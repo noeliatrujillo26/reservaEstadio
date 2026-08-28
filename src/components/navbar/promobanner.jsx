@@ -11,10 +11,10 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { useState } from 'react'
-import usebannerpromo from '../../hooks/usebannerpromo'
+import uselandingconfig from '../../hooks/uselandingconfig'
 
 export default function promobanner() {
-  const banner = usebannerpromo()
+  const { banner } = uselandingconfig()
   const [cerrado, setcerrado] = useState(false)
 
   // misma condicion que _aplicarBannerPromo: sin activo o sin texto, no se pinta.
