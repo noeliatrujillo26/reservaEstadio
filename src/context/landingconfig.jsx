@@ -103,6 +103,10 @@ export function landingconfigprovider({ children }) {
   // mismo estado inicial .pct-pending del html de la v1.
   const [cargandopolitica, setcargandopolitica] = useState(true)
   const [slides, setslides] = useState([])
+  // promo strip: mientras esto sea true se pinta el skeleton
+  // (.promo-strip--cargando), igual que el html inicial de la v1.
+  const [promostrip, setpromostrip] = useState(null)
+  const [cargandopromostrip, setcargandopromostrip] = useState(true)
 
   useEffect(() => {
     let vivo = true
@@ -130,10 +134,22 @@ export function landingconfigprovider({ children }) {
           enlace: (d && d.banner_enlace) || '',
           cotizamsg: (d && d.whatsapp_quote_message) || '',
         })
+        // misma normalizacion que api/sitio.js -> promoStrip()
+        setpromostrip({
+          activo: d && d.promo_strip_enabled != null ? !!d.promo_strip_enabled : true,
+          titulo: (d && d.promo_strip_titulo) || '',
+          subtitulo: (d && d.promo_strip_subtitulo) || '',
+          btntexto: (d && d.promo_strip_btn_texto) || '',
+          btnurl: (d && d.promo_strip_btn_url) || '',
+          cards: d && Array.isArray(d.promo_strip_cards) ? d.promo_strip_cards : null,
+        })
       } else {
         console.error('landing/banner-promo error:', rlanding.reason || rlanding.value?.error)
         setbanner(banner_vacio) // fail-open
+        // la v1 oculta la franja entera ante cualquier error de consulta.
+        setpromostrip(null)
       }
+      setcargandopromostrip(false)
 
       // ── politica_pagos → enganche minimo del stat 2 y textos del checkout
       if (rpolitica.status === 'fulfilled' && !rpolitica.value.error) {
@@ -173,7 +189,17 @@ export function landingconfigprovider({ children }) {
       ? '1 día antes del juego'
       : politica.dias_limite_liquidar + ' días antes del juego'
 
-  const valor = { banner, hero, stats, politica, cargandopolitica, slides, txtliquidar }
+  const valor = {
+    banner,
+    hero,
+    stats,
+    politica,
+    cargandopolitica,
+    slides,
+    promostrip,
+    cargandopromostrip,
+    txtliquidar,
+  }
 
   return <landingcontext.Provider value={valor}>{children}</landingcontext.Provider>
 }

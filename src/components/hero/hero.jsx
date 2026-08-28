@@ -9,12 +9,12 @@
 // donde el admin los edito. es una limitacion de la v1 que se conserva tal cual.
 //
 // la franja de promociones (.promo-strip) vive dentro de este <section> en el
-// html original; se migra aparte en promostrip.jsx. hoy no cambia nada visible
-// porque configuracion_landing.promo_strip_enabled esta en false.
+// html original y se monta aqui desde promostrip.jsx.
 // ═══════════════════════════════════════════════════════════════════
 
 import uselandingconfig from '../../hooks/uselandingconfig'
 import HeroCarrusel from './herocarrusel'
+import PromoStrip from './promostrip'
 
 export default function hero() {
   const { hero: textos, slides } = uselandingconfig()
@@ -53,6 +53,9 @@ export default function hero() {
         </a>
         <a href="#como-funciona" className="btn-secondary">¿Cómo funciona?</a>
       </div>
+
+      {/* Banner de promociones — dentro del hero, igual que en la v1 */}
+      <PromoStrip />
     </section>
   )
 }
