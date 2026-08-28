@@ -41,9 +41,6 @@ export function reservaprovider({ children }) {
   const [juegoactivofecha, setjuegoactivofecha] = useState(null)
   // juego mostrado en el panel del calendario (_calJuegoActual de la v1).
   const [caljuegoactual, setcaljuegoactual] = useState(null)
-  // texto de "N de M zonas disponibles · máx. X personas" que arma el mapa
-  // en filtrarZonasPorCap(). null mientras el mapa no este migrado.
-  const [zonasdisp, setzonasdisp] = useState(null)
 
   useEffect(() => {
     let vivo = true
@@ -151,8 +148,6 @@ export function reservaprovider({ children }) {
     juegoactivoid,
     caljuegoactual,
     setcaljuegoactual,
-    zonasdisp,
-    setzonasdisp,
   }
 
   return <reservacontext.Provider value={valor}>{children}</reservacontext.Provider>

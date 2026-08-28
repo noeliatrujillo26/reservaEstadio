@@ -10,6 +10,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import usereserva from '../../hooks/usereserva'
+import usemapa from '../../hooks/usemapa'
 
 const opciones = [
   { min: 0, texto: 'Todas' },
@@ -19,7 +20,8 @@ const opciones = [
 ]
 
 export default function capfilter() {
-  const { capmin, setcapmin, zonasdisp } = usereserva()
+  const { capmin, setcapmin } = usereserva()
+  const { zonasdisp } = usemapa()
 
   return (
     <div className="cap-filter">
@@ -36,9 +38,9 @@ export default function capfilter() {
           </button>
         ))}
       </div>
-      {/* el texto lo arma el mapa en filtrarZonasPorCap() ("3 de 21 zonas
-          disponibles · máx. 20 personas"). mientras el mapa no este migrado se
-          queda el texto inicial del html de la v1. */}
+      {/* mismo texto que arma filtrarZonasPorCap(): "3 de 21 zonas
+          disponibles · máx. 20 personas". sin zonas cargadas se queda el
+          texto inicial del html de la v1. */}
       <div className="zonas-disp" id="zonas-disp">
         {zonasdisp || '— zonas disponibles'}
       </div>

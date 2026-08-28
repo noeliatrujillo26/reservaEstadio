@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import LandingConfigProvider from './context/landingconfig'
 import ReservaProvider from './context/reservacontext'
+import MapaProvider from './context/mapacontext'
 import ToastProvider from './context/toastcontext'
 
 // css original de la v1, copiado textual desde el <style> de panel-inicio.html.
@@ -15,7 +16,9 @@ createRoot(document.getElementById('root')).render(
       <ToastProvider>
         <LandingConfigProvider>
           <ReservaProvider>
-            <App />
+            <MapaProvider>
+              <App />
+            </MapaProvider>
           </ReservaProvider>
         </LandingConfigProvider>
       </ToastProvider>
