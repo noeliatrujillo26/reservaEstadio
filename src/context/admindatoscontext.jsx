@@ -17,6 +17,7 @@ import { sb } from '../supabaseclient'
 import areas_data from '../lib/areasdata'
 import { map_usuario } from '../lib/usuarios'
 import { map_movimiento } from '../lib/movimientos'
+import { map_descuento, map_descuento_volumen, map_metodo } from '../lib/catalogos'
 
 export const admindatoscontext = createContext(null)
 
@@ -145,6 +146,9 @@ export function admindatosprovider({ children }) {
   const [movimientos, setmovimientos] = useState([])
   const [clientes, setclientes] = useState([])
   const [usuarios, setusuarios] = useState([])
+  const [descuentos, setdescuentos] = useState([])
+  const [descuentosvolumen, setdescuentosvolumen] = useState([])
+  const [metodos, setmetodos] = useState([])
   const [cargando, setcargando] = useState(true)
   const [errores, seterrores] = useState([])
 
@@ -154,8 +158,8 @@ export function admindatosprovider({ children }) {
 
     // cada consulta por separado: si una falla, las demas siguen y el panel
     // pinta lo que si tenga — mismo criterio de la v1, que aisla los renders.
-    const [rcobros, rreservas, rjuegos, rareas, rsecciones, restados, rmovs, rclientes, rusuarios] =
-      await Promise.allSettled([
+    const [rcobros, rreservas, rjuegos, rareas, rsecciones, restados, rmovs, rclientes, rusuarios,
+      rdescuentos, rdescvolumen, rmetodos] = await Promise.allSettled([
       select_todas('cobros', 'id'),
       select_todas('reservas', 'id'),
       sb.from('juegos').select('*').order('fecha'),
@@ -165,6 +169,9 @@ export function admindatosprovider({ children }) {
       sb.from('movimientos').select('*').order('created_at', { ascending: false }).limit(50),
       select_todas('clientes', 'id'),
       sb.from('usuarios').select('*').order('id'),
+      sb.from('descuentos').select('*'),
+      sb.from('descuentos_volumen').select('*').order('min_personas'),
+      sb.from('metodos_pago').select('*').order('id'),
     ])
 
     const ok = (r, etiqueta) => {
@@ -212,6 +219,17 @@ export function admindatosprovider({ children }) {
     const du = ok(rusuarios, 'usuarios')
     if (du) setusuarios(du.map(map_usuario))
 
+    const dd = ok(rdescuentos, 'descuentos')
+    if (dd) setdescuentos(dd.map(map_descuento))
+
+    // tolerante: si la tabla aun no existe (migracion pendiente) queda vacia y
+    // solo se avisa en consola, igual que la v1.
+    const ddv = ok(rdescvolumen, 'descuentos_volumen')
+    if (ddv) setdescuentosvolumen(ddv.map(map_descuento_volumen))
+
+    const dme = ok(rmetodos, 'metodos_pago')
+    if (dme) setmetodos(dme.map(map_metodo))
+
     seterrores(fallos)
     setcargando(false)
   }, [])
@@ -220,6 +238,7 @@ export function admindatosprovider({ children }) {
 
   const valor = {
     cobros, reservas, juegos, areas, areasestados, movimientos, clientes, usuarios,
+    descuentos, descuentosvolumen, metodos,
     cargando, errores, recargar: cargar,
   }
 

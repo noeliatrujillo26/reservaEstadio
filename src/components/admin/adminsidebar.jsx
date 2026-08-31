@@ -14,7 +14,7 @@ import { puedo_acceder } from '../../lib/permisos'
 import secciones_nav from './adminnav'
 
 // modulos ya migrados. conforme avance la migracion se agregan aqui.
-const migrados = ['dashboard', 'cobros', 'seccionesreservadas', 'clientes', 'usuarios', 'movimientos', 'consumos']
+const migrados = ['dashboard', 'cobros', 'seccionesreservadas', 'clientes', 'usuarios', 'movimientos', 'consumos', 'temporadas', 'descuentos', 'metodos']
 
 export default function adminsidebar({ vista, onvista, oncerrardrawer }) {
   const { usuario, cerrar_sesion } = useadmin()
