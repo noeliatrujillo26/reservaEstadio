@@ -1,0 +1,200 @@
+/* ═══════════════════════════════════════════════════════════════════
+   panel-reserva.css — css de panel-reserva.html (v1), con UN solo cambio:
+   cada regla queda acotada bajo .pagina-portal.
+
+   Mismo motivo que legales.css: en la v1 era un .html aparte con su propia
+   hoja y podia redefinir :root, * y body libremente. En la spa todo el css
+   comparte bundle y esas reglas chocarian con panel-inicio.css.
+   Las declaraciones no se tocaron: solo se antepuso el contenedor.
+   ═══════════════════════════════════════════════════════════════════ */
+
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  .pagina-portal {
+    --orange:#F15A22;
+    --ink:#111111;
+    --muted:#8A8A8A;
+    --line:#EAEAEA;
+    --bg:#FFFFFF;
+    --soft:#F7F7F7;
+    --green:#1E9E5A;
+    --wa:#25D366;
+    --red:#E5484D;
+  }
+  .pagina-portal, .pagina-portal * {box-sizing:border-box;margin:0;padding:0;}
+  .pagina-portal {font-family:'Inter',-apple-system,Arial,sans-serif;background:var(--bg);color:var(--ink);}
+
+  .pagina-portal .layout {display:grid;grid-template-columns:220px 1fr;min-height:100vh;}
+
+  /* Sidebar */
+  .pagina-portal aside {padding:32px 28px;border-right:1px solid var(--line);}
+  .pagina-portal .logo {margin-bottom:44px;}
+  .pagina-portal .logo img {height:40px;width:auto;object-fit:contain;display:block;}
+  /* El logo lleva de regreso a la landing: puntero + hover sutil. */
+  .pagina-portal .logo a {display:inline-block;cursor:pointer;transition:opacity .18s ease, transform .18s ease;}
+  .pagina-portal .logo a:hover {opacity:.8;transform:scale(1.03);}
+  .pagina-portal nav a {display:block;text-decoration:none;font-weight:700;font-size:17px;padding:8px 0;color:var(--ink);}
+  .pagina-portal nav a.dim {color:var(--muted);font-weight:600;}
+  .pagina-portal nav a:hover {color:var(--orange);}
+
+  /* Main */
+  .pagina-portal main {padding:40px 48px;max-width:920px;}
+
+  /* Orders header + selector */
+  .pagina-portal .orders-head {display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px;margin-bottom:26px;}
+  .pagina-portal .page-title {font-size:26px;font-weight:800;}
+  .pagina-portal .page-sub {color:var(--muted);font-size:15px;margin-top:2px;}
+
+  .pagina-portal .selector {position:relative;}
+  .pagina-portal .selector-label {font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;display:block;}
+  .pagina-portal .sel-btn {
+    display:flex;flex-direction:column;align-items:stretch;gap:6px;width:100%;
+    border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#fff;
+    cursor:pointer;font-family:inherit;font-size:14px;text-align:left;color:var(--ink);
+  }
+  .pagina-portal .selector {width:100%;margin-bottom:28px;}
+  .pagina-portal .sel-btn:hover {border-color:#d5d5d5;}
+  .pagina-portal .sel-top {display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .pagina-portal .sel-btn .match {font-weight:700;line-height:1.3;}
+  .pagina-portal .sel-btn .meta {color:var(--muted);font-size:12px;margin-top:1px;}
+  .pagina-portal .chev {color:var(--muted);transition:.2s;flex-shrink:0;}
+  .pagina-portal .selector.open .chev {transform:rotate(180deg);}
+  .pagina-portal .badge {font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;}
+  .pagina-portal .badge.active {background:#FDECE4;color:var(--orange);}
+  .pagina-portal .badge.past {background:var(--soft);color:var(--muted);}
+
+  .pagina-portal .dropdown {
+    position:absolute;top:100%;left:0;right:0;margin-top:8px;background:#fff;
+    border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.08);
+    overflow:hidden;z-index:20;display:none;
+  }
+  .pagina-portal .selector.open .dropdown {display:block;}
+  .pagina-portal .opt {display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 16px;cursor:pointer;border-bottom:1px solid var(--line);}
+  .pagina-portal .opt:last-child {border-bottom:none;}
+  .pagina-portal .opt:hover {background:var(--soft);}
+  .pagina-portal .opt .match {font-weight:600;font-size:14px;}
+  .pagina-portal .opt .meta {color:var(--muted);font-size:12px;margin-top:1px;}
+  .pagina-portal .opt.selected {background:#FFF6F2;}
+
+  /* Cards grid */
+  .pagina-portal .grid {display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-bottom:20px;}
+  .pagina-portal .card {border:1px solid var(--line);border-radius:16px;padding:24px;}
+  .pagina-portal .card h4 {font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:18px;}
+
+  .pagina-portal .row {display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line);font-size:15px;}
+  .pagina-portal .row:last-child {border-bottom:none;}
+  .pagina-portal .row .k {color:var(--muted);}
+  .pagina-portal .row .v {font-weight:600;}
+
+  /* Payment */
+  .pagina-portal .amounts {display:flex;gap:24px;margin-bottom:20px;}
+  .pagina-portal .amount {flex:1;}
+  .pagina-portal .amount .lbl {font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
+  .pagina-portal .amount .val {font-size:28px;font-weight:800;margin-top:4px;}
+  .pagina-portal .val.paid {color:var(--green);}
+  .pagina-portal .val.due {color:var(--orange);}
+  .pagina-portal .bar {height:8px;border-radius:99px;background:var(--soft);overflow:hidden;margin-bottom:8px;}
+  .pagina-portal .bar>div {height:100%;background:var(--orange);}
+  .pagina-portal .bar-note {font-size:13px;color:var(--muted);}
+  .pagina-portal .pay-btn {margin-top:20px;width:100%;background:var(--ink);color:#fff;border:none;border-radius:10px;padding:13px 0;font-weight:600;font-size:15px;cursor:pointer;font-family:inherit;}
+  .pagina-portal .pay-btn:hover {opacity:.88;}
+  .pagina-portal .pay-btn:disabled {background:var(--soft);color:var(--muted);cursor:default;}
+  .pagina-portal .pay-history {margin-top:18px;padding-top:16px;border-top:1px solid var(--line);}
+  .pagina-portal .pay-history h5 {font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:10px;}
+  .pagina-portal .pay-row {display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:13px;}
+  .pagina-portal .pay-row .pd {color:var(--muted);}
+  .pagina-portal .pay-row .pm {font-weight:700;color:var(--green);}
+
+  /* Benefits */
+  .pagina-portal .benefits {display:grid;gap:12px;}
+  .pagina-portal .benefit-item {display:flex;align-items:flex-start;gap:12px;font-size:14px;color:var(--ink);line-height:1.4;}
+  .pagina-portal .benefit-item .check {width:22px;height:22px;border-radius:50%;background:#FDECE4;color:var(--orange);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;margin-top:1px;}
+  .pagina-portal .benefits-empty {font-size:14px;color:var(--muted);}
+
+  /* Guests */
+  .pagina-portal .guests-head {display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .pagina-portal .guests-head h4 {margin-bottom:0;}
+  .pagina-portal .add-btn {
+    display:inline-flex;align-items:center;gap:6px;background:var(--ink);color:#fff;border:none;
+    border-radius:9px;padding:9px 15px;font-weight:600;font-size:13px;cursor:pointer;font-family:inherit;
+  }
+  .pagina-portal .add-btn:hover {opacity:.88;}
+  .pagina-portal .add-btn:disabled {background:var(--soft);color:var(--muted);cursor:default;}
+  .pagina-portal .guest-hint {font-size:14px;color:var(--muted);margin-bottom:16px;}
+  .pagina-portal .guests {display:grid;gap:10px;}
+  .pagina-portal .guest {
+    display:flex;align-items:center;gap:14px;width:100%;text-align:left;
+    border:1px solid var(--line);border-radius:12px;padding:12px 16px;
+    background:#fff;transition:.15s;font-family:inherit;color:var(--ink);
+  }
+  .pagina-portal .guest.empty {border-style:dashed;}
+  .pagina-portal .seat {width:44px;height:44px;border-radius:10px;background:var(--soft);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;}
+  .pagina-portal .guest .name {font-size:15px;font-weight:600;}
+  .pagina-portal .guest .state {font-size:13px;color:var(--muted);margin-top:1px;}
+  .pagina-portal .guest .contact {font-size:12px;color:var(--muted);margin-top:3px;}
+  .pagina-portal .guest .body {flex:1;min-width:0;}
+  .pagina-portal .icon-btn {background:none;border:none;cursor:pointer;color:var(--muted);padding:6px;border-radius:7px;font-size:15px;line-height:1;font-family:inherit;}
+  .pagina-portal .icon-btn:hover {background:var(--soft);color:var(--ink);}
+  .pagina-portal .icon-btn.assign {color:var(--orange);font-weight:600;font-size:13px;}
+  .pagina-portal .dot {width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle;}
+
+  /* Referidos */
+  .pagina-portal .ref-card {border:1px solid var(--line);border-radius:16px;padding:24px;margin-top:20px;background:linear-gradient(180deg,#FFF9F6,#fff);}
+  .pagina-portal .ref-card h4 {margin-bottom:6px;}
+  .pagina-portal .ref-lead {font-size:15px;color:var(--muted);margin-bottom:20px;}
+  .pagina-portal .ref-lead b {color:var(--ink);}
+  .pagina-portal .code-box {display:flex;align-items:center;gap:12px;border:1.5px dashed var(--orange);border-radius:12px;padding:14px 16px;background:#fff;margin-bottom:16px;flex-wrap:wrap;}
+  .pagina-portal .code {font-size:22px;font-weight:800;letter-spacing:.12em;color:var(--orange);flex:1;font-family:'Inter',monospace;}
+  .pagina-portal .copy-btn {border:1px solid var(--line);background:#fff;border-radius:9px;padding:9px 16px;font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;color:var(--ink);}
+  .pagina-portal .copy-btn:hover {background:var(--soft);}
+  .pagina-portal .copy-btn.done {border-color:var(--green);color:var(--green);}
+  .pagina-portal .ref-actions {display:flex;gap:10px;flex-wrap:wrap;}
+  .pagina-portal .wa-btn {display:inline-flex;align-items:center;gap:9px;background:var(--wa);color:#fff;border:none;border-radius:10px;padding:12px 20px;font-weight:600;font-size:15px;cursor:pointer;text-decoration:none;font-family:inherit;}
+  .pagina-portal .wa-btn:hover {opacity:.9;}
+  .pagina-portal .wa-btn svg {width:18px;height:18px;fill:#fff;}
+  .pagina-portal .ref-note {font-size:13px;color:var(--muted);margin-top:16px;}
+
+  /* Modal */
+  .pagina-portal .overlay {position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:50;padding:20px;}
+  .pagina-portal .overlay.open {display:flex;}
+  .pagina-portal .modal {background:#fff;border-radius:16px;width:100%;max-width:420px;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.2);}
+  .pagina-portal .modal h3 {font-size:20px;font-weight:800;margin-bottom:4px;}
+  .pagina-portal .modal .msub {color:var(--muted);font-size:14px;margin-bottom:20px;}
+  .pagina-portal .field {margin-bottom:16px;}
+  .pagina-portal .field label {display:block;font-size:13px;font-weight:600;margin-bottom:6px;}
+  .pagina-portal .field input, .pagina-portal .field select {width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:15px;font-family:inherit;color:var(--ink);background:#fff;}
+  .pagina-portal .field input:focus, .pagina-portal .field select:focus {outline:none;border-color:var(--orange);}
+  .pagina-portal .field input.input-invalido {border-color:#DC2626 !important;}
+  .pagina-portal .modal-actions {display:flex;gap:10px;margin-top:22px;}
+  .pagina-portal .modal-actions button {flex:1;border-radius:10px;padding:12px 0;font-weight:600;font-size:15px;cursor:pointer;font-family:inherit;border:none;}
+  .pagina-portal .btn-cancel {background:#fff;border:1px solid var(--line);color:var(--ink);}
+  .pagina-portal .btn-cancel:hover {background:var(--soft);}
+  .pagina-portal .btn-save {background:var(--ink);color:#fff;}
+  .pagina-portal .btn-save:hover {opacity:.88;}
+  .pagina-portal .btn-delete {background:none;border:none;color:var(--red);font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;margin-top:14px;width:100%;padding:8px;border-radius:8px;}
+  .pagina-portal .btn-delete:hover {background:#FDECEC;}
+
+  @media(max-width:720px){
+    .pagina-portal .layout {grid-template-columns:1fr;}
+    .pagina-portal aside {border-right:none;border-bottom:1px solid var(--line);}
+    .pagina-portal main {padding:28px 22px;}
+  }
+
+  /* ══ Acceso al portal (folio + correo) ══ */
+  .pagina-portal.noauth .layout {display:none;}
+  .pagina-portal:not(.noauth) #access-screen {display:none;}
+  .pagina-portal #access-screen {
+    position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
+    background:var(--soft);padding:20px;
+  }
+  .pagina-portal .access-card {
+    background:#fff;border:1px solid var(--line);border-radius:16px;width:100%;max-width:400px;
+    padding:32px 28px;box-shadow:0 20px 60px rgba(0,0,0,.08);
+  }
+  .pagina-portal .access-card .logo {margin-bottom:24px;text-align:center;}
+  .pagina-portal .access-card .logo img {height:40px;width:auto;object-fit:contain;display:inline-block;}
+  .pagina-portal .access-card h3 {font-size:20px;font-weight:800;margin-bottom:4px;text-align:center;}
+  .pagina-portal .access-card .msub {color:var(--muted);font-size:14px;margin-bottom:22px;text-align:center;}
+  .pagina-portal .access-err {display:none;margin-bottom:14px;font-size:13px;color:var(--red);background:#FDECEC;border-radius:8px;padding:9px 12px;font-weight:600;}
+  .pagina-portal .access-note {font-size:12px;color:var(--muted);margin-top:16px;text-align:center;line-height:1.5;}
+  .pagina-portal .access-note a {color:var(--orange);font-weight:600;}
+  .pagina-portal .loading-note {font-size:13px;color:var(--muted);text-align:center;padding:8px 0 0;display:none;}

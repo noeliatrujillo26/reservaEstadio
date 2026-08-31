@@ -1,0 +1,36 @@
+/* ═══════════════════════════════════════════════════════════════════
+   legales.css — css de legales.html (v1), con UN solo cambio: cada regla
+   queda acotada bajo .pagina-legales.
+
+   POR QUE: en la v1 esta pagina era un .html aparte con su propia hoja, asi
+   que podia redefinir :root, * y body sin afectar a nadie. En una spa todo
+   el css se junta en un bundle, y estas reglas CHOCAN con las de
+   panel-inicio.css — verificado: --negro (#111318 vs #1A1A1A), --gris,
+   --borde, el fondo del body y el line-height. Sin acotarlas, la landing se
+   veia con los colores de legales o al reves, segun el orden del bundle.
+
+   Las declaraciones (colores, tamanos, espaciados) no se tocaron: solo se
+   antepuso el selector contenedor.
+   ═══════════════════════════════════════════════════════════════════ */
+
+  .pagina-legales { --naranja:#E05C1A; --negro:#111318; --gris:#5A6478; --borde:#E8E4DC; }
+  .pagina-legales, .pagina-legales * { margin:0; padding:0; box-sizing:border-box; }
+  .pagina-legales { min-height:100vh; font-family:'Segoe UI', Arial, sans-serif; color:var(--negro); background:#FAF9F7; line-height:1.7; }
+  .pagina-legales .top { background:var(--negro); color:#fff; padding:14px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .pagina-legales .top a.volver { color:#fff; text-decoration:none; font-size:13px; opacity:.85; }
+  .pagina-legales .top a.volver:hover { opacity:1; }
+  .pagina-legales .top .titulo { font-size:16px; font-weight:800; }
+  .pagina-legales .wrap { max-width:860px; margin:0 auto; padding:24px 16px 60px; }
+  .pagina-legales .tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:22px; position:sticky; top:0; background:#FAF9F7; padding:12px 0; z-index:5; }
+  .pagina-legales .tab { border:1.5px solid var(--borde); background:#fff; border-radius:999px; padding:9px 16px; font-size:13px; font-weight:600; color:var(--gris); cursor:pointer; font-family:inherit; }
+  .pagina-legales .tab.activa { background:var(--naranja); border-color:var(--naranja); color:#fff; }
+  .pagina-legales .doc { display:none; background:#fff; border:1px solid var(--borde); border-radius:14px; padding:28px 26px; }
+  .pagina-legales .doc.visible { display:block; }
+  .pagina-legales .doc h1 { font-size:21px; margin-bottom:6px; border-bottom:3px solid var(--naranja); padding-bottom:12px; }
+  .pagina-legales .doc .fecha { font-size:12px; color:#9AA3B4; margin-bottom:18px; }
+  .pagina-legales .doc h2 { font-size:15px; margin:22px 0 8px; }
+  .pagina-legales .doc p { font-size:14px; color:#333; margin-bottom:10px; }
+  .pagina-legales .doc ul { margin:0 0 10px 22px; }
+  .pagina-legales .doc li { font-size:14px; color:#333; margin-bottom:4px; }
+  .pagina-legales .doc a { color:var(--naranja); }
+  @media (max-width:600px) { .pagina-legales .doc { padding:20px 16px; } }
