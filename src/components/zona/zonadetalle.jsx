@@ -15,6 +15,7 @@ import { useEffect, useMemo } from 'react'
 import usemapa from '../../hooks/usemapa'
 import usereserva from '../../hooks/usereserva'
 import uselandingconfig from '../../hooks/uselandingconfig'
+import usecheckout from '../../hooks/usecheckout'
 import { mxn2 } from '../../lib/dinero'
 import {
   con_extras,
@@ -33,6 +34,7 @@ export default function zonadetalle() {
   const { zonas, zonaactiva, personas, setpersonas, ninos, setninos } = usemapa()
   const { juegoactivofecha, juegoactivoid, dv_mejor_regla, dv_proxima_regla } = usereserva()
   const { politica } = uselandingconfig()
+  const { iniciar_reserva } = usecheckout()
 
   // la zona enriquecida con el respaldo local de tarifas (_loadExtras).
   const z = useMemo(() => {
@@ -223,6 +225,7 @@ export default function zonadetalle() {
       <button
         className="btn-reservar"
         id="btn-reservar"
+        onClick={iniciar_reserva}
         disabled={!puede_reservar}
         style={{ opacity: hay_precio ? 1 : 0.5 }}
       >

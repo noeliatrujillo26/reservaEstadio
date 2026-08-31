@@ -184,38 +184,38 @@ export function mapaprovider({ children }) {
   // ── estados de zona del juego activo ────────────────────────────
   // espejo de _cargarEstadosZona(): sin juego se limpian; con juego se piden
   // y se descarta la respuesta si el usuario ya cambio de juego.
-  useEffect(() => {
-    let vigente = true
-
+  // recargable a proposito: el aviso de plazo expirado la vuelve a llamar
+  // antes de devolver al cliente al mapa.
+  const recargar_estados = useCallback(async () => {
     if (!juegoactivoid) {
       setestados({})
       setpalcosocupacion({})
       return
     }
-
-    async function cargar_estados() {
-      try {
-        const resp = await fetch(
-          '/api/sitio?r=zona-estados&juegoId=' + encodeURIComponent(juegoactivoid)
-        )
-        const datos = await resp.json()
-        if (!vigente) return // el usuario ya cambio de juego; descartar
-        // el endpoint puede adjuntar `_palcos` con la ocupacion de los palcos
-        // compartidos. se separa antes de guardar: si se colara como una zona
-        // mas, el calculo de disponibilidad la trataria como tal.
-        const palcos = (datos && datos._palcos) || {}
-        const limpios = { ...(datos || {}) }
-        delete limpios._palcos
-        setpalcosocupacion(palcos)
-        setestados(limpios)
-      } catch (e) {
-        console.warn('No se pudieron cargar los estados de zona para este juego.', e)
-      }
+    try {
+      const resp = await fetch(
+        '/api/sitio?r=zona-estados&juegoId=' + encodeURIComponent(juegoactivoid)
+      )
+      const datos = await resp.json()
+      // el endpoint puede adjuntar `_palcos` con la ocupacion de los palcos
+      // compartidos. se separa antes de guardar: si se colara como una zona
+      // mas, el calculo de disponibilidad la trataria como tal.
+      const palcos = (datos && datos._palcos) || {}
+      const limpios = { ...(datos || {}) }
+      delete limpios._palcos
+      setpalcosocupacion(palcos)
+      setestados(limpios)
+    } catch (e) {
+      console.warn('No se pudieron cargar los estados de zona para este juego.', e)
     }
-
-    cargar_estados()
-    return () => { vigente = false }
   }, [juegoactivoid])
+
+  useEffect(() => {
+    let vigente = true
+    // si el usuario ya cambio de juego, la respuesta se descarta.
+    recargar_estados().then(() => { if (!vigente) return })
+    return () => { vigente = false }
+  }, [recargar_estados])
 
   // al cambiar de juego se deselecciona la zona, igual que _selJuegoEnMapa().
   useEffect(() => { setzonaactiva(null) }, [juegoactivoid])
@@ -280,6 +280,7 @@ export function mapaprovider({ children }) {
     setninos,
     visible_por_cap,
     zonasdisp,
+    recargar_estados,
   }
 
   return <mapacontext.Provider value={valor}>{children}</mapacontext.Provider>

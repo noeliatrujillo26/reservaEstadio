@@ -5,6 +5,7 @@ import App from './App'
 import LandingConfigProvider from './context/landingconfig'
 import ReservaProvider from './context/reservacontext'
 import MapaProvider from './context/mapacontext'
+import CheckoutProvider from './context/checkoutcontext'
 import ToastProvider from './context/toastcontext'
 
 // css original de la v1, copiado textual desde el <style> de panel-inicio.html.
@@ -17,7 +18,9 @@ createRoot(document.getElementById('root')).render(
         <LandingConfigProvider>
           <ReservaProvider>
             <MapaProvider>
-              <App />
+              <CheckoutProvider>
+                <App />
+              </CheckoutProvider>
             </MapaProvider>
           </ReservaProvider>
         </LandingConfigProvider>
