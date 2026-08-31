@@ -18,6 +18,8 @@ import { useEffect, useState } from 'react'
 import useadmin from '../hooks/useadmin'
 import AdminLogin from '../components/admin/adminlogin'
 import AdminSidebar from '../components/admin/adminsidebar'
+import AdminDatosProvider from '../context/admindatoscontext'
+import Dashboard from '../components/admin/dashboard'
 import secciones_nav from '../components/admin/adminnav'
 import '../styles/admin.css'
 import '../styles/admin-responsive.css'
@@ -80,7 +82,8 @@ export default function admin() {
   }
 
   return (
-    <div className={'pagina-admin authed' + (drawer ? ' drawer-abierto' : '')}>
+    <AdminDatosProvider>
+      <div className={'pagina-admin authed' + (drawer ? ' drawer-abierto' : '')}>
       <div className="admin-velo" onClick={() => setdrawer(false)} />
 
       <AdminSidebar vista={vista} onvista={setvista} oncerrardrawer={() => setdrawer(false)} />
@@ -98,26 +101,33 @@ export default function admin() {
           <span className="admin-topbar-titulo">{titulo_de(vista)}</span>
         </div>
 
-        <div className="page active" style={{ padding: '28px', flex: 1, minHeight: 0, overflowY: 'auto' }}>
-          <div className="page-header">
-            <h2>{titulo_de(vista)}</h2>
-            <p>Módulo pendiente de migrar.</p>
+        {vista === 'dashboard' ? (
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+            <Dashboard />
           </div>
+        ) : (
+          <div className="page active" style={{ padding: '28px', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+            <div className="page-header">
+              <h2>{titulo_de(vista)}</h2>
+              <p>Módulo pendiente de migrar.</p>
+            </div>
 
-          <div className="card" style={{ padding: '20px', marginTop: '18px', maxWidth: '640px' }}>
-            <p style={{ fontSize: '13px', color: 'var(--text-2)', lineHeight: 1.6, margin: 0 }}>
-              El acceso al panel y la navegación ya están migrados. El contenido de
-              <b> {titulo_de(vista)} </b> llega en un módulo posterior.
-            </p>
-            {!escritura_admin && (
-              <p style={{ fontSize: '12.5px', color: 'var(--text-3)', lineHeight: 1.6, marginTop: '10px', marginBottom: 0 }}>
-                🔒 El panel opera en modo de solo lectura: ningún módulo escribirá en producción
-                hasta habilitarlo explícitamente.
+            <div className="card" style={{ padding: '20px', marginTop: '18px', maxWidth: '640px' }}>
+              <p style={{ fontSize: '13px', color: 'var(--text-2)', lineHeight: 1.6, margin: 0 }}>
+                El acceso al panel y la navegación ya están migrados. El contenido de
+                <b> {titulo_de(vista)} </b> llega en un módulo posterior.
               </p>
-            )}
+              {!escritura_admin && (
+                <p style={{ fontSize: '12.5px', color: 'var(--text-3)', lineHeight: 1.6, marginTop: '10px', marginBottom: 0 }}>
+                  🔒 El panel opera en modo de solo lectura: ningún módulo escribirá en producción
+                  hasta habilitarlo explícitamente.
+                </p>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </main>
     </div>
+    </AdminDatosProvider>
   )
 }
