@@ -15,6 +15,7 @@
 import { createContext, useCallback, useEffect, useState } from 'react'
 import { sb } from '../supabaseclient'
 import areas_data from '../lib/areasdata'
+import { map_usuario } from '../lib/usuarios'
 
 export const admindatoscontext = createContext(null)
 
@@ -80,6 +81,27 @@ function map_reserva_admin(r) {
   }
 }
 
+// espejo de syncAreasDesdeCrear() (js/01-nucleo.js): el catalogo de zonas son
+// las SECCIONES REALES del mapa (tabla mapa_secciones), no la lista quemada.
+//
+// Esto importa mucho mas de lo que parece: zona_juego_estado.zona_id apunta a
+// ESTOS ids. Con el catalogo quemado ('td-1', 'ti-7'…) ninguna fila cruzaba,
+// asi que todos los juegos caian al estado base de la tabla `areas` y las
+// tarjetas de Reservas mostraban las mismas cifras para cualquier juego. De
+// aqui sale tambien `escompartida`, sin la cual el filtro "Palcos
+// compartidos" no encontraba ninguno.
+function map_seccion(s) {
+  return {
+    id: s.id || 'sec-' + s.num,
+    nombre: s.nombre || 'Sección ' + s.num,
+    cap: s.cap || 50,
+    // configuracion de palco compartido (migracion-palcos-compartidos.sql).
+    escompartida: s.es_compartida === true,
+    capacidadmaxima: s.capacidad_maxima != null ? Number(s.capacidad_maxima) : null,
+    estado: 'libre',
+  }
+}
+
 // espejo del map de cargarJuegosDesdeSupabase().
 // El `id` va normalizado a STRING a proposito: los <select> siempre entregan
 // strings, y las comparaciones estrictas contra un id numerico fallaban
@@ -133,6 +155,7 @@ export function admindatosprovider({ children }) {
   const [areasestados, setareasestados] = useState({})
   const [movimientos, setmovimientos] = useState([])
   const [clientes, setclientes] = useState([])
+  const [usuarios, setusuarios] = useState([])
   const [cargando, setcargando] = useState(true)
   const [errores, seterrores] = useState([])
 
@@ -142,14 +165,17 @@ export function admindatosprovider({ children }) {
 
     // cada consulta por separado: si una falla, las demas siguen y el panel
     // pinta lo que si tenga — mismo criterio de la v1, que aisla los renders.
-    const [rcobros, rreservas, rjuegos, rareas, restados, rmovs, rclientes] = await Promise.allSettled([
+    const [rcobros, rreservas, rjuegos, rareas, rsecciones, restados, rmovs, rclientes, rusuarios] =
+      await Promise.allSettled([
       select_todas('cobros', 'id'),
       select_todas('reservas', 'id'),
       sb.from('juegos').select('*').order('fecha'),
       sb.from('areas').select('*'),
+      sb.from('mapa_secciones').select('*').order('orden'),
       sb.from('zona_juego_estado').select('*'),
       sb.from('movimientos').select('*').order('created_at', { ascending: false }).limit(50),
       select_todas('clientes', 'id'),
+      sb.from('usuarios').select('*').order('id'),
     ])
 
     const ok = (r, etiqueta) => {
@@ -170,17 +196,18 @@ export function admindatosprovider({ children }) {
     const dj = ok(rjuegos, 'juegos')
     if (dj) setjuegos(dj.map(map_juego))
 
-    // la tabla `areas` solo aporta el estado base; el catalogo y los nombres
-    // son los de areas_data, igual que en la v1.
+    // el catalogo sale de mapa_secciones; solo si no hay secciones se usa la
+    // lista quemada, igual que syncAreasDesdeCrear() cuando no encuentra nada.
+    const ds = ok(rsecciones, 'mapa_secciones')
+    const catalogo = ds && ds.length ? ds.map(map_seccion) : areas_data
+    // la tabla `areas` solo aporta el estado base de cada zona.
     const da = ok(rareas, 'areas')
-    if (da) {
-      setareas(
-        areas_data.map((a) => {
-          const fila = da.find((x) => x.id === a.id)
-          return fila ? { ...a, estado: fila.estado } : a
-        })
-      )
-    }
+    setareas(
+      catalogo.map((a) => {
+        const fila = da ? da.find((x) => String(x.id) === String(a.id)) : null
+        return fila ? { ...a, estado: fila.estado } : a
+      })
+    )
 
     const de = ok(restados, 'zona_juego_estado')
     if (de) setareasestados(map_estados_zona(de))
@@ -193,6 +220,9 @@ export function admindatosprovider({ children }) {
     const dcl = ok(rclientes, 'clientes')
     if (dcl) setclientes(dcl)
 
+    const du = ok(rusuarios, 'usuarios')
+    if (du) setusuarios(du.map(map_usuario))
+
     seterrores(fallos)
     setcargando(false)
   }, [])
@@ -200,7 +230,7 @@ export function admindatosprovider({ children }) {
   useEffect(() => { cargar() }, [cargar])
 
   const valor = {
-    cobros, reservas, juegos, areas, areasestados, movimientos, clientes,
+    cobros, reservas, juegos, areas, areasestados, movimientos, clientes, usuarios,
     cargando, errores, recargar: cargar,
   }
 
