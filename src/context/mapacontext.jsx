@@ -89,6 +89,10 @@ export function mapaprovider({ children }) {
   // ocupacion de palcos compartidos que el servidor adjunta como _palcos.
   const [palcosocupacion, setpalcosocupacion] = useState({})
   const [zonaactiva, setzonaactiva] = useState(null)
+  // steppers del panel de detalle (_detallePersonas / _detalleNinos de la v1).
+  // viven aqui porque selectZone() los reinicia al cambiar de zona.
+  const [personas, setpersonas] = useState(0)
+  const [ninos, setninos] = useState(0)
 
   // ── carga del mapa: cache local y luego la fuente de verdad ──────
   useEffect(() => {
@@ -127,6 +131,35 @@ export function mapaprovider({ children }) {
             setposiciones(armado.posiciones)
             setconfigurado(true)
           }
+          // Imagenes de zonas: la fuente de verdad viaja en ESTA respuesta
+          // (mapa_secciones.img/img2). Se exponen en window (ganan sobre el
+          // localStorage, igual que en la v1) y se siembran al cache local
+          // para el primer pintado de la proxima visita.
+          try {
+            const imgs_srv = {}
+            const imgs2_srv = {}
+            data.secciones.forEach((s2) => {
+              const k = String(s2.name || '').toUpperCase().trim()
+              if (!k) return
+              // antes las dos fotos se colapsaban en una (`img || img2`) y la
+              // segunda se perdia antes de llegar al navegador: la galeria
+              // necesita las DOS por separado.
+              if (s2.img || s2.img2) imgs_srv[k] = s2.img || s2.img2
+              if (s2.img && s2.img2) imgs2_srv[k] = s2.img2
+            })
+            window._imgsZonasServidor = imgs_srv
+            window._imgs2ZonasServidor = imgs2_srv
+            if (Object.keys(imgs_srv).length) {
+              const loc_imgs = JSON.parse(localStorage.getItem('nrj_imagenes_precio') || '{}')
+              localStorage.setItem(
+                'nrj_imagenes_precio',
+                JSON.stringify(Object.assign(loc_imgs, imgs_srv))
+              )
+            }
+          } catch (e_imgs) {
+            console.warn('Imágenes de zonas no disponibles en la respuesta del mapa:', e_imgs)
+          }
+
           // se siembra el cache local para el primer pintado de la proxima visita.
           try {
             const max_num = data.secciones.reduce(
@@ -241,6 +274,10 @@ export function mapaprovider({ children }) {
     palcosocupacion,
     zonaactiva,
     setzonaactiva,
+    personas,
+    setpersonas,
+    ninos,
+    setninos,
     visible_por_cap,
     zonasdisp,
   }

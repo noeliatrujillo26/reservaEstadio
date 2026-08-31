@@ -6,9 +6,8 @@
 // el encabezado sigue al juego activo: "Mapa del estadio — Naranjeros vs X ·
 // Jueves 15 de Octubre", igual que _selJuegoEnMapa().
 //
-// EN CONSTRUCCION: el panel derecho (.seccion-detalle) se monta aqui con su
-// placeholder; el contenido con galeria, steppers y precios es el siguiente
-// componente (zona/zonadetalle.jsx).
+// el panel derecho (.seccion-detalle) monta el placeholder y, al elegir zona,
+// el detalle completo desde zona/zonadetalle.jsx.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useEffect, useRef, useState } from 'react'
@@ -17,6 +16,7 @@ import usereserva from '../../hooks/usereserva'
 import { fecha_con_dia } from '../../lib/fechas'
 import LeyendaMapa from './leyendamapa'
 import ZonasOverlay from './zonasoverlay'
+import ZonaDetalle from '../zona/zonadetalle'
 
 export default function mapaestadio() {
   const { configurado, imagenmapa, zonaactiva } = usemapa()
@@ -133,7 +133,7 @@ export default function mapaestadio() {
               Haz clic en cualquier botón del mapa para ver precio, capacidad y disponibilidad.
             </p>
           </div>
-          {/* el contenido del detalle llega en zona/zonadetalle.jsx */}
+          <ZonaDetalle />
         </div>
       </div>
     </div>

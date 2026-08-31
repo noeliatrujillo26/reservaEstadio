@@ -41,6 +41,9 @@ export function reservaprovider({ children }) {
   const [juegoactivofecha, setjuegoactivofecha] = useState(null)
   // juego mostrado en el panel del calendario (_calJuegoActual de la v1).
   const [caljuegoactual, setcaljuegoactual] = useState(null)
+  // reglas de descuento por grupo (Admin -> Descuentos por volumen).
+  // las usan el panel de detalle y, mas adelante, el paso 2 del checkout.
+  const [dvreglas, setdvreglas] = useState([])
 
   useEffect(() => {
     let vivo = true
@@ -82,8 +85,21 @@ export function reservaprovider({ children }) {
       }
     }
 
+    // espejo de _cargarReglasVolumen(): si la red falla NO se marcan como
+    // cargadas, para que el siguiente intento (al entrar al checkout) las
+    // vuelva a pedir.
+    async function cargar_reglas_volumen() {
+      try {
+        const resp = await fetch('/api/sitio?r=descuentos-volumen')
+        const d = await resp.json()
+        if (!vivo) return
+        if (d && Array.isArray(d.reglas)) setdvreglas(d.reglas)
+      } catch (e) {}
+    }
+
     sincronizar_juegos()
     cargar_disponibilidad()
+    cargar_reglas_volumen()
     return () => { vivo = false }
   }, [])
 
@@ -135,6 +151,58 @@ export function reservaprovider({ children }) {
     return (j && j.id) || ''
   }, [juegoactivofecha, juegosporfecha])
 
+  // ── descuentos por grupo ────────────────────────────────────────
+  // espejo de _dvActiva(): solo lo AFIRMATIVO cuenta (true / 'true' /
+  // 'Activo' / 1). antes se rechazaba unicamente `activo === false`, asi que
+  // una regla 'Inactivo' —o sin el campo— se aplicaba igual.
+  const dv_activa = useCallback((rg) => {
+    if (!rg) return false
+    const crudo = rg.activo != null ? rg.activo : rg.estado
+    if (crudo == null) return false
+    if (typeof crudo === 'boolean') return crudo
+    const n = String(crudo).trim().toLowerCase()
+    return n === 'true' || n === 'activo' || n === 'active' || n === '1' || n === 'si' || n === 'sí'
+  }, [])
+
+  // reglas ACTIVAS que cubren esta zona y este juego (sin mirar el minimo de
+  // personas), ordenadas por minimo ascendente.
+  const dv_reglas_de_zona = useCallback(
+    (zonaid, juegoid) =>
+      (dvreglas || [])
+        .filter((rg) => {
+          if (!dv_activa(rg)) return false
+          const js = Array.isArray(rg.juegos) && rg.juegos.length ? rg.juegos.map(String) : null
+          if (js && (!juegoid || js.indexOf(String(juegoid)) < 0)) return false
+          const zs = Array.isArray(rg.zonas) && rg.zonas.length ? rg.zonas.map(String) : null
+          if (zs && (!zonaid || zs.indexOf(String(zonaid)) < 0)) return false
+          return true
+        })
+        .sort((a, b) => (Number(a.min_personas) || 0) - (Number(b.min_personas) || 0)),
+    [dvreglas, dv_activa]
+  )
+
+  // la MEJOR regla ya ganada (mayor %) con las personas actuales.
+  const dv_mejor_regla = useCallback(
+    (personas, zonaid, juegoid) => {
+      let mejor = null
+      dv_reglas_de_zona(zonaid, juegoid).forEach((rg) => {
+        if ((Number(personas) || 0) < (Number(rg.min_personas) || 0)) return
+        if (!mejor || (Number(rg.porcentaje) || 0) > (Number(mejor.porcentaje) || 0)) mejor = rg
+      })
+      return mejor
+    },
+    [dv_reglas_de_zona]
+  )
+
+  // la SIGUIENTE regla por alcanzar (para invitar a sumar personas).
+  const dv_proxima_regla = useCallback(
+    (personas, zonaid, juegoid) =>
+      dv_reglas_de_zona(zonaid, juegoid).find(
+        (rg) => (Number(personas) || 0) < (Number(rg.min_personas) || 0)
+      ) || null,
+    [dv_reglas_de_zona]
+  )
+
   const valor = {
     juegos,
     juegosporfecha,
@@ -148,6 +216,8 @@ export function reservaprovider({ children }) {
     juegoactivoid,
     caljuegoactual,
     setcaljuegoactual,
+    dv_mejor_regla,
+    dv_proxima_regla,
   }
 
   return <reservacontext.Provider value={valor}>{children}</reservacontext.Provider>
