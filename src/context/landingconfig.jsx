@@ -106,6 +106,9 @@ export function landingconfigprovider({ children }) {
   // promo strip: mientras esto sea true se pinta el skeleton
   // (.promo-strip--cargando), igual que el html inicial de la v1.
   const [promostrip, setpromostrip] = useState(null)
+  // preguntas frecuentes editadas en Admin -> Landing (columna `faq`).
+  // null = todavia no hay respuesta: se muestran las estaticas del html.
+  const [faq, setfaq] = useState(null)
   const [cargandopromostrip, setcargandopromostrip] = useState(true)
 
   useEffect(() => {
@@ -143,11 +146,21 @@ export function landingconfigprovider({ children }) {
           btnurl: (d && d.promo_strip_btn_url) || '',
           cards: d && Array.isArray(d.promo_strip_cards) ? d.promo_strip_cards : null,
         })
+        // FAQ dinamica: solo se adopta si trae preguntas Y respuestas con
+        // texto. En cualquier otro caso la seccion conserva las estaticas del
+        // html — nunca queda vacia por un error tecnico (mismo fail-open que
+        // _cargarFaq() y el handler faq de api/sitio.js).
+        const crudas = d && Array.isArray(d.faq) ? d.faq : []
+        const utiles = crudas.filter(
+          (f) => f && String(f.pregunta || '').trim() && String(f.respuesta || '').trim()
+        )
+        setfaq(utiles.length ? utiles : null)
       } else {
         console.error('landing/banner-promo error:', rlanding.reason || rlanding.value?.error)
         setbanner(banner_vacio) // fail-open
         // la v1 oculta la franja entera ante cualquier error de consulta.
         setpromostrip(null)
+        setfaq(null)
       }
       setcargandopromostrip(false)
 
@@ -198,6 +211,7 @@ export function landingconfigprovider({ children }) {
     slides,
     promostrip,
     cargandopromostrip,
+    faq,
     txtliquidar,
   }
 
