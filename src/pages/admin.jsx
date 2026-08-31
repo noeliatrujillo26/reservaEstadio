@@ -15,11 +15,13 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { useEffect, useState } from 'react'
+import AdminProvider from '../context/admincontext'
 import useadmin from '../hooks/useadmin'
 import AdminLogin from '../components/admin/adminlogin'
 import AdminSidebar from '../components/admin/adminsidebar'
 import AdminDatosProvider from '../context/admindatoscontext'
 import Dashboard from '../components/admin/dashboard'
+import Cobros from '../components/admin/cobros'
 import secciones_nav from '../components/admin/adminnav'
 import '../styles/admin.css'
 import '../styles/admin-responsive.css'
@@ -33,7 +35,7 @@ function titulo_de(id) {
   return 'Panel Admin'
 }
 
-export default function admin() {
+function panel() {
   const { estado, escritura_admin } = useadmin()
 
   // la v1 recuerda la ultima seccion visitada en localStorage.
@@ -101,9 +103,9 @@ export default function admin() {
           <span className="admin-topbar-titulo">{titulo_de(vista)}</span>
         </div>
 
-        {vista === 'dashboard' ? (
+        {vista === 'dashboard' || vista === 'cobros' ? (
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-            <Dashboard />
+            {vista === 'dashboard' ? <Dashboard /> : <Cobros />}
           </div>
         ) : (
           <div className="page active" style={{ padding: '28px', flex: 1, minHeight: 0, overflowY: 'auto' }}>
@@ -129,5 +131,15 @@ export default function admin() {
       </main>
     </div>
     </AdminDatosProvider>
+  )
+}
+
+const Panel = panel
+
+export default function admin() {
+  return (
+    <AdminProvider>
+      <Panel />
+    </AdminProvider>
   )
 }

@@ -2,35 +2,16 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
-import LandingConfigProvider from './context/landingconfig'
-import ReservaProvider from './context/reservacontext'
-import MapaProvider from './context/mapacontext'
-import CheckoutProvider from './context/checkoutcontext'
-import PortalProvider from './context/portalcontext'
-import AdminProvider from './context/admincontext'
-import ToastProvider from './context/toastcontext'
 
 // css original de la v1, copiado textual desde el <style> de panel-inicio.html.
+// se queda aqui porque lo usa la landing, que es la ruta por defecto; las
+// hojas de /legales, /mis-reservas y /admin viajan con su propia pagina.
 import './styles/panel-inicio.css'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
-      <ToastProvider>
-        <LandingConfigProvider>
-          <ReservaProvider>
-            <MapaProvider>
-              <CheckoutProvider>
-                <PortalProvider>
-                  <AdminProvider>
-                    <App />
-                  </AdminProvider>
-                </PortalProvider>
-              </CheckoutProvider>
-            </MapaProvider>
-          </ReservaProvider>
-        </LandingConfigProvider>
-      </ToastProvider>
+      <App />
     </BrowserRouter>
   </StrictMode>
 )

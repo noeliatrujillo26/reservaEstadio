@@ -13,12 +13,13 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { useEffect } from 'react'
+import PortalProvider from '../context/portalcontext'
 import useportal from '../hooks/useportal'
 import AccesoPortal from '../components/portal/accesoportal'
 import VistaReserva from '../components/portal/vistareserva'
 import '../styles/panel-reserva.css'
 
-export default function misreservas() {
+function contenido() {
   const { sesion, reservas, actual, actualid, setactualid, salir } = useportal()
 
   useEffect(() => {
@@ -97,5 +98,15 @@ export default function misreservas() {
         </div>
       )}
     </div>
+  )
+}
+
+const Contenido = contenido
+
+export default function misreservas() {
+  return (
+    <PortalProvider>
+      <Contenido />
+    </PortalProvider>
   )
 }
