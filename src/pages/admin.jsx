@@ -22,9 +22,18 @@ import AdminSidebar from '../components/admin/adminsidebar'
 import AdminDatosProvider from '../context/admindatoscontext'
 import Dashboard from '../components/admin/dashboard'
 import Cobros from '../components/admin/cobros'
+import Reservas from '../components/admin/reservas'
 import secciones_nav from '../components/admin/adminnav'
 import '../styles/admin.css'
 import '../styles/admin-responsive.css'
+
+// modulos ya migrados: id de la v1 -> su vista. Los que faltan caen al aviso
+// de "pendiente de migrar".
+const MIGRADOS = {
+  dashboard: <Dashboard />,
+  cobros: <Cobros />,
+  seccionesreservadas: <Reservas />,
+}
 
 // titulo legible de la seccion, para la barra superior movil.
 function titulo_de(id) {
@@ -103,9 +112,9 @@ function panel() {
           <span className="admin-topbar-titulo">{titulo_de(vista)}</span>
         </div>
 
-        {vista === 'dashboard' || vista === 'cobros' ? (
+        {MIGRADOS[vista] ? (
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-            {vista === 'dashboard' ? <Dashboard /> : <Cobros />}
+            {MIGRADOS[vista]}
           </div>
         ) : (
           <div className="page active" style={{ padding: '28px', flex: 1, minHeight: 0, overflowY: 'auto' }}>

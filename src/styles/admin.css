@@ -1693,3 +1693,32 @@ body.vista-solo-ver .modal select,
   box-shadow: var(--shadow);
   padding: 32px 28px;
 }
+/* ═══════════════════════════════════════════════════════════════════
+   Filtros multi-seleccion del Registro de Cobros (.ms-*).
+
+   Estas reglas estaban en un <style> INCRUSTADO dentro de la propia pagina
+   de cobros (index.html lineas 2492-2501), no en el bloque <style> del
+   <head> que se extrajo al migrar. Al faltar, .ms-panel nunca recibia su
+   display:none ni su posicionamiento: los desplegables se veian todos
+   abiertos y amontonados al pie de la pagina.
+
+   UNICA adaptacion: la v1 usa position:fixed y calcula las coordenadas del
+   panel con JavaScript en cada apertura. Aqui el panel es position:absolute
+   dentro de .ms-filtro (que ya era position:relative), asi se coloca solo
+   bajo su boton y sigue al elemento si la pagina hace scroll. El resto de
+   las declaraciones va textual.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.pagina-admin .ms-filtro { position: relative; }
+.pagina-admin .ms-btn { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; text-align: left; cursor: pointer; font-size: 13px; }
+.pagina-admin .ms-btn .ms-caret { color: var(--text-3); font-size: 10px; }
+.pagina-admin .ms-btn.ms-activo { border-color: var(--naranja); color: var(--naranja); font-weight: 600; }
+.pagina-admin .ms-panel { display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 400; min-width: 210px; max-height: 260px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.18); padding: 6px; }
+.pagina-admin .ms-panel.open { display: block; }
+.pagina-admin .ms-acciones { display: flex; gap: 6px; padding: 2px 4px 8px; border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+.pagina-admin .ms-acciones button { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-size: 11px; cursor: pointer; color: var(--text-2); }
+.pagina-admin .ms-op { display: flex; align-items: center; gap: 7px; padding: 5px 6px; font-size: 12.5px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.pagina-admin .ms-op:hover { background: var(--surface-2); }
+
+/* el ultimo filtro de la fila abre hacia la izquierda para no salirse */
+.pagina-admin .ms-filtro:last-of-type .ms-panel { left: auto; right: 0; }

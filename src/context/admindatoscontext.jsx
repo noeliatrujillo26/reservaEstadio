@@ -62,11 +62,21 @@ function map_reserva_admin(r) {
     zona: r.zona,
     juego: r.juego,
     juegoid: r.juego_id != null ? String(r.juego_id) : '',
+    zonaid: r.zona_id || '',
     monto: r.monto,
     montopagado: r.monto_pagado,
+    descuentomonto: r.descuento_monto || 0,
     estadopago: r.estado_pago,
     pago: r.pago,
     estado: r.estado,
+    email: r.email || '',
+    tel: r.tel || '',
+    personas: r.personas,
+    // adultos conserva el NULL de la base: marca que la fila NUNCA la gestiono
+    // el panel (el checkout en linea no escribe esa columna). El conteo de
+    // personas depende de esa distincion para no sumar ninos dos veces.
+    adultos: r.adultos != null ? r.adultos : null,
+    ninos: r.ninos || 0,
   }
 }
 

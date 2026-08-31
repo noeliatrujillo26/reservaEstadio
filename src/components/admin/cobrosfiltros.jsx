@@ -16,8 +16,15 @@ function multiselect({ etiqueta, opciones, valor, oncambio }) {
     function fuera(e) {
       if (caja.current && !caja.current.contains(e.target)) setabierto(false)
     }
+    function escape(e) {
+      if (e.key === 'Escape') setabierto(false)
+    }
     document.addEventListener('mousedown', fuera)
-    return () => document.removeEventListener('mousedown', fuera)
+    document.addEventListener('keydown', escape)
+    return () => {
+      document.removeEventListener('mousedown', fuera)
+      document.removeEventListener('keydown', escape)
+    }
   }, [])
 
   function alternar(v) {
@@ -32,11 +39,13 @@ function multiselect({ etiqueta, opciones, valor, oncambio }) {
         type="button"
         className={'input ms-btn' + (activo ? ' ms-activo' : '')}
         onClick={() => setabierto((v) => !v)}
+        aria-expanded={abierto}
+        aria-haspopup="true"
       >
         <span>{activo ? etiqueta + ' (' + valor.length + ')' : etiqueta}</span>
         <span className="ms-caret">▼</span>
       </button>
-      <div className={'ms-panel' + (abierto ? ' open' : '')} style={{ position: 'absolute', top: '100%', left: 0 }}>
+      <div className={'ms-panel' + (abierto ? ' open' : '')}>
         <div className="ms-acciones">
           <button type="button" onClick={() => oncambio(opciones.slice())}>Todos</button>
           <button type="button" onClick={() => oncambio([])}>Ninguno</button>
