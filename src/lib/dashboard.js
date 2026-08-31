@@ -44,11 +44,16 @@ export function categoria_sec(nombre) {
   return 'General'
 }
 
+// String() en las dos llaves: la base puede devolver el id del juego como
+// numero o como texto, y una comparacion por tipo hacia que NINGUNA fila de
+// zona_juego_estado cruzara. El sintoma no era un error sino algo peor: todos
+// los juegos caian al estado base y mostraban KPIs identicos, como si el
+// selector no reaccionara.
 export function estado_zona(areasestados, areas, juegoid, zonaid) {
-  const porjuego = areasestados[juegoid]
-  const local = areas.find((a) => a.id === zonaid)
+  const porjuego = areasestados[String(juegoid)]
+  const local = areas.find((a) => String(a.id) === String(zonaid))
   if (!porjuego) return (local && local.estado) || 'libre'
-  return porjuego[zonaid] || (local && local.estado) || 'libre'
+  return porjuego[String(zonaid)] || (local && local.estado) || 'libre'
 }
 
 export const colores_categoria = {

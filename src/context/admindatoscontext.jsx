@@ -80,6 +80,38 @@ function map_reserva_admin(r) {
   }
 }
 
+// espejo del map de cargarJuegosDesdeSupabase().
+// El `id` va normalizado a STRING a proposito: los <select> siempre entregan
+// strings, y las comparaciones estrictas contra un id numerico fallaban
+// dejando la tabla de Reservas vacia y los KPIs en 0. La v1 lo documenta con
+// esas mismas palabras; migrarlo con un select crudo se salto esa
+// normalizacion y reintrodujo el bug.
+function map_juego(j) {
+  return {
+    id: String(j.id),
+    mes: j.mes,
+    fecha: j.fecha || '',
+    hora: j.hora,
+    rival: j.rival,
+    num: j.num,
+    serie: j.serie,
+    estado: j.estado,
+    notas: j.notas,
+  }
+}
+
+// las llaves de zona_juego_estado tambien se normalizan a string, para que
+// crucen con los ids de arriba sin depender del tipo que devuelva la base.
+function map_estados_zona(filas) {
+  const mapa = {}
+  filas.forEach((row) => {
+    const k = String(row.juego_id)
+    if (!mapa[k]) mapa[k] = {}
+    mapa[k][String(row.zona_id)] = row.estado
+  })
+  return mapa
+}
+
 // espejo de _movDesdeFila().
 function map_movimiento(m) {
   return {
@@ -100,6 +132,7 @@ export function admindatosprovider({ children }) {
   const [areas, setareas] = useState(areas_data)
   const [areasestados, setareasestados] = useState({})
   const [movimientos, setmovimientos] = useState([])
+  const [clientes, setclientes] = useState([])
   const [cargando, setcargando] = useState(true)
   const [errores, seterrores] = useState([])
 
@@ -109,13 +142,14 @@ export function admindatosprovider({ children }) {
 
     // cada consulta por separado: si una falla, las demas siguen y el panel
     // pinta lo que si tenga — mismo criterio de la v1, que aisla los renders.
-    const [rcobros, rreservas, rjuegos, rareas, restados, rmovs] = await Promise.allSettled([
+    const [rcobros, rreservas, rjuegos, rareas, restados, rmovs, rclientes] = await Promise.allSettled([
       select_todas('cobros', 'id'),
       select_todas('reservas', 'id'),
       sb.from('juegos').select('*').order('fecha'),
       sb.from('areas').select('*'),
       sb.from('zona_juego_estado').select('*'),
       sb.from('movimientos').select('*').order('created_at', { ascending: false }).limit(50),
+      select_todas('clientes', 'id'),
     ])
 
     const ok = (r, etiqueta) => {
@@ -134,7 +168,7 @@ export function admindatosprovider({ children }) {
     if (dr) setreservas(dr.map(map_reserva_admin))
 
     const dj = ok(rjuegos, 'juegos')
-    if (dj) setjuegos(dj)
+    if (dj) setjuegos(dj.map(map_juego))
 
     // la tabla `areas` solo aporta el estado base; el catalogo y los nombres
     // son los de areas_data, igual que en la v1.
@@ -149,17 +183,15 @@ export function admindatosprovider({ children }) {
     }
 
     const de = ok(restados, 'zona_juego_estado')
-    if (de) {
-      const mapa = {}
-      de.forEach((row) => {
-        if (!mapa[row.juego_id]) mapa[row.juego_id] = {}
-        mapa[row.juego_id][row.zona_id] = row.estado
-      })
-      setareasestados(mapa)
-    }
+    if (de) setareasestados(map_estados_zona(de))
 
     const dm = ok(rmovs, 'movimientos')
     if (dm) setmovimientos(dm.map(map_movimiento))
+
+    // la tabla `clientes` viaja cruda: lib/clientes.js la normaliza al armar
+    // el expediente.
+    const dcl = ok(rclientes, 'clientes')
+    if (dcl) setclientes(dcl)
 
     seterrores(fallos)
     setcargando(false)
@@ -167,7 +199,10 @@ export function admindatosprovider({ children }) {
 
   useEffect(() => { cargar() }, [cargar])
 
-  const valor = { cobros, reservas, juegos, areas, areasestados, movimientos, cargando, errores, recargar: cargar }
+  const valor = {
+    cobros, reservas, juegos, areas, areasestados, movimientos, clientes,
+    cargando, errores, recargar: cargar,
+  }
 
   return <admindatoscontext.Provider value={valor}>{children}</admindatoscontext.Provider>
 }
