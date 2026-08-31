@@ -16,6 +16,7 @@ import { createContext, useCallback, useEffect, useState } from 'react'
 import { sb } from '../supabaseclient'
 import areas_data from '../lib/areasdata'
 import { map_usuario } from '../lib/usuarios'
+import { map_movimiento } from '../lib/movimientos'
 
 export const admindatoscontext = createContext(null)
 
@@ -78,6 +79,7 @@ function map_reserva_admin(r) {
     // personas depende de esa distincion para no sumar ninos dos veces.
     adultos: r.adultos != null ? r.adultos : null,
     ninos: r.ninos || 0,
+    saldoconsumo: r.saldo_consumo || 0,
   }
 }
 
@@ -132,19 +134,6 @@ function map_estados_zona(filas) {
     mapa[k][String(row.zona_id)] = row.estado
   })
   return mapa
-}
-
-// espejo de _movDesdeFila().
-function map_movimiento(m) {
-  return {
-    fecha: (m.created_at || '').slice(0, 10),
-    ts: m.created_at || '',
-    tipo: m.tipo,
-    desc: m.descripcion,
-    ref: m.ref,
-    usuario: m.usuario,
-    monto: m.monto,
-  }
 }
 
 export function admindatosprovider({ children }) {

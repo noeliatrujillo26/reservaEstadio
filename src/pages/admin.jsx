@@ -25,6 +25,8 @@ import Cobros from '../components/admin/cobros'
 import Reservas from '../components/admin/reservas'
 import Clientes from '../components/admin/clientes'
 import Usuarios from '../components/admin/usuarios'
+import Movimientos from '../components/admin/movimientos'
+import Consumos from '../components/admin/consumos'
 import secciones_nav from '../components/admin/adminnav'
 import '../styles/admin.css'
 import '../styles/admin-responsive.css'
@@ -37,6 +39,8 @@ const MIGRADOS = {
   seccionesreservadas: <Reservas />,
   clientes: <Clientes />,
   usuarios: <Usuarios />,
+  movimientos: <Movimientos />,
+  consumos: <Consumos />,
 }
 
 // titulo legible de la seccion, para la barra superior movil.
