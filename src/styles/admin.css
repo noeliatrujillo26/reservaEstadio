@@ -1,0 +1,1695 @@
+/* ═══════════════════════════════════════════════════════════════════
+   admin.css — css del panel de administracion (index.html de la v1), con UN
+   solo cambio: cada regla queda acotada bajo .pagina-admin.
+
+   Mismo motivo que legales.css y panel-reserva.css: en la v1 era un .html
+   aparte con su propia hoja; en la spa todo el css comparte bundle y sus
+   :root, * y body chocarian con los de la landing.
+   Las declaraciones no se tocaron: solo se antepuso el contenedor.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.pagina-admin {
+  --naranja: #E05C1A;
+  --naranja-dark: #B84A12;
+  --naranja-light: #F4784A;
+  --naranja-muted: rgba(224,92,26,0.12);
+  --negro: #111318;
+  --sidebar-bg: #161A22;
+  --sidebar-w: 240px;
+  --surface: #FFFFFF;
+  --surface-2: #F7F8FA;
+  --border: #E4E7EC;
+  --text: #111318;
+  --text-2: #5A6478;
+  --text-3: #9AA3B4;
+  --verde: #16A34A;
+  --verde-bg: #DCFCE7;
+  --rojo: #DC2626;
+  --rojo-bg: #FEE2E2;
+  --amarillo: #CA8A04;
+  --amarillo-bg: #FEF9C3;
+  --azul: #2563EB;
+  --azul-bg: #DBEAFE;
+  --morado: #7C3AED;
+  --morado-bg: #EDE9FE;
+  /* Verde azulado del estado "Aprobada" de las cotizaciones: se distingue del
+     verde de "Concretada" sin confundirse con el azul de "Activa". */
+  --teal: #0D9488;
+  --teal-bg: #CCFBF1;
+  --radius: 10px;
+  --shadow: 0 1px 4px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.04);
+}
+.pagina-admin, .pagina-admin * {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+.pagina-admin {
+  min-height:100vh;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--surface-2);
+  color: var(--text);
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  font-size: 14px;
+}
+.pagina-admin .sidebar {
+  width: var(--sidebar-w);
+  background: var(--sidebar-bg);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 10;
+  overflow-y: auto;
+  border-right: none;
+}
+.pagina-admin .sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 18px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.pagina-admin .sidebar-logo-icon {
+  width: 32px;
+  height: 32px;
+  background: var(--naranja);
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.pagina-admin .sidebar-logo-text {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.pagina-admin .sidebar-logo-text span {
+  display: block;
+  font-size: 10px;
+  color: #666;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.pagina-admin .sidebar-section {
+  padding: 16px 10px 4px;
+}
+.pagina-admin .sidebar-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #444;
+  padding: 0 8px;
+  margin-bottom: 4px;
+}
+.pagina-admin .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: #8A94A8;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+}
+.pagina-admin .nav-item:hover {
+  background: rgba(255,255,255,0.06);
+  color: #CBD5E1;
+}
+.pagina-admin .nav-item.active {
+  background: rgba(224,92,26,0.15);
+  color: #F4784A;
+}
+.pagina-admin .nav-item.active .nav-icon {
+  color: var(--naranja);
+}
+/* Permisos "solo ver": dentro de una página en modo lectura se ocultan los
+   botones de acción (Crear/Guardar/Eliminar usan .btn-primary/.btn-danger
+   en todo el panel). Los administradores nunca reciben esta clase. */
+.page.solo-ver .btn-primary,
+.pagina-admin .page.solo-ver .btn-danger { display: none !important; }
+.pagina-admin .page.solo-ver .pipeline-card { cursor: default !important; }
+/* Modo solo lectura (vista activa sin nivel 'editar'):
+   - Los MODALES quedan de consulta: campos deshabilitados visual y
+     funcionalmente (los modales viven fuera de .page, por eso va en body).
+   - Los filtros/búsquedas de las páginas NO se tocan: consultar sigue libre.
+   - El guardia de escritura en sb.from() y las políticas RLS son la
+     autoridad real; esto es la señal visual. */
+body.vista-solo-ver .modal input,
+body.vista-solo-ver .modal select,
+.pagina-admin.vista-solo-ver .modal textarea {
+  pointer-events: none; background: #F3F4F6 !important; color: #6B7280; opacity: .85;
+}
+.pagina-admin #badge-solo-lectura {
+  display: none; position: fixed; top: 14px; right: 18px; z-index: 3000;
+  align-items: center; gap: 6px; background: #FEF3C7; color: #92400E;
+  border: 1px solid #FCD34D; border-radius: 999px; padding: 6px 14px;
+  font-size: 12px; font-weight: 700; box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  pointer-events: none;
+}
+.pagina-admin .nav-icon {
+  width: 16px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+.pagina-admin .nav-badge {
+  margin-left: auto;
+  background: var(--naranja);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 100px;
+}
+.pagina-admin .sidebar-footer {
+  margin-top: auto;
+  padding: 12px 10px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.pagina-admin .sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 7px;
+}
+.pagina-admin .sidebar-avatar {
+  width: 30px;
+  height: 30px;
+  background: var(--naranja);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+}
+.pagina-admin .sidebar-user-info {
+  flex: 1;
+  min-width: 0;
+}
+.pagina-admin .sidebar-user-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #CBD5E1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pagina-admin .sidebar-user-role {
+  font-size: 10px;
+  color: #555;
+}
+.pagina-admin .btn-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #666;
+  font-size: 12px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: color 0.15s;
+  margin-bottom: 4px;
+}
+.pagina-admin .btn-back:hover {
+  color: #AAA;
+}
+.pagina-admin .main {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100vh;
+  background: var(--surface-2);
+}
+.pagina-admin .page {
+  display: none;
+}
+.pagina-admin .page.active {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+.pagina-admin .card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.pagina-admin .card-header {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pagina-admin .card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.pagina-admin .card-sub {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+.pagina-admin .card-body {
+  padding: 20px;
+}
+.pagina-admin .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s, transform 0.1s;
+}
+.pagina-admin .btn:active {
+  transform: translateY(1px);
+}
+.pagina-admin .btn-primary {
+  background: var(--naranja);
+  color: white;
+}
+.pagina-admin .btn-primary:hover {
+  background: var(--naranja-dark);
+}
+.pagina-admin .btn-outline {
+  background: transparent;
+  border: 1.5px solid var(--border);
+  color: var(--text-2);
+}
+.pagina-admin .btn-outline:hover {
+  border-color: var(--naranja);
+  color: var(--naranja);
+}
+.pagina-admin .btn-ghost {
+  background: transparent;
+  color: var(--text-2);
+}
+.pagina-admin .btn-ghost:hover {
+  background: var(--surface-2);
+}
+.pagina-admin .btn-danger {
+  background: var(--rojo-bg);
+  color: var(--rojo);
+}
+.pagina-admin .btn-danger:hover {
+  background: #FCA5A5;
+}
+.pagina-admin .btn-sm {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.pagina-admin .btn-xs {
+  padding: 3px 8px;
+  font-size: 11px;
+  border-radius: 5px;
+}
+.pagina-admin .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.pagina-admin .badge-green {
+  background: var(--verde-bg);
+  color: var(--verde);
+}
+.pagina-admin .badge-red {
+  background: var(--rojo-bg);
+  color: var(--rojo);
+}
+.pagina-admin .badge-yellow {
+  background: var(--amarillo-bg);
+  color: var(--amarillo);
+}
+.pagina-admin .badge-blue {
+  background: var(--azul-bg);
+  color: var(--azul);
+}
+.pagina-admin .badge-purple {
+  background: var(--morado-bg);
+  color: var(--morado);
+}
+.pagina-admin .badge-teal {
+  background: var(--teal-bg);
+  color: var(--teal);
+}
+.pagina-admin .badge-gray {
+  background: #F1F3F7;
+  color: var(--text-2);
+}
+.pagina-admin .badge-orange {
+  background: var(--naranja-muted);
+  color: var(--naranja);
+}
+.pagina-admin .bdot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.pagina-admin .table-wrap {
+  overflow-x: auto;
+}
+.pagina-admin table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.pagina-admin thead th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.pagina-admin tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+.pagina-admin tbody tr:last-child td {
+  border-bottom: none;
+}
+.pagina-admin tbody tr:hover {
+  background: #FAFBFC;
+}
+/* Tablas del detalle del cliente: hover SUTIL con transición y limpieza
+   garantizada al quitar el cursor — nada de filas que se quedan pintadas. */
+.pagina-admin #modal-cliente-detalle tbody tr {
+  transition: background-color 0.15s ease;
+}
+.pagina-admin #modal-cliente-detalle tbody tr:hover {
+  background: rgba(224, 92, 26, 0.045);
+}
+.pagina-admin #modal-cliente-detalle tbody tr:not(:hover) {
+  background: transparent !important;
+}
+.pagina-admin .td-name {
+  font-weight: 600;
+}
+.pagina-admin .td-muted {
+  color: var(--text-2);
+  font-size: 12px;
+}
+.pagina-admin .input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  transition: border-color 0.15s;
+  outline: none;
+  font-family: inherit;
+}
+.pagina-admin .input:focus {
+  border-color: var(--naranja);
+}
+/* Tiempo real: destello de 1 s en la fila/tarjeta recién modificada por
+   OTRO usuario (la clase la pone y quita _rtDestacarFila). */
+@keyframes rtFlash {
+  .pagina-admin 0% { background-color: rgba(224, 92, 26, 0.35); }
+  .pagina-admin 100% { background-color: transparent; }
+}
+.pagina-admin .rt-flash {
+  animation: rtFlash 1.2s ease-out;
+}
+/* Switch pills de Tipo de comida — Carne Asada / Discada (Cotizaciones y
+   Detalles de la cotización del prospecto). */
+.pagina-admin .tc-toggle {
+  display: inline-flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  padding: 3px;
+  gap: 2px;
+}
+.pagina-admin .tc-toggle button {
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 14px;
+  border-radius: 100px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.pagina-admin .tc-toggle button.tc-on {
+  background: var(--naranja);
+  color: #fff;
+}
+.pagina-admin .tc-toggle button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+/* Campos de PRECIO bloqueados (Cotizaciones / Detalles de la cotización /
+   Nuevo prospecto): el valor viene SOLO del catálogo de Precios — gris,
+   cursor prohibido y sin flechitas de subir/bajar número. */
+.precio-bloqueado,
+.pagina-admin .precio-bloqueado:disabled {
+  background: var(--surface-2) !important;
+  color: var(--text-2) !important;
+  cursor: not-allowed !important;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.precio-bloqueado::-webkit-outer-spin-button,
+.pagina-admin .precio-bloqueado::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.pagina-admin .select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%239AA3B4' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+.pagina-admin .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.pagina-admin .form-row-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+.pagina-admin .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.pagina-admin .pd-compact .form-group {
+  margin-bottom: 8px;
+  gap: 3px;
+}
+.pagina-admin .pd-compact .form-row {
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.pagina-admin .pd-compact .form-label {
+  font-size: 10.5px;
+}
+.pagina-admin .pd-compact .input {
+  padding: 5px 9px;
+  font-size: 12px;
+}
+.pagina-admin .form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.pagina-admin .stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.pagina-admin .stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+}
+.pagina-admin .stat-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+.pagina-admin .stat-card-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.pagina-admin .stat-card-delta {
+  font-size: 12px;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pagina-admin .delta-up {
+  color: var(--verde);
+}
+.pagina-admin .delta-down {
+  color: var(--rojo);
+}
+.pagina-admin .stat-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  font-size: 20px;
+}
+.pagina-admin .grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.pagina-admin .grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 20px;
+}
+@media (max-width: 900px) {
+.pagina-admin .grid-2, .pagina-admin .grid-3 {
+  grid-template-columns: 1fr;
+}
+}
+.pagina-admin .pipeline-cols {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  min-height: 500px;
+  overflow-x: auto;
+}
+@media (max-width: 1400px) {
+.pagina-admin .pipeline-cols {
+  grid-template-columns: repeat(3, 1fr);
+}
+}
+@media (max-width: 900px) {
+.pagina-admin .pipeline-cols {
+  grid-template-columns: repeat(2, 1fr);
+}
+}
+.pagina-admin .pipeline-col {
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  padding: 12px;
+  border: 1px solid var(--border);
+}
+.pagina-admin .pipeline-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.pagina-admin .pipeline-col-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-2);
+}
+.pagina-admin .pipeline-count {
+  font-size: 11px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  padding: 1px 7px;
+  border-radius: 100px;
+  font-weight: 600;
+}
+.pagina-admin .pipeline-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  cursor: grab;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  transition: box-shadow 0.15s;
+}
+.pagina-admin .pipeline-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.pagina-admin .pipeline-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.pagina-admin .pipeline-card-zona {
+  font-size: 11px;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+.pagina-admin .pipeline-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pagina-admin .pipeline-card-monto {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--naranja);
+}
+.pagina-admin .pipeline-bar {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.pagina-admin .pipeline-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+}
+.pagina-admin .area-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.pagina-admin .area-card {
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s;
+}
+.pagina-admin .area-card.libre {
+  border-color: #BBF7D0;
+  background: #F0FDF4;
+}
+.pagina-admin .area-card.bloqueada {
+  border-color: #FECACA;
+  background: #FFF5F5;
+}
+.pagina-admin .area-card.reservada {
+  border-color: #BFDBFE;
+  background: #EFF6FF;
+}
+.pagina-admin .area-card-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+.pagina-admin .area-card-cap {
+  font-size: 11px;
+  color: var(--text-2);
+}
+.pagina-admin .area-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.pagina-admin .bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 120px;
+  padding: 0 4px;
+}
+.pagina-admin .bar-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+  justify-content: flex-end;
+}
+.pagina-admin .bar {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  background: var(--naranja);
+  opacity: 0.85;
+  transition: opacity 0.2s;
+  min-height: 4px;
+}
+.pagina-admin .bar:hover {
+  opacity: 1;
+}
+.pagina-admin .bar-label {
+  font-size: 10px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.pagina-admin .bar-val {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.pagina-admin .donut-wrap {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  flex-shrink: 0;
+}
+.pagina-admin .donut-wrap svg {
+  transform: rotate(-90deg);
+}
+.pagina-admin .donut-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%,-50%);
+  text-align: center;
+}
+.pagina-admin .donut-pct {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+}
+.pagina-admin .donut-lbl {
+  font-size: 9px;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+.pagina-admin .timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.pagina-admin .tl-item {
+  display: flex;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.pagina-admin .tl-item:last-child {
+  border-bottom: none;
+}
+.pagina-admin .tl-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+  font-size: 12px;
+}
+.pagina-admin .tl-content {
+  flex: 1;
+}
+.pagina-admin .tl-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.pagina-admin .tl-meta {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.pagina-admin .modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.pagina-admin .modal-overlay.open {
+  display: flex;
+}
+.pagina-admin .modal {
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 0;
+  width: 520px;
+  max-width: 95vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  /* REGLA GLOBAL anti-desborde: en laptops de poca altura el modal jamás
+     rebasa la pantalla — header y footer quedan fijos y SOLO el cuerpo
+     (.modal-body) hace scroll. Aplica a TODOS los modales del sistema. */
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+.pagina-admin .modal-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.pagina-admin .modal-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+.pagina-admin .modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-3);
+  padding: 4px;
+  border-radius: 5px;
+  display: flex;
+}
+.pagina-admin .modal-close:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+.pagina-admin .modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.pagina-admin .modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+}
+/* Scrollbar discreta y moderna en los cuerpos con scroll (modales y drawers). */
+.pagina-admin .modal-body, .pagina-admin .desc-drawer-body {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.pagina-admin .modal-body::-webkit-scrollbar, .pagina-admin .desc-drawer-body::-webkit-scrollbar {
+  width: 6px;
+}
+.pagina-admin .modal-body::-webkit-scrollbar-track, .pagina-admin .desc-drawer-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.pagina-admin .modal-body::-webkit-scrollbar-thumb, .pagina-admin .desc-drawer-body::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+.pagina-admin .modal-body::-webkit-scrollbar-thumb:hover, .pagina-admin .desc-drawer-body::-webkit-scrollbar-thumb:hover {
+  background: var(--text-3);
+}
+.pagina-admin .tab-bar {
+  display: flex;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 20px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.pagina-admin .tab-bar::-webkit-scrollbar {
+  display: none;
+}
+.pagina-admin .tab-btn {
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  border: none;
+  background: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.pagina-admin .tab-btn.active {
+  color: var(--naranja);
+  border-bottom-color: var(--naranja);
+}
+.pagina-admin .tab-pane {
+  display: none;
+}
+.pagina-admin .tab-pane.active {
+  display: block;
+}
+.pagina-admin .search-wrap {
+  position: relative;
+}
+.pagina-admin .search-wrap input {
+  padding-left: 32px;
+}
+.pagina-admin .search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-3);
+  pointer-events: none;
+}
+/* Ícono giratorio del botón "↻ Actualizar" (Clientes) */
+.pagina-admin .cl-refresh-icon.girando { animation: cl-girar 0.8s linear infinite; }
+@keyframes cl-girar { to { transform: rotate(360deg); } }
+
+/* Skeleton loader (carga segura Database-First): barras shimmer mientras
+   Supabase responde — nunca tablas vacías ni montos en $0 a medio cargar. */
+.pagina-admin .skel-bar {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: skel-shimmer 1.2s ease-in-out infinite;
+}
+@keyframes skel-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+.pagina-admin .toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--negro);
+  color: #fff;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  border-left: 3px solid var(--naranja);
+  transform: translateY(100px);
+  opacity: 0;
+  transition: transform 0.3s, opacity 0.3s;
+  z-index: 999;
+}
+.pagina-admin .toast.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+.pagina-admin .page-header {
+  margin-bottom: 24px;
+}
+.pagina-admin .page-header h2 {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+}
+.pagina-admin .page-header p {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-top: 4px;
+}
+.pagina-admin .empty-state {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--text-3);
+}
+.pagina-admin .empty-state-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+}
+.pagina-admin .tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.pagina-admin hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}
+.pagina-admin .flex {
+  display: flex;
+}
+.pagina-admin .flex-center {
+  align-items: center;
+}
+.pagina-admin .gap-2 {
+  gap: 8px;
+}
+.pagina-admin .gap-3 {
+  gap: 12px;
+}
+.pagina-admin .ml-auto {
+  margin-left: auto;
+}
+.pagina-admin .mt-4 {
+  margin-top: 16px;
+}
+.pagina-admin .mb-4 {
+  margin-bottom: 16px;
+}
+.pagina-admin .text-sm {
+  font-size: 12px;
+}
+.pagina-admin .text-muted {
+  color: var(--text-2);
+}
+.pagina-admin .fw-700 {
+  font-weight: 700;
+}
+.pagina-admin .w-full {
+  width: 100%;
+}
+.pagina-admin .cobros-tab-pane {
+  display: none;
+}
+.pagina-admin .cobros-tab-pane.active {
+  display: block;
+}
+.pagina-admin #ctab-pane-tabla .card {
+  overflow: hidden;
+}
+.pagina-admin #ctab-pane-tabla .table-wrap {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 60vh;
+}
+.pagina-admin #page-cobros .card {
+  min-height: 0;
+}
+.pagina-admin #page-cotizaciones .tab-bar {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+.pagina-admin ._cmitem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text);
+  line-height: 1.3;
+}
+.pagina-admin ._cmitem:hover {
+  background: var(--surface-2);
+}
+.pagina-admin #qtab-pane-lista {
+  flex: 1;
+}
+.pagina-admin #qtab-pane-lista .card {
+  border-radius: 0 0 10px 10px;
+}
+.pagina-admin .page-inner {
+  padding: 28px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.pagina-admin #editor-secciones-app {
+  --bg:#0f172a;
+  --panel:#111827;
+  --panel2:#1e293b;
+  --line:#334155;
+  --txt:#e2e8f0;
+  --muted:#94a3b8;
+  --accent:#3b82f6;
+  --accent2:#2563eb;
+  --ok:#22c55e;
+  --danger:#ef4444;
+  --warn:#f59e0b;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  flex:1;
+  min-height:520px;
+  border-radius:10px;
+  border:1px solid #1e293b;
+  background:var(--bg);
+  color:var(--txt);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+.pagina-admin #editor-secciones-app * {
+  box-sizing:border-box
+}
+.pagina-admin #editor-secciones-app header {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  padding:10px 14px;
+  background:var(--panel);
+  border-bottom:1px solid var(--line);
+  box-shadow:0 2px 8px rgba(0,0,0,.3);
+  z-index:20;
+}
+.pagina-admin #editor-secciones-app header h1 {
+  font-size:16px;
+  margin:0 12px 0 0;
+  font-weight:700;
+  letter-spacing:.2px;
+  color:var(--txt)
+}
+.pagina-admin #editor-secciones-app header h1 span {
+  color:var(--accent)
+}
+.pagina-admin #editor-secciones-app .btn {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  cursor:pointer;
+  border:1px solid var(--line);
+  background:var(--panel2);
+  color:var(--txt);
+  padding:8px 12px;
+  border-radius:8px;
+  font-size:13px;
+  font-weight:600;
+  transition:.15s;
+  white-space:nowrap;
+  user-select:none;
+}
+.pagina-admin #editor-secciones-app .btn:hover {
+  border-color:var(--accent);
+  background:#243044
+}
+.pagina-admin #editor-secciones-app .btn.primary {
+  background:var(--accent2);
+  border-color:var(--accent2)
+}
+.pagina-admin #editor-secciones-app .btn.primary:hover {
+  background:var(--accent)
+}
+.pagina-admin #editor-secciones-app .btn.primary.active {
+  background:var(--ok);
+  border-color:var(--ok);
+  box-shadow:0 0 0 3px rgba(34,197,94,.25)
+}
+.pagina-admin #editor-secciones-app .btn.ghost {
+  background:transparent
+}
+.pagina-admin #editor-secciones-app .btn.danger:hover {
+  border-color:var(--danger);
+  background:#3a1d1d;
+  color:#fecaca
+}
+.pagina-admin #editor-secciones-app .spacer {
+  flex:1
+}
+.pagina-admin #editor-secciones-app .zoomctrl {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:13px;
+  color:var(--muted)
+}
+.pagina-admin #editor-secciones-app .zoomctrl input[type=range] {
+  accent-color:var(--accent)
+}
+.pagina-admin #editor-secciones-app main {
+  flex:1;
+  display:flex;
+  min-height:0
+}
+.pagina-admin #editor-secciones-app #canvasWrap {
+  flex:1;
+  overflow:auto;
+  position:relative;
+  background: linear-gradient(45deg,#0b1220 25%,transparent 25%), linear-gradient(-45deg,#0b1220 25%,transparent 25%), linear-gradient(45deg,transparent 75%,#0b1220 75%), linear-gradient(-45deg,transparent 75%,#0b1220 75%);
+  background-size:24px 24px;
+  background-position:0 0,0 12px,12px -12px,-12px 0;
+}
+.pagina-admin #editor-secciones-app #stageScroll {
+  padding:24px;
+  min-width:min-content;
+  display:inline-block
+}
+.pagina-admin #editor-secciones-app #stage {
+  position:relative;
+  display:inline-block;
+  line-height:0;
+  box-shadow:0 10px 40px rgba(0,0,0,.5);
+  border-radius:6px;
+  overflow:hidden;
+  background:#fff
+}
+.pagina-admin #editor-secciones-app #mapImg {
+  display:block;
+  width:100%;
+  height:auto;
+  user-select:none;
+  -webkit-user-drag:none
+}
+.pagina-admin #editor-secciones-app #overlay {
+  position:absolute;
+  inset:0
+}
+.pagina-admin #editor-secciones-app #stage.adding #overlay {
+  cursor:crosshair
+}
+.pagina-admin #editor-secciones-app .sec {
+  position:absolute;
+  transform:translate(-50%,-50%);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  border-radius:50%;
+  color:#fff;
+  font-weight:800;
+  cursor:grab;
+  border:2px solid rgba(255,255,255,.9);
+  box-shadow:0 2px 8px rgba(0,0,0,.45);
+  touch-action:none;
+  line-height:1;
+  text-align:center;
+}
+.pagina-admin #editor-secciones-app .sec:active {
+  cursor:grabbing
+}
+.pagina-admin #editor-secciones-app.locked .sec {
+  cursor:default
+}
+.pagina-admin #editor-secciones-app.locked .sec:active {
+  cursor:default
+}
+.pagina-admin #editor-secciones-app.locked #stage.adding #overlay {
+  cursor:default
+}
+.pagina-admin #editor-secciones-app.locked .listitem .del {
+  display:none
+}
+.pagina-admin #editor-secciones-app.locked .listitem {
+  cursor:default
+}
+.pagina-admin #editor-secciones-app .btn.locked-off {
+  opacity:.45;
+  pointer-events:none;
+  filter:grayscale(.4)
+}
+.pagina-admin .map-lock-banner {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background:var(--amarillo-bg);
+  color:var(--amarillo);
+  border:1px solid #FDE68A;
+  border-radius:8px;
+  padding:8px 14px;
+  font-size:13px;
+  font-weight:600;
+  margin-bottom:12px
+}
+.pagina-admin #editor-secciones-app .sec .num {
+  pointer-events:none
+}
+.pagina-admin #editor-secciones-app .sec.sel {
+  outline:3px solid #fff;
+  outline-offset:3px;
+  box-shadow:0 0 0 3px rgba(59,130,246,.6),0 4px 14px rgba(0,0,0,.5)
+}
+.pagina-admin #editor-secciones-app .sec .label {
+  position:absolute;
+  top:100%;
+  left:50%;
+  transform:translate(-50%,4px);
+  background:rgba(15,23,42,.92);
+  color:#fff;
+  padding:2px 7px;
+  border-radius:6px;
+  white-space:nowrap;
+  font-weight:700;
+  border:1px solid rgba(255,255,255,.18);
+  pointer-events:none;
+}
+.pagina-admin #editor-secciones-app aside {
+  width:320px;
+  flex-shrink:0;
+  background:var(--panel);
+  border-left:1px solid var(--line);
+  display:flex;
+  flex-direction:column;
+  min-height:0
+}
+.pagina-admin #editor-secciones-app .panelhead {
+  padding:12px 14px;
+  border-bottom:1px solid var(--line);
+  display:flex;
+  align-items:center;
+  justify-content:space-between
+}
+.pagina-admin #editor-secciones-app .panelhead h2 {
+  font-size:14px;
+  margin:0;
+  font-weight:700;
+  color:var(--txt)
+}
+.pagina-admin #editor-secciones-app .badge {
+  background:var(--panel2);
+  border:1px solid var(--line);
+  color:var(--muted);
+  font-size:12px;
+  padding:2px 8px;
+  border-radius:999px
+}
+.pagina-admin #editor-secciones-app .panelbody {
+  flex:1;
+  overflow:auto;
+  padding:12px 14px
+}
+.pagina-admin #editor-secciones-app #editor {
+  background:var(--panel2);
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:14px;
+  margin-bottom:14px
+}
+.pagina-admin #editor-secciones-app #editor.hidden {
+  display:none
+}
+.pagina-admin #editor-secciones-app #editor .row {
+  margin-bottom:11px
+}
+.pagina-admin #editor-secciones-app #editor label {
+  display:block;
+  font-size:12px;
+  color:var(--muted);
+  margin-bottom:5px;
+  font-weight:600
+}
+#editor-secciones-app #editor input[type=text],
+.pagina-admin #editor-secciones-app #editor input[type=number] {
+  width:100%;
+  padding:8px 10px;
+  border-radius:7px;
+  border:1px solid var(--line);
+  background:#0b1220;
+  color:var(--txt);
+  font-size:14px;
+  font-weight:600;
+}
+.pagina-admin #editor-secciones-app #editor input:focus {
+  outline:none;
+  border-color:var(--accent)
+}
+.pagina-admin #editor-secciones-app .swatches {
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap
+}
+.pagina-admin #editor-secciones-app .swatch {
+  width:26px;
+  height:26px;
+  border-radius:50%;
+  cursor:pointer;
+  border:2px solid transparent
+}
+.pagina-admin #editor-secciones-app .swatch.sel {
+  border-color:#fff;
+  box-shadow:0 0 0 2px var(--accent)
+}
+.pagina-admin #editor-secciones-app .sizerow {
+  display:flex;
+  align-items:center;
+  gap:10px
+}
+.pagina-admin #editor-secciones-app .sizerow input[type=range] {
+  flex:1;
+  accent-color:var(--accent)
+}
+.pagina-admin #editor-secciones-app .editor-actions {
+  display:flex;
+  gap:8px;
+  margin-top:6px
+}
+.pagina-admin #editor-secciones-app .editor-actions .btn {
+  flex:1;
+  justify-content:center
+}
+.pagina-admin #editor-secciones-app .listitem {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:8px 10px;
+  border-radius:8px;
+  cursor:pointer;
+  border:1px solid transparent;
+  margin-bottom:4px;
+}
+.pagina-admin #editor-secciones-app .listitem:hover {
+  background:var(--panel2)
+}
+.pagina-admin #editor-secciones-app .listitem.sel {
+  background:var(--panel2);
+  border-color:var(--accent)
+}
+.pagina-admin #editor-secciones-app .dot {
+  width:22px;
+  height:22px;
+  border-radius:50%;
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:11px;
+  font-weight:800;
+  color:#fff;
+  border:1px solid rgba(255,255,255,.5)
+}
+.pagina-admin #editor-secciones-app .listitem .meta {
+  flex:1;
+  min-width:0
+}
+.pagina-admin #editor-secciones-app .listitem .meta .nm {
+  font-size:13px;
+  font-weight:700;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis
+}
+.pagina-admin #editor-secciones-app .listitem .meta .sub {
+  font-size:11px;
+  color:var(--muted)
+}
+.pagina-admin #editor-secciones-app .listitem .del {
+  opacity:0;
+  color:var(--muted);
+  font-size:16px;
+  padding:2px 6px;
+  border-radius:6px
+}
+.pagina-admin #editor-secciones-app .listitem:hover .del {
+  opacity:1
+}
+.pagina-admin #editor-secciones-app .listitem .del:hover {
+  color:var(--danger);
+  background:#3a1d1d
+}
+.pagina-admin #editor-secciones-app .empty {
+  color:var(--muted);
+  font-size:13px;
+  text-align:center;
+  padding:24px 10px;
+  line-height:1.5
+}
+.pagina-admin #editor-secciones-app .hint {
+  font-size:12px;
+  color:var(--muted);
+  padding:8px 14px;
+  border-top:1px solid var(--line);
+  background:var(--panel)
+}
+.pagina-admin #editor-secciones-app .hint b {
+  color:var(--txt)
+}
+.pagina-admin #editor-secciones-app input[type=file] {
+  display:none
+}
+.pagina-admin #editor-secciones-app #toast {
+  position:fixed;
+  bottom:18px;
+  left:50%;
+  transform:translateX(-50%) translateY(20px);
+  background:var(--panel2);
+  border:1px solid var(--accent);
+  color:var(--txt);
+  padding:10px 16px;
+  border-radius:10px;
+  font-size:13px;
+  font-weight:600;
+  opacity:0;
+  pointer-events:none;
+  transition:.25s;
+  z-index:50;
+  box-shadow:0 8px 24px rgba(0,0,0,.4)
+}
+.pagina-admin #editor-secciones-app #toast.show {
+  opacity:1;
+  transform:translateX(-50%) translateY(0)
+}
+@media (max-width:760px) {
+.pagina-admin #editor-secciones-app aside {
+  position:absolute;
+  right:0;
+  top:0;
+  bottom:0;
+  z-index:15;
+  box-shadow:-8px 0 24px rgba(0,0,0,.4);
+  transform:translateX(100%);
+  transition:.2s
+}
+.pagina-admin #editor-secciones-app aside.open {
+  transform:translateX(0)
+}
+.pagina-admin #editor-secciones-app .mobtoggle {
+  display:inline-flex
+}
+}
+.pagina-admin #editor-secciones-app .mobtoggle {
+  display:none
+}
+
+.pagina-admin .desc-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 210;
+  display: none;
+}
+.pagina-admin .desc-drawer-overlay.open { display: block; }
+.pagina-admin .desc-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 400px;
+  max-width: 95vw;
+  background: var(--surface);
+  z-index: 211;
+  box-shadow: -4px 0 32px rgba(0,0,0,0.18);
+  transform: translateX(100%);
+  transition: transform 0.28s cubic-bezier(.4,0,.2,1);
+  display: flex;
+  flex-direction: column;
+}
+.pagina-admin .desc-drawer.open { transform: translateX(0); }
+.pagina-admin .desc-drawer-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  background: var(--surface);
+}
+.pagina-admin .desc-drawer-body {
+  padding: 20px 24px;
+  flex: 1;
+  overflow-y: auto;
+}
+.pagina-admin .desc-drawer-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.pagina-admin .desc-juegos-list {
+  border: 1.5px solid var(--border);
+  border-radius: 7px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--surface);
+}
+.pagina-admin .desc-juego-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text);
+  user-select: none;
+}
+.pagina-admin .desc-juego-item:last-child { border-bottom: none; }
+.pagina-admin .desc-juego-item:hover { background: var(--surface-2); }
+.pagina-admin .desc-juego-item input[type=checkbox] { accent-color: var(--naranja); cursor: pointer; flex-shrink: 0; }
+.pagina-admin .desc-juegos-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0 6px;
+}
+.pagina-admin .desc-juegos-group-label {
+  padding: 5px 12px 3px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.pagina-admin .switch { position: relative; display: inline-block; width: 38px; height: 22px; flex-shrink: 0; }
+.pagina-admin .switch input { opacity: 0; width: 0; height: 0; }
+.pagina-admin .switch .switch-track { position: absolute; inset: 0; background: var(--border); border-radius: 999px; cursor: pointer; transition: background .15s; }
+.pagina-admin .switch .switch-track::before { content: ""; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .15s; }
+.pagina-admin .switch input:checked + .switch-track { background: var(--naranja); }
+.pagina-admin .switch input:checked + .switch-track::before { transform: translateX(16px); }
+.pagina-admin .input-error { border-color: #DC2626 !important; box-shadow: 0 0 0 1px #DC2626; }
+
+/* ══ Login / control de acceso ══ */
+.pagina-admin:not(.authed) .sidebar, .pagina-admin:not(.authed) .main { display: none; }
+.pagina-admin.authed #login-screen { display: none; }
+
+/* ══ Estado de carga inicial (anti-parpadeo del login) ══
+   El body arranca con .auth-waiting: se oculta el login y se muestra un
+   overlay de carga hasta que Supabase decide si hay sesión activa. */
+.pagina-admin.auth-waiting #login-screen { display: none; }
+.pagina-admin #auth-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: var(--negro);
+}
+.pagina-admin.auth-waiting #auth-loading { display: flex; }
+.pagina-admin .auth-spinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgba(255,255,255,0.15);
+  border-top-color: var(--naranja);
+  border-radius: 50%;
+  animation: authspin 0.8s linear infinite;
+}
+@keyframes authspin { to { transform: rotate(360deg); } }
+.pagina-admin #login-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--negro);
+}
+.pagina-admin .login-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 32px 28px;
+}

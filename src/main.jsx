@@ -7,6 +7,7 @@ import ReservaProvider from './context/reservacontext'
 import MapaProvider from './context/mapacontext'
 import CheckoutProvider from './context/checkoutcontext'
 import PortalProvider from './context/portalcontext'
+import AdminProvider from './context/admincontext'
 import ToastProvider from './context/toastcontext'
 
 // css original de la v1, copiado textual desde el <style> de panel-inicio.html.
@@ -21,7 +22,9 @@ createRoot(document.getElementById('root')).render(
             <MapaProvider>
               <CheckoutProvider>
                 <PortalProvider>
-                  <App />
+                  <AdminProvider>
+                    <App />
+                  </AdminProvider>
                 </PortalProvider>
               </CheckoutProvider>
             </MapaProvider>

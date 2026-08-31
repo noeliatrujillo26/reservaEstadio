@@ -1,0 +1,81 @@
+/* ═══════════════════════════════════════════════════════════════════
+   admin-responsive.css — LO UNICO AÑADIDO al diseño del panel.
+
+   El panel de la v1 es de escritorio: la barra lateral es `position:fixed`
+   con 240px y `.main` lleva `margin-left:240px`, sin ninguna media query. En
+   un celular eso deja la barra encima del contenido y el panel inservible.
+
+   Aqui abajo de 900px la barra se convierte en cajon deslizante con su
+   velo, y aparece una barra superior con el boton de menu. Por encima de
+   900px NO se aplica NADA: el escritorio queda exactamente igual que la v1.
+
+   Vive en su propio archivo, aparte de admin.css, justo para que se vea de
+   un vistazo que es un añadido y no parte de la migracion 1:1. Si prefieres
+   el comportamiento original, basta con dejar de importarlo.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* la barra superior solo existe en movil */
+.pagina-admin .admin-topbar { display: none; }
+
+@media (max-width: 900px) {
+  .pagina-admin .admin-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 52px;
+    padding: 0 14px;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 12;
+  }
+  .pagina-admin .admin-topbar-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-1);
+    flex-shrink: 0;
+  }
+  .pagina-admin .admin-topbar-titulo {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-1);
+  }
+
+  /* la barra lateral pasa a cajon */
+  .pagina-admin .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 30;
+    width: 260px;
+  }
+  .pagina-admin.drawer-abierto .sidebar { transform: translateX(0); }
+
+  .pagina-admin .admin-velo {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 20;
+  }
+  .pagina-admin.drawer-abierto .admin-velo { display: block; }
+
+  /* sin barra fija a la izquierda, el contenido ocupa todo el ancho */
+  .pagina-admin .main {
+    margin-left: 0;
+    height: auto;
+    min-height: calc(100vh - 52px);
+  }
+}
+
+/* quien pidio menos animacion no ve deslizarse el cajon */
+@media (prefers-reduced-motion: reduce) {
+  .pagina-admin .sidebar { transition: none; }
+}
