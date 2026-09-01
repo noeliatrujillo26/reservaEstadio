@@ -26,44 +26,37 @@ const az = 'rgba(37,99,235,0.05)'
 const nj = 'var(--naranja-muted)'
 const der = { textAlign: 'right', whiteSpace: 'nowrap' }
 
-// Celdas de texto CONTENIDAS. En la v1 estas dos columnas son un <input> y un
-// <textarea rows=2>, que tienen altura fija: por eso su cuadricula no se
-// deformaba. Al pintarlas como texto plano el contenido largo estiraba la
-// fila, asi que aqui se replica esa altura fija — una linea con elipsis para
-// la descripcion corta, y dos lineas recortadas para la larga.
-const texto_una_linea = {
+// Campos de solo lectura, con el MISMO estilo que la v1. Son la razon de que
+// alli la cuadricula no se deforme: tienen altura fija propia, asi que el
+// texto largo se desplaza dentro del campo en vez de estirar la fila.
+// El textarea conserva resize:vertical — quien necesite leer una descripcion
+// larga puede estirar su cuadro, igual que en la version original.
+const est_desc_corta = {
+  width: '100%',
+  minWidth: '280px',
   fontSize: '12px',
-  maxWidth: '280px',
-  whiteSpace: 'nowrap',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
+  background: 'var(--surface-2)',
+  color: 'var(--text-2)',
 }
 
-// -webkit-line-clamp corta a 2 lineas y pone la elipsis; el maxHeight es el
-// respaldo para los navegadores que no lo soporten.
-const texto_dos_lineas = {
-  fontSize: '12px',
+const est_desc = {
   width: '220px',
-  display: '-webkit-box',
-  WebkitLineClamp: 2,
-  WebkitBoxOrient: 'vertical',
-  overflow: 'hidden',
-  maxHeight: '34px',
-  lineHeight: '17px',
+  fontSize: '12px',
+  resize: 'vertical',
+  background: 'var(--surface-2)',
+  color: 'var(--text-2)',
+  border: '1px solid var(--border)',
+  borderRadius: '8px',
+  padding: '6px 8px',
+  fontFamily: 'inherit',
 }
 
-// miniatura de 44px, el mismo tamaño que usa la v1 en estas dos columnas.
-function miniatura({ src, alt }) {
-  if (!src) return <span style={{ color: 'var(--text-3)', fontSize: '12px' }}>—</span>
-  return (
-    <img
-      src={src} alt={alt} loading="lazy"
-      style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: '5px', flexShrink: 0 }}
-    />
-  )
+const est_sku = {
+  width: '90px',
+  textTransform: 'uppercase',
+  background: 'var(--surface-2)',
+  color: 'var(--text-2)',
 }
-
-const Miniatura = miniatura
 
 export default function precios() {
   const { secciones, cargando, errores } = useadmindatos()
@@ -144,7 +137,7 @@ export default function precios() {
               </thead>
               <tbody id="precios-table">
                 {filas.map((p) => (
-                  <tr key={p.pinid} style={{ verticalAlign: 'middle' }}>
+                  <tr key={p.pinid} style={{ verticalAlign: 'top' }}>
                     <td className="td-name" style={{ whiteSpace: 'nowrap' }} title={p.zona}>
                       {p.zona}
                       {p.escompartida && (
@@ -154,12 +147,22 @@ export default function precios() {
                       )}
                     </td>
                     <td><span className={'badge ' + (badge_seccion[p.seccion] || 'badge-gray')}>{p.seccion}</span></td>
-                    <td className="td-muted">{p.sku || '—'}</td>
-                    <td className="td-muted" title={p.shortdescription || undefined}>
-                      <div style={texto_una_linea}>{p.shortdescription || '—'}</div>
+                    <td>
+                      <input className="input" style={est_sku} value={p.sku || ''} readOnly />
                     </td>
-                    <td className="td-muted" title={p.descripcion || undefined}>
-                      <div style={texto_dos_lineas}>{p.descripcion || '—'}</div>
+                    <td>
+                      <input
+                        className="input" style={est_desc_corta}
+                        value={p.shortdescription || ''} title={p.shortdescription || undefined}
+                        readOnly
+                      />
+                    </td>
+                    <td>
+                      <textarea
+                        rows={2} style={est_desc}
+                        value={p.descripcion || ''} title={p.descripcion || undefined}
+                        readOnly
+                      />
                     </td>
 
                     <td style={{ ...der, background: az, borderLeft: '2px solid var(--azul)' }}>{p.minv}</td>

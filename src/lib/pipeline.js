@@ -180,3 +180,37 @@ export function ocupacion_palco(area, juegoid, reservas) {
 export function palcos_del_mapa(areas) {
   return (areas || []).filter((a) => a && a.escompartida)
 }
+
+// ── completados ─────────────────────────────────────────────────
+// espejo del filtro de renderCompletados(): el archivo del tablero son las
+// tarjetas en etapa 'completado'.
+//
+// El buscador mira folio, nombre Y los folios de reserva vinculados — asi se
+// puede localizar un proceso archivado por el folio de su reserva, que suele
+// ser el que trae el cliente.
+export function filtrar_completados(cards, { busqueda, juego, seriejuegoids }) {
+  const q = String(busqueda || '').toLowerCase().trim()
+  return cards.filter((c) => {
+    if (c.etapa !== 'completado') return false
+    if (
+      q &&
+      !(
+        String(c.folio || '').toLowerCase().includes(q) ||
+        String(c.nombre || '').toLowerCase().includes(q) ||
+        (c.reservaids || []).some((rid) => String(rid).toLowerCase().includes(q))
+      )
+    ) {
+      return false
+    }
+    if (juego && String(c.juego || '') !== juego) return false
+    // una tarjeta SIN juego pasa el filtro de serie, igual que en el tablero.
+    if (seriejuegoids && c.juego && seriejuegoids.indexOf(String(c.juego)) < 0) return false
+    return true
+  })
+}
+
+// los folios visibles de un completado: el del prospecto mas los de sus
+// reservas vinculadas, en una sola celda.
+export function folios_completado(c) {
+  return [c.folio].concat(c.reservaids || []).filter(Boolean).join(' · ')
+}
