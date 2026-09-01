@@ -30,6 +30,9 @@ import Consumos from '../components/admin/consumos'
 import Temporadas from '../components/admin/temporadas'
 import Descuentos from '../components/admin/descuentos'
 import Metodos from '../components/admin/metodos'
+import Reportes from '../components/admin/reportes'
+import Mensajes from '../components/admin/mensajes'
+import Landing from '../components/admin/landing'
 import secciones_nav from '../components/admin/adminnav'
 import '../styles/admin.css'
 import '../styles/admin-responsive.css'
@@ -47,6 +50,9 @@ const MIGRADOS = {
   temporadas: <Temporadas />,
   descuentos: <Descuentos />,
   metodos: <Metodos />,
+  reportes: <Reportes />,
+  mensajes: <Mensajes />,
+  landing: <Landing />,
 }
 
 // titulo legible de la seccion, para la barra superior movil.

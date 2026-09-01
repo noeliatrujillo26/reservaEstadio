@@ -149,6 +149,8 @@ export function admindatosprovider({ children }) {
   const [descuentos, setdescuentos] = useState([])
   const [descuentosvolumen, setdescuentosvolumen] = useState([])
   const [metodos, setmetodos] = useState([])
+  const [configlanding, setconfiglanding] = useState(null)
+  const [slides, setslides] = useState([])
   const [cargando, setcargando] = useState(true)
   const [errores, seterrores] = useState([])
 
@@ -159,7 +161,7 @@ export function admindatosprovider({ children }) {
     // cada consulta por separado: si una falla, las demas siguen y el panel
     // pinta lo que si tenga — mismo criterio de la v1, que aisla los renders.
     const [rcobros, rreservas, rjuegos, rareas, rsecciones, restados, rmovs, rclientes, rusuarios,
-      rdescuentos, rdescvolumen, rmetodos] = await Promise.allSettled([
+      rdescuentos, rdescvolumen, rmetodos, rconfig, rslides] = await Promise.allSettled([
       select_todas('cobros', 'id'),
       select_todas('reservas', 'id'),
       sb.from('juegos').select('*').order('fecha'),
@@ -172,6 +174,8 @@ export function admindatosprovider({ children }) {
       sb.from('descuentos').select('*'),
       sb.from('descuentos_volumen').select('*').order('min_personas'),
       sb.from('metodos_pago').select('*').order('id'),
+      sb.from('configuracion_landing').select('*').eq('id', 1).maybeSingle(),
+      sb.from('carousel_slides').select('*').order('order_index'),
     ])
 
     const ok = (r, etiqueta) => {
@@ -230,6 +234,13 @@ export function admindatosprovider({ children }) {
     const dme = ok(rmetodos, 'metodos_pago')
     if (dme) setmetodos(dme.map(map_metodo))
 
+    // fila unica id=1: banner, promo strip, faq y mensajes de la landing.
+    if (rconfig.status === 'fulfilled' && !rconfig.value.error) setconfiglanding(rconfig.value.data)
+    else fallos.push('configuracion_landing')
+
+    const dsl = ok(rslides, 'carousel_slides')
+    if (dsl) setslides(dsl)
+
     seterrores(fallos)
     setcargando(false)
   }, [])
@@ -238,7 +249,7 @@ export function admindatosprovider({ children }) {
 
   const valor = {
     cobros, reservas, juegos, areas, areasestados, movimientos, clientes, usuarios,
-    descuentos, descuentosvolumen, metodos,
+    descuentos, descuentosvolumen, metodos, configlanding, slides,
     cargando, errores, recargar: cargar,
   }
 
