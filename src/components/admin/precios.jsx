@@ -58,6 +58,19 @@ const est_sku = {
   color: 'var(--text-2)',
 }
 
+// miniatura de 44px, el mismo tamaño que usa la v1 en Imagen y Sitio.
+function miniatura({ src, alt }) {
+  if (!src) return <span style={{ color: 'var(--text-3)', fontSize: '12px' }}>—</span>
+  return (
+    <img
+      src={src} alt={alt} loading="lazy"
+      style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: '5px', flexShrink: 0 }}
+    />
+  )
+}
+
+const Miniatura = miniatura
+
 export default function precios() {
   const { secciones, cargando, errores } = useadmindatos()
   const [busqueda, setbusqueda] = useState('')

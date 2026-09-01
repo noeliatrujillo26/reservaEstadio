@@ -20,6 +20,7 @@ import useadmin from '../hooks/useadmin'
 import AdminLogin from '../components/admin/adminlogin'
 import AdminSidebar from '../components/admin/adminsidebar'
 import AdminDatosProvider from '../context/admindatoscontext'
+import LimiteError from '../components/admin/limiteerror'
 import Dashboard from '../components/admin/dashboard'
 import Cobros from '../components/admin/cobros'
 import Reservas from '../components/admin/reservas'
@@ -144,7 +145,10 @@ function panel() {
 
         {MIGRADOS[vista] ? (
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-            {MIGRADOS[vista]}
+            {/* si una vista falla, se aisla aqui y el resto del panel sigue */}
+            <LimiteError vista={vista} onvolver={() => setvista('dashboard')}>
+              {MIGRADOS[vista]}
+            </LimiteError>
           </div>
         ) : (
           <div className="page active" style={{ padding: '28px', flex: 1, minHeight: 0, overflowY: 'auto' }}>

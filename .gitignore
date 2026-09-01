@@ -26,3 +26,6 @@ dist-ssr
 # variables de entorno
 .env
 .env.local
+
+# salida del banco de pruebas de render
+pruebas/out

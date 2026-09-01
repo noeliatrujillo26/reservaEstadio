@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verificar-vistas": "vite build --ssr pruebas/vistas-admin.jsx --outDir pruebas/out --logLevel error && node pruebas/vistas-admin.run.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",
