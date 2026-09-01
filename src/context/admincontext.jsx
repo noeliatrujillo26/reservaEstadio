@@ -24,14 +24,25 @@ export const escritura_admin = import.meta.env.VITE_ESCRITURA_ADMIN === 'true'
 
 // tope de espera para que una consulta colgada no deje la pantalla de carga
 // eterna — espejo de _conTimeout() de la v1.
+// El temporizador se LIMPIA pase lo que pase: sin el finally quedaba vivo
+// aunque la promesa ya hubiera respondido, y cada intento de acceso dejaba
+// otro colgando.
 function con_tiempo(promesa, ms, etiqueta) {
-  return Promise.race([
-    promesa,
-    new Promise((_, rechazar) =>
-      setTimeout(() => rechazar(new Error('Tiempo agotado: ' + etiqueta)), ms)
-    ),
-  ])
+  let id = null
+  const limite = new Promise((_, rechazar) => {
+    id = setTimeout(() => rechazar(new Error('Tiempo agotado: ' + etiqueta)), ms)
+  })
+  return Promise.race([promesa, limite]).finally(() => {
+    if (id) clearTimeout(id)
+  })
 }
+
+// Motivos por los que cargar_perfil() puede no devolver un usuario. Importa
+// distinguirlos: un fallo tecnico NO es lo mismo que "no tienes acceso", y
+// tratarlos igual cerraba la sesion de alguien que si tenia permiso.
+export const sin_sesion = 'sin_sesion'
+export const sin_perfil = 'sin_perfil'
+export const fallo_tecnico = 'fallo_tecnico'
 
 function iniciales_de(nombre) {
   return String(nombre || '')
@@ -50,21 +61,46 @@ export function adminprovider({ children }) {
 
   // ── perfil y permisos ───────────────────────────────────────────
   // espejo de verificarYEntrar(): sin perfil valido NO se entra.
+  // devuelve { usuario } o { motivo }. Nunca lanza: quien la llama decide que
+  // mensaje mostrar segun el motivo.
   const cargar_perfil = useCallback(async () => {
-    const { data: { user } } = await con_tiempo(sb.auth.getUser(), 5000, 'auth.getUser')
-    if (!user) return null
+    let user = null
+    try {
+      const r = await con_tiempo(sb.auth.getUser(), 5000, 'auth.getUser')
+      // lectura DEFENSIVA: sin sesion algunas versiones devuelven data en null
+      // y el destructurado directo lanzaba un TypeError que se confundia con
+      // "no tienes acceso".
+      user = (r && r.data && r.data.user) || null
+    } catch (e) {
+      // sin sesion guardada supabase rechaza; eso no es un fallo tecnico.
+      const msg = String((e && e.message) || '')
+      if (/session|Auth session missing/i.test(msg)) return { motivo: sin_sesion }
+      console.error('admin/getUser:', e)
+      return { motivo: fallo_tecnico }
+    }
+    if (!user) return { motivo: sin_sesion }
 
     // tope de 3.5 s: si la tabla usuarios no responde, mejor un error visible
     // que una pantalla de carga eterna.
-    const { data: perfil, error: err } = await con_tiempo(
-      sb.from('usuarios').select('*').eq('email', user.email).maybeSingle(),
-      3500,
-      'perfil de usuario'
-    )
+    let perfil = null
+    try {
+      const r = await con_tiempo(
+        sb.from('usuarios').select('*').eq('email', user.email).maybeSingle(),
+        3500,
+        'perfil de usuario'
+      )
+      if (r && r.error) throw r.error
+      perfil = r ? r.data : null
+    } catch (e) {
+      console.error('admin/perfil:', e)
+      return { motivo: fallo_tecnico }
+    }
 
     // "Invitado" tambien puede entrar: es quien acaba de crear su contrasena
     // desde el correo de invitacion.
-    if (err || !perfil || (perfil.estado !== 'Activo' && perfil.estado !== 'Invitado')) return null
+    if (!perfil || (perfil.estado !== 'Activo' && perfil.estado !== 'Invitado')) {
+      return { motivo: sin_perfil }
+    }
 
     // PENDIENTE (escritura): la v1 aqui promueve el perfil 'Invitado' a
     // 'Activo' con un update. Esta fase es de solo lectura, asi que no se
@@ -81,12 +117,14 @@ export function adminprovider({ children }) {
     }
 
     return {
-      id: perfil.id,
-      nombre: perfil.nombre,
-      email: perfil.email,
-      rol: perfil.rol,
-      permisos,
-      iniciales: iniciales_de(perfil.nombre),
+      usuario: {
+        id: perfil.id,
+        nombre: perfil.nombre,
+        email: perfil.email,
+        rol: perfil.rol,
+        permisos,
+        iniciales: iniciales_de(perfil.nombre),
+      },
     }
   }, [])
 
@@ -94,12 +132,27 @@ export function adminprovider({ children }) {
   useEffect(() => {
     let vivo = true
     cargar_perfil()
-      .then((u) => {
+      .then((r) => {
         if (!vivo) return
-        if (u) { setusuario(u); setestado('dentro') }
-        else { setestado('fuera') }
+        if (r.usuario) {
+          setusuario(r.usuario)
+          setestado('dentro')
+          return
+        }
+        // Pase lo que pase se llega al LOGIN, nunca se queda en "Verificando".
+        // Si fue un fallo tecnico se dice, para no dar a entender que las
+        // credenciales o los permisos estan mal.
+        if (r.motivo === fallo_tecnico) {
+          seterror('No se pudo verificar tu sesión. Revisa tu conexión e inicia sesión de nuevo.')
+        }
+        setestado('fuera')
       })
-      .catch(() => { if (vivo) setestado('fuera') })
+      .catch((e) => {
+        console.error('admin/verificacion inicial:', e)
+        if (!vivo) return
+        seterror('No se pudo verificar tu sesión. Inicia sesión de nuevo.')
+        setestado('fuera')
+      })
     return () => { vivo = false }
   }, [cargar_perfil])
 
@@ -111,13 +164,19 @@ export function adminprovider({ children }) {
         seterror('Correo o contraseña incorrectos.')
         return false
       }
-      const u = await cargar_perfil().catch(() => null)
-      if (!u) {
+      const r = await cargar_perfil().catch(() => ({ motivo: fallo_tecnico }))
+      if (!r.usuario) {
+        // Un fallo tecnico NO cierra la sesion: las credenciales eran validas
+        // y cerrarla obligaba a teclearlas de nuevo por un problema de red.
+        if (r.motivo === fallo_tecnico) {
+          seterror('Entraste, pero no pudimos leer tu perfil. Reintenta en unos segundos.')
+          return false
+        }
         seterror('Tu cuenta no tiene acceso al panel. Contacta a un administrador.')
         await sb.auth.signOut()
         return false
       }
-      setusuario(u)
+      setusuario(r.usuario)
       setestado('dentro')
       return true
     },
