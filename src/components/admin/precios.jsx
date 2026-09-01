@@ -24,7 +24,33 @@ const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2
 // los dos bloques de dia, con el color que usa la v1.
 const az = 'rgba(37,99,235,0.05)'
 const nj = 'var(--naranja-muted)'
-const der = { textAlign: 'right' }
+const der = { textAlign: 'right', whiteSpace: 'nowrap' }
+
+// Celdas de texto CONTENIDAS. En la v1 estas dos columnas son un <input> y un
+// <textarea rows=2>, que tienen altura fija: por eso su cuadricula no se
+// deformaba. Al pintarlas como texto plano el contenido largo estiraba la
+// fila, asi que aqui se replica esa altura fija — una linea con elipsis para
+// la descripcion corta, y dos lineas recortadas para la larga.
+const texto_una_linea = {
+  fontSize: '12px',
+  maxWidth: '280px',
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+}
+
+// -webkit-line-clamp corta a 2 lineas y pone la elipsis; el maxHeight es el
+// respaldo para los navegadores que no lo soporten.
+const texto_dos_lineas = {
+  fontSize: '12px',
+  width: '220px',
+  display: '-webkit-box',
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: 'vertical',
+  overflow: 'hidden',
+  maxHeight: '34px',
+  lineHeight: '17px',
+}
 
 // miniatura de 44px, el mismo tamaño que usa la v1 en estas dos columnas.
 function miniatura({ src, alt }) {
@@ -118,8 +144,8 @@ export default function precios() {
               </thead>
               <tbody id="precios-table">
                 {filas.map((p) => (
-                  <tr key={p.pinid}>
-                    <td className="td-name" title={p.descripcion || undefined}>
+                  <tr key={p.pinid} style={{ verticalAlign: 'middle' }}>
+                    <td className="td-name" style={{ whiteSpace: 'nowrap' }} title={p.zona}>
                       {p.zona}
                       {p.escompartida && (
                         <span className="badge badge-purple" style={{ fontSize: '9px', marginLeft: '6px' }}>
@@ -129,19 +155,11 @@ export default function precios() {
                     </td>
                     <td><span className={'badge ' + (badge_seccion[p.seccion] || 'badge-gray')}>{p.seccion}</span></td>
                     <td className="td-muted">{p.sku || '—'}</td>
-                    <td
-                      className="td-muted"
-                      style={{ fontSize: '12px', maxWidth: '260px' }}
-                      title={p.shortdescription || undefined}
-                    >
-                      {p.shortdescription || '—'}
+                    <td className="td-muted" title={p.shortdescription || undefined}>
+                      <div style={texto_una_linea}>{p.shortdescription || '—'}</div>
                     </td>
-                    <td
-                      className="td-muted"
-                      style={{ fontSize: '12px', maxWidth: '260px', whiteSpace: 'pre-line' }}
-                      title={p.descripcion || undefined}
-                    >
-                      {p.descripcion || '—'}
+                    <td className="td-muted" title={p.descripcion || undefined}>
+                      <div style={texto_dos_lineas}>{p.descripcion || '—'}</div>
                     </td>
 
                     <td style={{ ...der, background: az, borderLeft: '2px solid var(--azul)' }}>{p.minv}</td>

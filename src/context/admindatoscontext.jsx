@@ -19,6 +19,7 @@ import { map_usuario } from '../lib/usuarios'
 import { map_movimiento } from '../lib/movimientos'
 import { map_descuento, map_descuento_volumen, map_metodo } from '../lib/catalogos'
 import { map_cotizacion } from '../lib/cotizaciones'
+import { map_prospecto } from '../lib/pipeline'
 
 export const admindatoscontext = createContext(null)
 
@@ -156,6 +157,7 @@ export function admindatosprovider({ children }) {
   // todas sus columnas de tarifa, no solo las que usa el mapa.
   const [secciones, setsecciones] = useState([])
   const [cotizaciones, setcotizaciones] = useState([])
+  const [pipeline, setpipeline] = useState([])
   const [cargando, setcargando] = useState(true)
   const [errores, seterrores] = useState([])
 
@@ -166,7 +168,7 @@ export function admindatosprovider({ children }) {
     // cada consulta por separado: si una falla, las demas siguen y el panel
     // pinta lo que si tenga — mismo criterio de la v1, que aisla los renders.
     const [rcobros, rreservas, rjuegos, rareas, rsecciones, restados, rmovs, rclientes, rusuarios,
-      rdescuentos, rdescvolumen, rmetodos, rconfig, rslides, rcotiz] = await Promise.allSettled([
+      rdescuentos, rdescvolumen, rmetodos, rconfig, rslides, rcotiz, rpipe] = await Promise.allSettled([
       select_todas('cobros', 'id'),
       select_todas('reservas', 'id'),
       sb.from('juegos').select('*').order('fecha'),
@@ -182,6 +184,7 @@ export function admindatosprovider({ children }) {
       sb.from('configuracion_landing').select('*').eq('id', 1).maybeSingle(),
       sb.from('carousel_slides').select('*').order('order_index'),
       select_todas('cotizaciones', 'fecha'),
+      select_todas('pipeline_prospectos', 'id'),
     ])
 
     const ok = (r, etiqueta) => {
@@ -251,6 +254,9 @@ export function admindatosprovider({ children }) {
     const dco = ok(rcotiz, 'cotizaciones')
     if (dco) setcotizaciones(dco.map(map_cotizacion))
 
+    const dpi = ok(rpipe, 'pipeline_prospectos')
+    if (dpi) setpipeline(dpi.map(map_prospecto))
+
     seterrores(fallos)
     setcargando(false)
   }, [])
@@ -259,7 +265,7 @@ export function admindatosprovider({ children }) {
 
   const valor = {
     cobros, reservas, juegos, areas, areasestados, movimientos, clientes, usuarios,
-    descuentos, descuentosvolumen, metodos, configlanding, slides, secciones, cotizaciones,
+    descuentos, descuentosvolumen, metodos, configlanding, slides, secciones, cotizaciones, pipeline,
     cargando, errores, recargar: cargar,
   }
 
