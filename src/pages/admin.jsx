@@ -34,6 +34,7 @@ import Reportes from '../components/admin/reportes'
 import Mensajes from '../components/admin/mensajes'
 import Landing from '../components/admin/landing'
 import Precios from '../components/admin/precios'
+import Cotizaciones from '../components/admin/cotizaciones'
 import secciones_nav from '../components/admin/adminnav'
 import '../styles/admin.css'
 import '../styles/admin-responsive.css'
@@ -55,6 +56,7 @@ const MIGRADOS = {
   mensajes: <Mensajes />,
   landing: <Landing />,
   precios: <Precios />,
+  cotizaciones: <Cotizaciones />,
 }
 
 // titulo legible de la seccion, para la barra superior movil.

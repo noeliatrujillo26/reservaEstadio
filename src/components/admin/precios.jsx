@@ -14,7 +14,8 @@
 import { useMemo, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
 import {
-  aplicar_overrides_locales, badge_seccion, fila_precio, filtrar_precios, map_precio,
+  aplicar_imagenes_locales, aplicar_overrides_locales, badge_seccion, fila_precio,
+  filtrar_precios, map_precio,
 } from '../../lib/preciosadmin'
 import { redondear_dinero, mxn2 } from '../../lib/dinero'
 
@@ -25,6 +26,19 @@ const az = 'rgba(37,99,235,0.05)'
 const nj = 'var(--naranja-muted)'
 const der = { textAlign: 'right' }
 
+// miniatura de 44px, el mismo tamaño que usa la v1 en estas dos columnas.
+function miniatura({ src, alt }) {
+  if (!src) return <span style={{ color: 'var(--text-3)', fontSize: '12px' }}>—</span>
+  return (
+    <img
+      src={src} alt={alt} loading="lazy"
+      style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: '5px', flexShrink: 0 }}
+    />
+  )
+}
+
+const Miniatura = miniatura
+
 export default function precios() {
   const { secciones, cargando, errores } = useadmindatos()
   const [busqueda, setbusqueda] = useState('')
@@ -32,8 +46,8 @@ export default function precios() {
   const catalogo = useMemo(() => {
     const base = (secciones || []).map(map_precio)
     // el cache local del admin RELLENA campos; nunca pisa lo de la base con
-    // un valor ausente.
-    return aplicar_overrides_locales(base)
+    // un valor ausente. Lo mismo para las fotos.
+    return aplicar_imagenes_locales(aplicar_overrides_locales(base))
   }, [secciones])
 
   const filas = useMemo(
@@ -73,15 +87,19 @@ export default function precios() {
                   <th>Zona</th>
                   <th>Sección</th>
                   <th>SKU</th>
+                  <th>Descripción corta</th>
+                  <th>Descripción</th>
                   <th colSpan={8} style={{ textAlign: 'center', background: 'rgba(37,99,235,0.12)', color: 'var(--azul)', borderLeft: '2px solid var(--azul)' }}>
                     🔵 DOM – MIÉ
                   </th>
                   <th colSpan={5} style={{ textAlign: 'center', background: nj, color: 'var(--naranja)', borderLeft: '2px solid var(--naranja)' }}>
                     🟠 JUE – SÁB
                   </th>
+                  <th>Imagen</th>
+                  <th>Sitio</th>
                 </tr>
                 <tr>
-                  <th></th><th></th><th></th>
+                  <th></th><th></th><th></th><th></th><th></th>
                   <th style={{ background: 'rgba(37,99,235,0.06)', borderLeft: '2px solid var(--azul)' }}>Mín. pers.</th>
                   <th style={{ background: 'rgba(37,99,235,0.06)' }}>Cap. máx.</th>
                   <th style={{ background: 'rgba(37,99,235,0.06)' }}>Precio base</th>
@@ -95,6 +113,7 @@ export default function precios() {
                   <th style={{ background: nj }}>Precio base</th>
                   <th style={{ background: nj }}>Extra adulto</th>
                   <th style={{ background: nj }}>Extra niño</th>
+                  <th></th><th></th>
                 </tr>
               </thead>
               <tbody id="precios-table">
@@ -110,6 +129,20 @@ export default function precios() {
                     </td>
                     <td><span className={'badge ' + (badge_seccion[p.seccion] || 'badge-gray')}>{p.seccion}</span></td>
                     <td className="td-muted">{p.sku || '—'}</td>
+                    <td
+                      className="td-muted"
+                      style={{ fontSize: '12px', maxWidth: '260px' }}
+                      title={p.shortdescription || undefined}
+                    >
+                      {p.shortdescription || '—'}
+                    </td>
+                    <td
+                      className="td-muted"
+                      style={{ fontSize: '12px', maxWidth: '260px', whiteSpace: 'pre-line' }}
+                      title={p.descripcion || undefined}
+                    >
+                      {p.descripcion || '—'}
+                    </td>
 
                     <td style={{ ...der, background: az, borderLeft: '2px solid var(--azul)' }}>{p.minv}</td>
                     <td style={{ ...der, background: az }}>{p.capv}</td>
@@ -125,6 +158,9 @@ export default function precios() {
                     <td style={{ ...der, background: nj, fontWeight: 700 }}>{money(p.precio2v)}</td>
                     <td style={{ ...der, background: nj }}>{p.extra2v != null ? money(p.extra2v) : '—'}</td>
                     <td style={{ ...der, background: nj }}>{p.nino2v != null ? money(p.nino2v) : '—'}</td>
+
+                    <td><Miniatura src={p.img} alt={'Imagen de ' + p.zona} /></td>
+                    <td><Miniatura src={p.img2} alt={'Foto de sitio de ' + p.zona} /></td>
                   </tr>
                 ))}
               </tbody>

@@ -50,6 +50,14 @@ export function map_precio(s) {
     sku: s.sku || undefined,
     descripcion: s.descripcion || undefined,
     shortdescription: s.short_description || undefined,
+    // Fotos de la zona: IMAGEN e IMAGEN SITIO del catalogo.
+    // La v1 las lee SOLO de localStorage (nrj_imagenes_precio / _precio2), que
+    // es cache del navegador del admin. Aqui salen de mapa_secciones, que es
+    // la fuente de verdad — es el mismo criterio que la propia v1 aplica en la
+    // landing: "El servidor MANDA; el localStorage solo es respaldo". El cache
+    // se sigue consultando, pero solo para las zonas que la base deja vacias.
+    img: s.img || null,
+    img2: s.img2 || null,
   }
 }
 
@@ -76,6 +84,27 @@ export function aplicar_overrides_locales(lista) {
     if (e.nino != null) out.precionino = e.nino
     if (e.nino2 != null) out.precionino2 = e.nino2
     return out
+  })
+}
+
+// espejo de _cargarImgsPrecio(): el cache local de imagenes, indexado por
+// NOMBRE de zona en mayusculas. Solo rellena lo que la base no trae.
+export function aplicar_imagenes_locales(lista) {
+  let imgs = {}
+  let imgs2 = {}
+  try {
+    imgs = JSON.parse(localStorage.getItem('nrj_imagenes_precio') || '{}')
+    imgs2 = JSON.parse(localStorage.getItem('nrj_imagenes_precio2') || '{}')
+  } catch (e) {
+    return lista
+  }
+  return lista.map((p) => {
+    const k = String(p.zona || '').toUpperCase().trim()
+    return {
+      ...p,
+      img: p.img || imgs[k] || null,
+      img2: p.img2 || imgs2[k] || null,
+    }
   })
 }
 
