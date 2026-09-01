@@ -151,6 +151,9 @@ export function admindatosprovider({ children }) {
   const [metodos, setmetodos] = useState([])
   const [configlanding, setconfiglanding] = useState(null)
   const [slides, setslides] = useState([])
+  // filas CRUDAS de mapa_secciones: el catalogo de Precios las necesita con
+  // todas sus columnas de tarifa, no solo las que usa el mapa.
+  const [secciones, setsecciones] = useState([])
   const [cargando, setcargando] = useState(true)
   const [errores, seterrores] = useState([])
 
@@ -199,6 +202,7 @@ export function admindatosprovider({ children }) {
     // el catalogo sale de mapa_secciones; solo si no hay secciones se usa la
     // lista quemada, igual que syncAreasDesdeCrear() cuando no encuentra nada.
     const ds = ok(rsecciones, 'mapa_secciones')
+    if (ds) setsecciones(ds)
     const catalogo = ds && ds.length ? ds.map(map_seccion) : areas_data
     // la tabla `areas` solo aporta el estado base de cada zona.
     const da = ok(rareas, 'areas')
@@ -249,7 +253,7 @@ export function admindatosprovider({ children }) {
 
   const valor = {
     cobros, reservas, juegos, areas, areasestados, movimientos, clientes, usuarios,
-    descuentos, descuentosvolumen, metodos, configlanding, slides,
+    descuentos, descuentosvolumen, metodos, configlanding, slides, secciones,
     cargando, errores, recargar: cargar,
   }
 
