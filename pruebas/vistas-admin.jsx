@@ -14,6 +14,7 @@
 import { renderToString } from 'react-dom/server'
 import { admindatoscontext } from '../src/context/admindatoscontext'
 import { admincontext } from '../src/context/admincontext'
+import ToastProvider from '../src/context/toastcontext'
 import Dashboard from '../src/components/admin/dashboard'
 import Cobros from '../src/components/admin/cobros'
 import Reservas from '../src/components/admin/reservas'
@@ -64,6 +65,8 @@ export const vistas={dashboard:Dashboard,cobros:Cobros,seccionesreservadas:Reser
 export function render(Comp){
   return renderToString(
     <admincontext.Provider value={sesion}>
-      <admindatoscontext.Provider value={valor}><Comp /></admindatoscontext.Provider>
+      <ToastProvider>
+        <admindatoscontext.Provider value={valor}><Comp /></admindatoscontext.Provider>
+      </ToastProvider>
     </admincontext.Provider>)
 }

@@ -21,6 +21,8 @@ import AdminLogin from '../components/admin/adminlogin'
 import AdminSidebar from '../components/admin/adminsidebar'
 import AdminDatosProvider from '../context/admindatoscontext'
 import LimiteError from '../components/admin/limiteerror'
+import ToastProvider from '../context/toastcontext'
+import Toast from '../components/ui/toast'
 import Dashboard from '../components/admin/dashboard'
 import Cobros from '../components/admin/cobros'
 import Reservas from '../components/admin/reservas'
@@ -172,6 +174,9 @@ function panel() {
           </div>
         )}
       </main>
+
+      {/* avisos de las acciones de escritura */}
+      <Toast />
     </div>
     </AdminDatosProvider>
   )
@@ -182,7 +187,11 @@ const Panel = panel
 export default function admin() {
   return (
     <AdminProvider>
-      <Panel />
+      {/* ToastProvider envuelve al panel: las acciones de escritura avisan
+          por aqui, y sin el proveedor la vista de Cobros ni siquiera monta. */}
+      <ToastProvider>
+        <Panel />
+      </ToastProvider>
     </AdminProvider>
   )
 }

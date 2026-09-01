@@ -12,6 +12,7 @@
 
 import { useMemo, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
+import usefactura from '../../hooks/usefactura'
 import CobrosFiltros from './cobrosfiltros'
 import {
   cobro_cancelado, estado_cobro, filtrar_cobros, kpis_cobros, meses_label,
@@ -58,6 +59,8 @@ export default function cobros() {
   const [filtros, setfiltros] = useState(filtros_vacios)
   const [orden, setorden] = useState({ col: 'fecha', dir: 'desc' })
   const [pestana, setpestana] = useState('tabla')
+  // primera escritura del panel: ver hooks/usefactura.js
+  const { alternar: alternar_factura, guardando, puede: puede_editar } = usefactura()
 
   // opciones de cada desplegable: las fijas del sistema mas TODA forma y
   // vendedor que aparezca de verdad en los cobros.
@@ -178,7 +181,17 @@ export default function cobros() {
                         <td>{c.recibio || '—'}</td>
                         <td>{c.folio || '—'}</td>
                         <td>
-                          {requiere_factura(c) ? (
+                          {puede_editar && !cancelado ? (
+                            <button
+                              className={'badge ' + (requiere_factura(c) ? 'badge-orange' : 'badge-gray')}
+                              onClick={() => alternar_factura(c)}
+                              disabled={guardando === c.id}
+                              title="Cambiar si este cobro requiere factura"
+                              style={{ border: 'none', cursor: 'pointer', fontSize: '10px', fontWeight: 600 }}
+                            >
+                              {guardando === c.id ? '…' : requiere_factura(c) ? 'Requerida' : 'No requiere'}
+                            </button>
+                          ) : requiere_factura(c) ? (
                             <span className="badge badge-orange" style={{ fontSize: '10px' }}>Requerida</span>
                           ) : (
                             <span className="td-muted">—</span>
