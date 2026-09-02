@@ -19,6 +19,9 @@ import {
   abonado_etapa, pagos_de_tarjeta, pipeline_etapas, reservas_activas, suma_pagos_dinero,
 } from '../../lib/pipeline'
 import { msg_sin_pago, msg_ya_generada, puede_generar_reserva } from '../../lib/prospectos'
+import { msg_no_eliminable, puede_eliminarse } from '../../lib/mapaocupacion'
+import { es_pago_desde_saldo_favor } from '../../lib/cobros'
+import { es_pago_credito } from '../../lib/dashboard'
 import { map_precio } from '../../lib/preciosadmin'
 import { min_seccion, precio_seccion } from '../../lib/reservasadmin'
 import { formato_fecha } from '../../lib/cobros'
@@ -29,12 +32,21 @@ const money = (n) => '$' + (Number(n) || 0).toLocaleString('es-MX', mxn2)
 
 // El padre monta este componente SOLO con una tarjeta, y con key={card.id}.
 // Asi el estado inicial puede derivarse de `card` sin efectos ni guardas.
-function detalle_prospecto({ card, puede, oncerrar, oneditar, ongenerar, guardando }) {
-  const { juegos, areas, secciones, reservas, cobros, politica } = useadmindatos()
+function detalle_prospecto({
+  card, puede, oncerrar, oneditar, ongenerar, oneliminar, onpagar,
+  guardando, borrando, pagando,
+}) {
+  const { juegos, areas, secciones, reservas, cobros, politica, metodos } = useadmindatos()
 
   const [editando, seteditando] = useState(false)
   const [pendiente, setpendiente] = useState(false)
   const [campos, setcampos] = useState([])
+  // formulario de pago de la tarjeta (agregarPagoPD).
+  const [pago, setpago] = useState({
+    concepto: 'ABONO', forma: '', monto: '', requierefactura: false,
+    archivo: null, pendiente: false,
+  })
+  const [errorpago, seterrorpago] = useState(null)
   // El formulario arranca DERIVADO de la tarjeta, no cargado por un efecto.
   // Con el efecto, el primer render devolvia null: la vista salia vacia un
   // instante, y el banco de pruebas —que no ejecuta efectos— renderizaba CERO
@@ -81,6 +93,36 @@ function detalle_prospecto({ card, puede, oncerrar, oneditar, ongenerar, guardan
   async function generar() {
     if (!puedegenerar) return
     await ongenerar(card, { juegoid: d.juegoid, zonaid: d.zonaid, areamonto })
+  }
+
+  // Formas de pago del catalogo REAL (metodos_pago), mas SALDO A FAVOR, que no
+  // es un metodo del catalogo sino la aplicacion de dinero que ya entro.
+  const formas = (metodos || [])
+    .filter((m) => String(m.estado || 'Activo') !== 'Inactivo')
+    .map((m) => m.nombre)
+  const formaspago = (formas.length ? formas : ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA'])
+    .concat(['CRÉDITO', 'SALDO A FAVOR'])
+
+  const setp = (k, v) => setpago((x) => ({ ...x, [k]: v }))
+  const formaefectiva = pago.pendiente ? 'PENDIENTE' : pago.forma
+  const pagoescredito = !pago.pendiente && es_pago_credito(pago.concepto, formaefectiva)
+  const pagoessaldo = !pago.pendiente && es_pago_desde_saldo_favor('', formaefectiva)
+  // El comprobante es obligatorio salvo en cuatro casos, cada uno por su
+  // motivo: credito (no hay archivo aun), pendiente (no hay pago), efectivo
+  // (se recibe en mano) y saldo a favor (ese dinero ya entro con el suyo).
+  const comprobanteobligatorio = !pagoescredito && !pago.pendiente &&
+    formaefectiva !== 'EFECTIVO' && !pagoessaldo
+
+  async function pagar() {
+    seterrorpago(null)
+    const r = await onpagar(card, { ...pago, forma: formaefectiva })
+    if (r && r.ok) {
+      setpago({ concepto: 'ABONO', forma: '', monto: '', requierefactura: false, archivo: null, pendiente: false })
+    } else if (r && r.campo) seterrorpago(r.campo)
+  }
+
+  async function eliminar() {
+    await oneliminar(card)
   }
 
   const chip = (label, valor, color) => (
@@ -210,6 +252,97 @@ function detalle_prospecto({ card, puede, oncerrar, oneditar, ongenerar, guardan
             </button>
           )}
 
+          {/* ── Registrar un pago ── */}
+          {puede && (
+            <>
+              <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: 0 }} />
+              <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-3)' }}>
+                Registrar pago
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Concepto</label>
+                  <select className="input select" value={pago.concepto}
+                    onChange={(e) => setp('concepto', e.target.value)}>
+                    {['ABONO', 'ANTICIPO', 'LIQUIDACION', 'CONSUMO', 'CRÉDITO'].map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Monto *</label>
+                  <input
+                    className={'input' + (errorpago === 'monto' ? ' input-error' : '')}
+                    type="number" min="0" step="0.01" placeholder="0.00"
+                    value={pago.monto} onChange={(e) => setp('monto', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Forma de pago</label>
+                <select
+                  className="input select" value={pago.forma} disabled={pago.pendiente}
+                  onChange={(e) => setp('forma', e.target.value)}
+                >
+                  <option value="">— Selecciona —</option>
+                  {formaspago.map((f) => <option key={f} value={f}>{f}</option>)}
+                </select>
+              </div>
+
+              {/* "Pendiente" es el apartado SIN cobro: no hay dinero todavia,
+                  asi que no hay forma de pago ni comprobante que pedir. */}
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox" style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                  checked={pago.pendiente}
+                  onChange={(e) => setpago((x) => ({ ...x, pendiente: e.target.checked, forma: '' }))}
+                />
+                Pendiente — apartar la zona sin cobro por ahora
+              </label>
+
+              {!pago.pendiente && (
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">
+                    {'Comprobante' + (comprobanteobligatorio ? ' *' : ' (Opcional)')}
+                  </label>
+                  <input
+                    className={'input' + (errorpago === 'comprobante' && !pago.archivo ? ' input-error' : '')}
+                    type="file" accept="image/*,application/pdf"
+                    style={{ fontSize: '12px', padding: '6px' }}
+                    onChange={(e) => setp('archivo', e.target.files && e.target.files[0] ? e.target.files[0] : null)}
+                  />
+                  <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '3px' }}>
+                    {comprobanteobligatorio
+                      ? 'Obligatorio: adjunta el respaldo del pago.'
+                      : pagoescredito
+                        ? 'El crédito no lleva comprobante: todavía no hay dinero recibido.'
+                        : pagoessaldo
+                          ? 'El saldo a favor ya entró antes con su propio comprobante.'
+                          : 'En efectivo el dinero se recibe en mano, sin documento externo.'}
+                  </div>
+                </div>
+              )}
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox" style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                  checked={pago.requierefactura}
+                  onChange={(e) => setp('requierefactura', e.target.checked)}
+                />
+                Requiere factura
+              </label>
+
+              <button
+                className="btn btn-primary btn-sm" onClick={pagar}
+                disabled={pagando || !(parseFloat(pago.monto) > 0) || (!pago.forma && !pago.pendiente)}
+              >
+                {pagando ? 'Registrando…' : '+ Registrar pago'}
+              </button>
+            </>
+          )}
+
           {/* ── Historial de pagos (consulta) ── */}
           <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: 0 }} />
           <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-3)' }}>
@@ -306,7 +439,17 @@ function detalle_prospecto({ card, puede, oncerrar, oneditar, ongenerar, guardan
           )}
         </div>
 
-        <div className="modal-footer">
+        <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+          {puede ? (
+            <button
+              className="btn btn-danger btn-sm"
+              onClick={eliminar}
+              disabled={borrando === card.id || !puede_eliminarse(card)}
+              title={puede_eliminarse(card) ? 'Eliminar prospecto' : msg_no_eliminable}
+            >
+              {borrando === card.id ? '…' : '🗑 Eliminar prospecto'}
+            </button>
+          ) : <span />}
           <button className="btn btn-ghost" onClick={oncerrar}>Cerrar</button>
         </div>
       </div>

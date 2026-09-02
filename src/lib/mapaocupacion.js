@@ -10,12 +10,23 @@
 // escribe ocupacion en ningun sitio — solo el estado libre/reservada/bloqueada
 // de la seccion, que si es una decision y no una consecuencia.
 //
-// `zona_juego_estado` lleva una fila por (juego, zona). Se escribe con UPSERT
-// porque la fila puede no existir todavia: una seccion que nunca se toco no
-// tiene registro, y su estado es 'libre' por omision.
+// `zona_juego_estado` lleva una fila por (juego, zona), y la fila puede no
+// existir todavia: una seccion que nunca se toco no tiene registro, y su
+// estado es 'libre' por omision.
+//
+// POR ESO NO SE USA UPSERT. Un upsert sin `onConflict` resuelve el conflicto
+// contra la CLAVE PRIMARIA, asi que depende de que la tabla tenga la unica
+// sobre (juego_id, zona_id) declarada exactamente asi. Si no la tiene —o si
+// la primaria es un id propio— el upsert no encuentra contra que chocar:
+// inserta una fila mas y la seccion acaba con dos estados a la vez, o falla
+// con 23505. En ninguno de los dos casos queda lo que se pidio.
+//
+// Aqui se hace explicito: UPDATE primero y, solo si no toco ninguna fila,
+// INSERT. Son dos viajes en vez de uno, y a cambio funciona con o sin clave
+// unica, y se sabe siempre cual de las dos cosas ocurrio.
 // ═══════════════════════════════════════════════════════════════════
 
-import { motivo_bloqueo, registrar_movimiento } from './escritura'
+import { actualizar_verificado, motivo_bloqueo, registrar_movimiento } from './escritura'
 
 export const estados_zona = ['libre', 'reservada', 'bloqueada']
 
@@ -50,20 +61,53 @@ export async function set_estado_zona(sb, usuario, juegoid, zonaid, estado) {
   // contra uno de texto, por ejemplo), el mensaje lo enseña en vez de dejar
   // adivinando por que la seccion sigue libre.
   const fila = { juego_id: juegoid, zona_id: zonaid, estado }
-  const res = await sb.from('zona_juego_estado').upsert(fila).select()
 
-  if (res.error) {
-    console.error('escritura/upsert en zona_juego_estado:', res.error, '· fila:', fila)
-    return { ok: false, motivo: 'error', error: res.error, fila }
+  // 1. UPDATE. Si la fila existe, aqui termina.
+  const upd = await sb
+    .from('zona_juego_estado')
+    .update({ estado })
+    .eq('juego_id', juegoid)
+    .eq('zona_id', zonaid)
+    .select()
+  if (upd.error) {
+    console.error('escritura/update en zona_juego_estado:', upd.error, '· fila:', fila)
+    return { ok: false, motivo: 'error', error: upd.error, fila }
   }
-  if (!(res.data || []).length) {
-    console.error(
-      'escritura/upsert en zona_juego_estado: 0 filas afectadas ' +
-      '(¿política RLS, o falta la clave única (juego_id, zona_id)?) · fila:', fila
-    )
-    return { ok: false, motivo: 'sin_filas', fila }
+  if ((upd.data || []).length) {
+    return { ok: true, filas: upd.data.length, estado, fila, via: 'update' }
   }
-  return { ok: true, filas: res.data.length, estado, fila }
+
+  // 2. No habia fila: se crea. Si dos cajas llegan a la vez, una de las dos
+  //    choca con la unica (23505) — y eso significa que la otra ya la creo,
+  //    asi que se reintenta el UPDATE en lugar de dar error.
+  const ins = await sb.from('zona_juego_estado').insert(fila).select()
+  if (!ins.error && (ins.data || []).length) {
+    return { ok: true, filas: ins.data.length, estado, fila, via: 'insert' }
+  }
+  const duplicado = ins.error &&
+    (ins.error.code === '23505' || /duplicate key/i.test(ins.error.message || ''))
+  if (duplicado) {
+    const reintento = await sb
+      .from('zona_juego_estado')
+      .update({ estado })
+      .eq('juego_id', juegoid)
+      .eq('zona_id', zonaid)
+      .select()
+    if (!reintento.error && (reintento.data || []).length) {
+      return { ok: true, filas: reintento.data.length, estado, fila, via: 'update-tras-carrera' }
+    }
+  }
+
+  if (ins.error) {
+    console.error('escritura/insert en zona_juego_estado:', ins.error, '· fila:', fila)
+    return { ok: false, motivo: 'error', error: ins.error, fila }
+  }
+  // Ni update ni insert devolvieron fila y ninguno dio error: es RLS callando.
+  console.error(
+    'escritura en zona_juego_estado: 0 filas en update y en insert ' +
+    '(¿política RLS?) · fila:', fila
+  )
+  return { ok: false, motivo: 'sin_filas', fila }
 }
 
 // Bloquear o liberar, con su rastro. El movimiento se registra TAMBIEN cuando
@@ -106,10 +150,105 @@ export function texto_fallo_estado(res, nombre) {
       'cambiar el estado de las secciones. Pídelo y márcala a mano mientras tanto.'
   }
   if (res.motivo === 'sin_filas') {
-    return '⚠️ La sección' + donde + ' NO se marcó: la base no aceptó el cambio (0 filas). ' +
-      'Revisa las políticas RLS de `zona_juego_estado` y su clave única (juego_id, zona_id).'
+    return '⚠️ La sección' + donde + ' NO se marcó: la base no aceptó ni la actualización ' +
+      'ni el alta (0 filas). Revisa las políticas RLS de `zona_juego_estado`.'
   }
   return '⚠️ La sección' + donde + ' NO se marcó como reservada' +
     (res.error && res.error.message ? ': ' + res.error.message : '.') +
     ' Márcala a mano desde el mapa.'
 }
+
+// ── LIBERAR LAS RESERVAS DE UNA TARJETA ─────────────────────────
+// espejo 1:1 de v1: _liberarReservasDeProspecto() (js/modules/pipeline.js).
+// Cancela cada reserva ACTIVA vinculada y libera su seccion, con DOS
+// salvaguardas que no son opcionales:
+//
+//   1. La seccion solo se libera si NO queda otra reserva activa sobre la
+//      misma (zona, juego). Liberarla sin mirar dejaba vendida una zona que
+//      otro cliente seguia ocupando.
+//   2. Solo se pisa el estado 'reservada'. Un 'bloqueada' es una decision
+//      manual del admin —la zona esta fuera de venta a proposito— y cancelar
+//      una reserva no puede deshacerla.
+//
+// Cancelar la reserva BORRA ademas su saldo de consumo: una reserva cancelada
+// jamas debe seguir apareciendo en la vista de consumos ni en sus envios.
+export async function liberar_reservas_de_prospecto(sb, usuario, card, ctx) {
+  const ids = card.reservaids || []
+  const liberadas = []
+  const avisos = []
+
+  for (const rid of ids) {
+    const r = (ctx.reservas || []).find((x) => x.id === rid)
+    if (!r || String(r.estado || '').toLowerCase() === 'cancelada') continue
+
+    const res = await actualizar_verificado(
+      sb, usuario, 'reservas', { estado: 'Cancelada', saldo_consumo: 0 }, rid, ['estado']
+    )
+    if (!res.ok) {
+      console.error('No se pudo cancelar la reserva ' + rid + ':', res.error || res.motivo)
+      avisos.push('⚠️ No se pudo liberar la reserva ' + rid + ' — revísala a mano.')
+      continue
+    }
+
+    // La seccion se resuelve con la llave compuesta, en orden estricto:
+    // zona_id primero y el nombre exacto como respaldo.
+    const juegoid = r.juegoid || ''
+    const area = (r.zonaid && (ctx.areas || []).find((a) => String(a.id) === String(r.zonaid))) ||
+      (ctx.areas || []).find((a) => a.nombre === r.zona)
+    if (!juegoid || !area) continue
+
+    // Salvaguarda 1: ¿queda otra reserva activa en la misma zona y juego?
+    const otraactiva = (ctx.reservas || []).find((x) => {
+      if (x.id === rid || String(x.juegoid) !== String(juegoid)) return false
+      if (String(x.estado || '').toLowerCase() === 'cancelada') return false
+      return x.zonaid
+        ? String(x.zonaid) === String(area.id)
+        : String(x.zona || '').trim().toLowerCase() === String(area.nombre || '').trim().toLowerCase()
+    })
+    if (otraactiva) continue
+
+    // Salvaguarda 2: solo se pisa 'reservada'.
+    if (estado_vivo(ctx.areasestados, juegoid, area.id) !== 'reservada') continue
+
+    const libre = await set_estado_zona(sb, usuario, juegoid, area.id, 'libre')
+    if (!libre.ok) {
+      avisos.push(texto_fallo_estado(libre, area.nombre))
+      continue
+    }
+    liberadas.push({ rid, zona: area.nombre })
+    registrar_movimiento(sb, {
+      tipo: 'Reserva',
+      desc: 'Sección liberada: ' + area.nombre + ' · reserva ' + rid +
+        ' cancelada al eliminar del Pipeline',
+      ref: card.nombre,
+      usuario: usuario ? usuario.nombre : '—',
+    })
+  }
+
+  return { liberadas, avisos }
+}
+
+// Los tres folios con los que puede estar etiquetado un cobro de esta tarjeta:
+// el folio del prospecto, su alias ('PROS-002' ↔ '002') y el id de cada
+// reserva vinculada. Se agrega tambien el id de la tarjeta, que la v1 usa
+// como ultimo recurso.
+export function folios_de_prospecto(card) {
+  const folios = []
+  ;(card.reservaids || []).forEach((rid) => folios.push(String(rid)))
+  const f = String(card.folio || '').trim()
+  if (f) {
+    folios.push(f)
+    folios.push(f.toUpperCase().startsWith('PROS-') ? f.slice(5) : 'PROS-' + f)
+  }
+  folios.push(String(card.id))
+  return folios
+}
+
+// En "Boletos enviados" la eliminacion esta PROHIBIDA: los boletos ya salieron
+// y liberar el espacio dejaria una doble venta.
+export function puede_eliminarse(card) {
+  return !!card && card.etapa !== 'boletos_entregados'
+}
+
+export const msg_no_eliminable =
+  '⛔ Imposible eliminar: esta reserva ya cuenta con boletos enviados.'

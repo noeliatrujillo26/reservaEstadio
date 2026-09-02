@@ -27,7 +27,7 @@ import {
   actualizar_verificado, motivo_bloqueo, registrar_movimiento,
 } from './escritura'
 import { redondear_dinero } from './dinero'
-import { es_cobro_desde_saldo_favor, es_cobro_credito } from './cobros'
+import { cobro_cancelado, es_cobro_desde_saldo_favor, es_cobro_credito } from './cobros'
 import { buscar_cliente, nombre_norm, tel_norm } from './clientes'
 import {
   abonado_etapa, debe_reclasificar, pct_abonado, pipeline_etapas, reservas_activas,
@@ -369,4 +369,51 @@ export function afecta_saldo_reserva(c, reservas) {
   if (!c || !c.folio) return false
   if (es_cobro_credito(c)) return false
   return (reservas || []).some((r) => String(r.id) === String(c.folio))
+}
+
+// ── CANCELAR EN CASCADA LOS COBROS DE UNOS FOLIOS ───────────────
+// espejo de _cancelarCobrosDeFolios(). Se usa al borrar una reserva y al
+// eliminar un prospecto: sin dueño, sus pagos seguirian sumando en el Registro
+// de Cobros y en los Ingresos de Reportes.
+//
+// Borrado SUAVE con nota: la fila se conserva para auditoria. Si el pago
+// existio, ese dinero sigue en la caja aunque deje de aparecer en los
+// reportes — por eso queda escrito en las notas por que se cancelo.
+//
+// Un fallo en uno NO detiene a los demas: se devuelve cuantos si se pudieron.
+// Vive aqui, y no en cada hook, porque los dos flujos que la usan tienen que
+// comportarse EXACTAMENTE igual.
+export async function cancelar_cobros_de_folios(sb, usuario, folios, motivo, ctx) {
+  const lista = (folios || []).map(String).filter(Boolean)
+  if (!lista.length) return { cancelados: 0, avisos: [] }
+
+  const objetivo = (ctx.cobros || []).filter(
+    (c) => !cobro_cancelado(c) && lista.indexOf(String(c.folio || '')) >= 0
+  )
+  let cancelados = 0
+  const avisos = []
+
+  for (const c of objetivo) {
+    const nota = (c.notas ? c.notas + ' · ' : '') +
+      'Cobro cancelado: ' + (motivo || 'la reservación se eliminó')
+    const res = await actualizar_verificado(
+      sb, usuario, 'cobros', { estado: 'cancelado', notas: nota }, c.id, ['estado']
+    )
+    if (!res.ok) {
+      console.error('No se pudo cancelar el cobro ' + c.id + ':', res.error || res.motivo)
+      continue
+    }
+    // Si el cobro tocaba el saldo a favor hay que deshacerlo tambien aqui: sin
+    // esto el saldo queda descuadrado igual que al cancelar uno a mano.
+    try {
+      const aviso = texto_reversion_saldo(
+        await revertir_saldo_favor_de_cobro(sb, usuario, c, ctx)
+      )
+      if (aviso) avisos.push(aviso)
+    } catch (e) {
+      console.error('Reversión de saldo a favor en cascada falló:', e)
+    }
+    cancelados++
+  }
+  return { cancelados, avisos }
 }

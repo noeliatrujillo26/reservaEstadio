@@ -497,6 +497,9 @@ for (let i = 0; i < 6000; i++) {
 // ══ 4. ESCRITURAS CONTRA UNA BASE FALSA ═══════════════════════════
 // Aqui no se compara con la v1: se comprueba QUE SE ESCRIBE y CUANDO no se
 // escribe nada. Es la parte que las cuentas puras no pueden cubrir.
+// `filas` puede traer una clave por tabla con la fila que la base "ya tiene".
+// Para zona_juego_estado importa la distincion entre "existe" y "no existe":
+// opciones.sinFila hace que el UPDATE no toque nada y el flujo caiga al INSERT.
 function base_falsa(filas, opciones) {
   const o = opciones || {}
   const escrituras = []
@@ -516,9 +519,13 @@ function base_falsa(filas, opciones) {
         },
         then(res, rej) {
           escrituras.push({ tabla, op: q._op, payload: q._payload, filtros: { ...q._filtros } })
-          const devuelve = o.filas === 0 ? [] : [{ ...(filas[tabla] || {}), ...q._payload }]
-          return Promise.resolve({ data: o.error ? null : devuelve, error: o.error || null })
-            .then(res, rej)
+          // Un UPDATE sobre una fila que no existe no toca nada: es lo que
+          // empuja a set_estado_zona a insertar.
+          const noExiste = o.sinFila && q._op === 'update'
+          const devuelve = (o.filas === 0 || noExiste)
+            ? [] : [{ ...(filas[tabla] || {}), ...q._payload }]
+          const err = o.error && !(o.errorSoloEn && o.errorSoloEn !== q._op) ? o.error : null
+          return Promise.resolve({ data: err ? null : devuelve, error: err }).then(res, rej)
         },
       }
       return q
@@ -1059,9 +1066,13 @@ for (let i = 0; i < 6000; i++) {
 {
   const sb = base_falsa({ zona_juego_estado: { juego_id: 'j1', zona_id: 'sec-9' } })
   const r = await v2.set_estado_zona(sb, admin, 'j1', 'sec-9', 'reservada')
-  afirmar('estado de zona: escribe el upsert', r.ok === true && sb.escrituras[0].tabla === 'zona_juego_estado')
-  afirmar('estado de zona: manda juego, zona y estado',
-    sb.escrituras[0].payload.juego_id === 'j1' && sb.escrituras[0].payload.estado === 'reservada')
+  afirmar('estado de zona: escribe', r.ok === true && sb.escrituras[0].tabla === 'zona_juego_estado')
+  // Sobre una fila existente el estado viaja en el payload del UPDATE y los
+  // ids en sus filtros — ya no en un unico payload de upsert.
+  afirmar('estado de zona: manda el estado y filtra por juego y zona',
+    sb.escrituras[0].payload.estado === 'reservada' &&
+    sb.escrituras[0].filtros.juego_id === 'j1' &&
+    sb.escrituras[0].filtros.zona_id === 'sec-9')
 }
 {
   // Un estado inventado no llega a la base.
@@ -1543,8 +1554,9 @@ for (let i = 0; i < 8000; i++) {
   const error = { ok: false, motivo: 'error', error: { message: 'boom' } }
   afirmar('sin permiso se explica como permiso',
     /permiso/.test(v2.texto_fallo_estado(sinPermiso, 'Terraza 1')))
-  afirmar('0 filas apunta a RLS y a la clave unica',
-    /RLS/.test(v2.texto_fallo_estado(sinFilas)) && /clave única/.test(v2.texto_fallo_estado(sinFilas)))
+  afirmar('0 filas apunta a RLS',
+    /RLS/.test(v2.texto_fallo_estado(sinFilas)) &&
+    /ni la actualización ni el alta/.test(v2.texto_fallo_estado(sinFilas)))
   afirmar('el error de la base se muestra tal cual',
     /boom/.test(v2.texto_fallo_estado(error)))
   afirmar('un exito no genera aviso', v2.texto_fallo_estado({ ok: true }) === null)
@@ -1582,6 +1594,214 @@ for (let i = 0; i < 8000; i++) {
   afirmar('los ids cruzan aunque cambie el tipo',
     v2.estado_vivo({ 7: { 'sec-1': 'reservada' } }, '7', 'sec-1') === 'reservada' &&
     v2.estado_vivo({ 7: { 'sec-1': 'reservada' } }, 7, 'sec-1') === 'reservada')
+}
+
+// ── set_estado_zona: UPDATE primero, INSERT solo si hace falta ──
+// Deja de depender de que la tabla tenga la clave unica (juego_id, zona_id)
+// declarada: sin ella, un upsert insertaba una fila mas y la seccion acababa
+// con dos estados a la vez.
+{
+  // La fila YA existe: basta el update, no debe insertar nada.
+  const sb = base_falsa({ zona_juego_estado: { juego_id: 'j1', zona_id: 'sec-1' } })
+  const r = await v2.set_estado_zona(sb, admin, 'j1', 'sec-1', 'reservada')
+  afirmar('fila existente: se actualiza', r.ok === true && r.via === 'update')
+  afirmar('fila existente: NO se inserta',
+    !sb.escrituras.some((w) => w.tabla === 'zona_juego_estado' && w.op === 'insert'))
+  afirmar('el update filtra por juego y zona',
+    sb.escrituras[0].filtros.juego_id === 'j1' && sb.escrituras[0].filtros.zona_id === 'sec-1')
+}
+{
+  // NO existe: el update no toca nada y entra el insert con la fila completa.
+  const sb = base_falsa({ zona_juego_estado: {} }, { sinFila: true })
+  const r = await v2.set_estado_zona(sb, admin, 'j9', 'sec-9', 'reservada')
+  afirmar('sin fila: cae al insert', r.ok === true && r.via === 'insert')
+  const ins = sb.escrituras.filter((w) => w.op === 'insert')[0]
+  afirmar('el insert lleva juego, zona y estado',
+    ins && ins.payload.juego_id === 'j9' && ins.payload.zona_id === 'sec-9' &&
+    ins.payload.estado === 'reservada')
+}
+{
+  // Dos cajas a la vez: el insert choca con la unica, y eso significa que la
+  // otra ya creo la fila — se reintenta el update en vez de dar error.
+  let ops = 0
+  const sbCarrera = {
+    escrituras: [],
+    from(tabla) {
+      const q = {
+        _op: null, _p: null,
+        update(p) { q._op = 'update'; q._p = p; return q },
+        insert(p) { q._op = 'insert'; q._p = p; return q },
+        eq() { return q },
+        select() { return q },
+        then(res) {
+          ops++
+          sbCarrera.escrituras.push({ tabla, op: q._op })
+          // 1º update: nada. 2º insert: choca. 3º update: ahora si.
+          if (ops === 1) return Promise.resolve({ data: [], error: null }).then(res)
+          if (ops === 2) {
+            return Promise.resolve({ data: null, error: { code: '23505', message: 'duplicate key' } }).then(res)
+          }
+          return Promise.resolve({ data: [{ estado: q._p.estado }], error: null }).then(res)
+        },
+      }
+      return q
+    },
+  }
+  const r = await v2.set_estado_zona(sbCarrera, admin, 'j1', 'sec-1', 'reservada')
+  afirmar('carrera: el duplicado se resuelve reintentando el update',
+    r.ok === true && r.via === 'update-tras-carrera' && ops === 3)
+}
+{
+  // RLS callando: ni update ni insert devuelven fila, y ninguno da error.
+  const sb = base_falsa({ zona_juego_estado: {} }, { filas: 0 })
+  const r = await v2.set_estado_zona(sb, admin, 'j1', 'sec-1', 'libre')
+  afirmar('0 filas en las dos vias sigue siendo fallo', r.ok === false && r.motivo === 'sin_filas')
+}
+
+// ══ 10. ELIMINAR UN PROSPECTO Y REGISTRAR SUS PAGOS ═══════════════
+
+// Los tres folios con los que puede estar etiquetado un cobro de la tarjeta.
+// espejo del arreglo que arma eliminarProspecto().
+function _foliosProspectoV1(card) {
+  const f = []
+  ;(card.reservaIds || []).forEach((rid) => f.push(String(rid)))
+  if (card.folio) {
+    const x = String(card.folio).trim()
+    f.push(x)
+    f.push(x.toUpperCase().startsWith('PROS-') ? x.slice(5) : 'PROS-' + x)
+  }
+  f.push(String(card.id))
+  return f
+}
+
+for (let i = 0; i < 4000; i++) {
+  const folio = elige(['PROS-00' + (i % 9), String(i % 9), ''])
+  const ids = []
+  for (let k = 0; k < Math.floor(rnd() * 3); k++) ids.push('NRJ-ADM-' + i + k)
+  const card_v1 = { id: 'p' + i, folio, reservaIds: ids }
+  const card_v2 = { id: 'p' + i, folio, reservaids: ids }
+  if (!comparar('folios_de_prospecto', _foliosProspectoV1(card_v1),
+    v2.folios_de_prospecto(card_v2), { folio, ids })) fallos++
+}
+
+// En "Boletos enviados" NO se elimina: los boletos ya salieron y liberar el
+// espacio dejaria una doble venta.
+{
+  pipelineEtapas.forEach((e) => {
+    const permitido = v2.puede_eliminarse({ etapa: e.id })
+    afirmar('eliminar en ' + e.id + (e.id === 'boletos_entregados' ? ' se prohibe' : ' se permite'),
+      permitido === (e.id !== 'boletos_entregados'))
+  })
+  afirmar('el mensaje de bloqueo menciona los boletos', /boletos enviados/i.test(v2.msg_no_eliminable))
+}
+
+// ── LIBERAR RESERVAS: LAS DOS SALVAGUARDAS ──
+{
+  // Salvaguarda 1: NO se libera si otra reserva activa ocupa la misma
+  // (zona, juego). Liberarla dejaba vendida una zona que otro seguia usando.
+  const reservas = [
+    { id: 'R1', estado: 'activa', juegoid: 'j1', zonaid: 'sec-1', zona: 'Terraza 1' },
+    { id: 'R2', estado: 'activa', juegoid: 'j1', zonaid: 'sec-1', zona: 'Terraza 1' },
+  ]
+  const sb = base_falsa({ reservas: { id: 'R1' }, zona_juego_estado: { juego_id: 'j1' }, movimientos: {} })
+  const r = await v2.liberar_reservas_de_prospecto(sb, admin, { id: 'p1', nombre: 'X', reservaids: ['R1'] }, {
+    reservas, areas: [{ id: 'sec-1', nombre: 'Terraza 1' }],
+    areasestados: { j1: { 'sec-1': 'reservada' } },
+  })
+  afirmar('la reserva se cancela', sb.escrituras.some((w) => w.tabla === 'reservas' && w.payload.estado === 'Cancelada'))
+  afirmar('cancelar borra el saldo de consumo',
+    sb.escrituras.some((w) => w.tabla === 'reservas' && w.payload.saldo_consumo === 0))
+  afirmar('con otra reserva activa la seccion NO se libera',
+    r.liberadas.length === 0 && !sb.escrituras.some((w) => w.tabla === 'zona_juego_estado'))
+}
+{
+  // Sin otra reserva activa: si se libera.
+  const reservas = [{ id: 'R1', estado: 'activa', juegoid: 'j1', zonaid: 'sec-1', zona: 'Terraza 1' }]
+  const sb = base_falsa({ reservas: { id: 'R1' }, zona_juego_estado: { juego_id: 'j1' }, movimientos: {} })
+  const r = await v2.liberar_reservas_de_prospecto(sb, admin, { id: 'p1', nombre: 'X', reservaids: ['R1'] }, {
+    reservas, areas: [{ id: 'sec-1', nombre: 'Terraza 1' }],
+    areasestados: { j1: { 'sec-1': 'reservada' } },
+  })
+  afirmar('sin otra reserva activa la seccion se libera', r.liberadas.length === 1)
+  afirmar('se escribe libre en zona_juego_estado',
+    sb.escrituras.some((w) => w.tabla === 'zona_juego_estado' && w.payload.estado === 'libre'))
+  afirmar('queda rastro de la seccion liberada',
+    sb.escrituras.some((w) => w.tabla === 'movimientos' && /Sección liberada/.test(w.payload.descripcion)))
+}
+{
+  // Salvaguarda 2: un 'bloqueada' es una decision MANUAL del admin y cancelar
+  // una reserva no puede deshacerla.
+  const reservas = [{ id: 'R1', estado: 'activa', juegoid: 'j1', zonaid: 'sec-1', zona: 'Terraza 1' }]
+  const sb = base_falsa({ reservas: { id: 'R1' }, zona_juego_estado: {}, movimientos: {} })
+  const r = await v2.liberar_reservas_de_prospecto(sb, admin, { id: 'p1', nombre: 'X', reservaids: ['R1'] }, {
+    reservas, areas: [{ id: 'sec-1', nombre: 'Terraza 1' }],
+    areasestados: { j1: { 'sec-1': 'bloqueada' } },
+  })
+  afirmar('un bloqueo manual NO se pisa al cancelar',
+    r.liberadas.length === 0 && !sb.escrituras.some((w) => w.tabla === 'zona_juego_estado'))
+}
+{
+  // Una reserva ya cancelada no se vuelve a tocar.
+  const reservas = [{ id: 'R1', estado: 'Cancelada', juegoid: 'j1', zonaid: 'sec-1' }]
+  const sb = base_falsa({ reservas: { id: 'R1' }, movimientos: {} })
+  const r = await v2.liberar_reservas_de_prospecto(sb, admin, { id: 'p1', nombre: 'X', reservaids: ['R1'] }, {
+    reservas, areas: [{ id: 'sec-1', nombre: 'Terraza 1' }], areasestados: {},
+  })
+  afirmar('una reserva ya cancelada no se toca',
+    r.liberadas.length === 0 && sb.escrituras.length === 0)
+}
+{
+  // La seccion se resuelve por zona_id y, a falta de el, por nombre exacto.
+  const reservas = [{ id: 'R1', estado: 'activa', juegoid: 'j1', zonaid: '', zona: 'Terraza 1' }]
+  const sb = base_falsa({ reservas: { id: 'R1' }, zona_juego_estado: {}, movimientos: {} })
+  const r = await v2.liberar_reservas_de_prospecto(sb, admin, { id: 'p1', nombre: 'X', reservaids: ['R1'] }, {
+    reservas, areas: [{ id: 'sec-1', nombre: 'Terraza 1' }],
+    areasestados: { j1: { 'sec-1': 'reservada' } },
+  })
+  afirmar('sin zona_id la seccion se resuelve por nombre', r.liberadas.length === 1)
+}
+
+// ── CANCELAR EN CASCADA LOS COBROS DE UNOS FOLIOS ──
+{
+  const cobros = [
+    { id: 1, folio: 'PROS-001', monto: 100, concepto: 'ABONO', formapago: 'EFECTIVO', estado: '', notas: 'previo' },
+    { id: 2, folio: 'NRJ-ADM-1', monto: 200, concepto: 'ABONO', formapago: 'EFECTIVO', estado: '' },
+    { id: 3, folio: 'ajeno', monto: 300, concepto: 'ABONO', formapago: 'EFECTIVO', estado: '' },
+    { id: 4, folio: 'PROS-001', monto: 50, concepto: 'ABONO', formapago: 'EFECTIVO', estado: 'cancelado' },
+  ]
+  const sb = base_falsa({ cobros: {}, clientes: { saldo_favor: 0 } })
+  const r = await v2.cancelar_cobros_de_folios(
+    sb, admin, ['PROS-001', 'NRJ-ADM-1'], 'se eliminó el prospecto',
+    { cobros, clientes: [], reservas: [] }
+  )
+  afirmar('cancela solo los folios pedidos', r.cancelados === 2)
+  const tocados = sb.escrituras.filter((w) => w.tabla === 'cobros').map((w) => w.filtros.id).sort()
+  afirmar('no toca el cobro ajeno ni el ya cancelado',
+    tocados.length === 2 && tocados.indexOf(3) < 0 && tocados.indexOf(4) < 0)
+  afirmar('deja el motivo escrito en las notas',
+    sb.escrituras.some((w) => w.tabla === 'cobros' && /se eliminó el prospecto/.test(w.payload.notas)))
+  afirmar('conserva las notas anteriores',
+    sb.escrituras.some((w) => w.tabla === 'cobros' && /^previo · /.test(w.payload.notas)))
+  afirmar('es borrado SUAVE, no delete',
+    sb.escrituras.filter((w) => w.tabla === 'cobros').every((w) => w.op === 'update' && w.payload.estado === 'cancelado'))
+}
+{
+  // Un abono a saldo a favor cancelado en cascada tambien revierte el saldo.
+  const cobros = [{
+    id: 1, folio: 'PROS-001', monto: 400, concepto: 'SALDO A FAVOR',
+    formapago: 'EFECTIVO', estado: '', cliente: 'ANA',
+  }]
+  const sb = base_falsa({ cobros: {}, clientes: { saldo_favor: 1000 } })
+  await v2.cancelar_cobros_de_folios(sb, admin, ['PROS-001'], 'x',
+    { cobros, clientes: [{ id: 1, nombre: 'ANA' }], reservas: [] })
+  afirmar('la cascada revierte el saldo a favor',
+    sb.escrituras.some((w) => w.tabla === 'clientes' && w.payload.saldo_favor === 600))
+}
+{
+  // Sin folios no hay nada que hacer, y no se escribe.
+  const sb = base_falsa({ cobros: {} })
+  const r = await v2.cancelar_cobros_de_folios(sb, admin, [], 'x', { cobros: [], clientes: [], reservas: [] })
+  afirmar('sin folios no escribe', r.cancelados === 0 && sb.escrituras.length === 0)
 }
 
 // ══ RESULTADO ═════════════════════════════════════════════════════

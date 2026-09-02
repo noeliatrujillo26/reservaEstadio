@@ -26,8 +26,8 @@ import {
   actualizar_verificado, borrar_verificado, insertar_verificado, mensajes_bloqueo,
   motivo_bloqueo, registrar_movimiento,
 } from '../lib/escritura'
-import { revertir_saldo_favor_de_cobro, texto_reversion_saldo } from '../lib/cascadas'
-import { cobro_cancelado } from '../lib/cobros'
+import { cancelar_cobros_de_folios } from '../lib/cascadas'
+
 import { set_estado_zona, texto_fallo_estado } from '../lib/mapaocupacion'
 import {
   cobro_inicial, economia_reserva, email_valido, estado_pago_reserva, etiqueta_juego,
@@ -54,45 +54,6 @@ export function usereservasescritura() {
 
   const puede = motivo_bloqueo(usuario, 'reservas') === null
   const puede_estados = motivo_bloqueo(usuario, 'zona_juego_estado') === null
-
-  // ── CANCELAR LOS COBROS QUE SE CAEN CON LA RESERVA ──────────
-  // espejo de _cancelarCobrosDeFolios(): borrado suave con nota, uno por uno,
-  // y cada uno revierte lo que hubiera hecho con el saldo a favor del cliente.
-  // Un fallo en uno no detiene a los demas: se cuenta lo que si se pudo.
-  const cancelar_cobros_de_folios = useCallback(
-    async (folios, motivo) => {
-      const lista = (folios || []).map(String).filter(Boolean)
-      if (!lista.length) return 0
-      const objetivo = (cobros || []).filter(
-        (c) => !cobro_cancelado(c) && lista.indexOf(String(c.folio || '')) >= 0
-      )
-      let cancelados = 0
-      for (const c of objetivo) {
-        const nota = (c.notas ? c.notas + ' · ' : '') +
-          'Cobro cancelado: ' + (motivo || 'la reservación se eliminó')
-        const res = await actualizar_verificado(
-          sb, usuario, 'cobros', { estado: 'cancelado', notas: nota }, c.id, ['estado']
-        )
-        if (!res.ok) {
-          console.error('No se pudo cancelar el cobro ' + c.id + ':', res.error || res.motivo)
-          continue
-        }
-        // Si el cobro tocaba el saldo a favor hay que deshacerlo tambien aqui:
-        // sin esto el saldo queda descuadrado igual que al cancelar a mano.
-        try {
-          const aviso = texto_reversion_saldo(
-            await revertir_saldo_favor_de_cobro(sb, usuario, c, { clientes, reservas })
-          )
-          if (aviso) mostrartoast(aviso, 9000)
-        } catch (e) {
-          console.error('Reversión de saldo a favor en cascada falló:', e)
-        }
-        cancelados++
-      }
-      return cancelados
-    },
-    [cobros, clientes, reservas, usuario, mostrartoast]
-  )
 
   // ── CREAR / EDITAR ───────────────────────────────────────────
   // datos = { juegoid, zonaid, nombre, email, tel, pago, metodo, montomanual,
@@ -285,11 +246,15 @@ export function usereservasescritura() {
         //    con nota: la fila se conserva para auditoria, pero si el pago
         //    existio ese dinero sigue en la caja aunque deje de aparecer.
         try {
-          const n = await cancelar_cobros_de_folios(
-            folios_de_reserva_borrada(reserva, pipeline),
-            'se eliminó la reserva ' + reserva.id
+          const r = await cancelar_cobros_de_folios(
+            sb, usuario, folios_de_reserva_borrada(reserva, pipeline),
+            'se eliminó la reserva ' + reserva.id,
+            { cobros, clientes, reservas }
           )
-          if (n > 0) mostrartoast('🧾 ' + n + ' cobro(s) vinculado(s) cancelado(s)')
+          r.avisos.forEach((a) => avisos.push(a))
+          if (r.cancelados > 0) {
+            mostrartoast('🧾 ' + r.cancelados + ' cobro(s) vinculado(s) cancelado(s)')
+          }
         } catch (e) {
           console.error('Cancelación de cobros al eliminar la reserva falló:', e)
         }
@@ -340,7 +305,7 @@ export function usereservasescritura() {
         setborrando(null)
       }
     },
-    [usuario, pipeline, mostrartoast, recargar, cancelar_cobros_de_folios]
+    [usuario, pipeline, cobros, clientes, reservas, mostrartoast, recargar]
   )
 
   return { puede, puede_estados, guardar, guardando, eliminar, borrando }

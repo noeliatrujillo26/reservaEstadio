@@ -22,11 +22,18 @@ import useadmin from './useadmin'
 import useadmindatos from './useadmindatos'
 import { usetoast } from '../context/toastcontext'
 import {
-  actualizar_verificado, insertar_verificado, mensajes_bloqueo, motivo_bloqueo,
-  registrar_movimiento,
+  actualizar_verificado, borrar_verificado, insertar_verificado, mensajes_bloqueo,
+  motivo_bloqueo, registrar_movimiento,
 } from '../lib/escritura'
-import { set_estado_zona, texto_fallo_estado } from '../lib/mapaocupacion'
-import { sincronizar_etapa } from '../lib/cascadas'
+import {
+  folios_de_prospecto, liberar_reservas_de_prospecto, msg_no_eliminable,
+  puede_eliminarse, set_estado_zona, texto_fallo_estado,
+} from '../lib/mapaocupacion'
+import {
+  cancelar_cobros_de_folios, cliente_id_de_cobro, mover_saldo_favor, saldo_favor_de,
+  sincronizar_etapa, sincronizar_pago_reserva,
+} from '../lib/cascadas'
+import { subir_comprobante } from '../lib/storage'
 import { pipeline_etapas, reservas_activas } from '../lib/pipeline'
 import {
   bruto_tarjeta, calc_total_prospecto, nuevo_folio_prospecto, validar_edicion_prospecto,
@@ -38,9 +45,9 @@ import {
 } from '../lib/reservasadmin'
 import { map_precio } from '../lib/preciosadmin'
 import { buscar_cliente, tel_norm } from '../lib/clientes'
-import { cobro_cancelado } from '../lib/cobros'
-import { es_cobro_credito } from '../lib/dashboard'
-import { redondear_dinero } from '../lib/dinero'
+import { area_por_nombre_zona, cobro_cancelado, es_pago_desde_saldo_favor } from '../lib/cobros'
+import { es_cobro_credito, es_pago_credito } from '../lib/dashboard'
+import { mxn2, redondear_dinero } from '../lib/dinero'
 import { hoy_hermosillo } from '../lib/fechas'
 
 const claves_legacy_prospecto = [
@@ -49,6 +56,14 @@ const claves_legacy_prospecto = [
 const claves_legacy_reserva = [
   'id', 'cliente', 'email', 'tel', 'zona', 'juego', 'juego_id', 'monto',
   'descuento_monto', 'monto_pagado', 'pago', 'metodo', 'personas', 'estado', 'estado_pago',
+]
+
+const money = (n) => '$' + (Number(n) || 0).toLocaleString('es-MX', mxn2)
+
+// claves originales de `cobros`, iguales que en Registro de Cobros.
+const claves_legacy_cobro = [
+  'fecha', 'mes', 'cliente', 'area', 'zona', 'concepto', 'monto', 'forma_pago',
+  'fecha_reserva', 'recibio', 'factura', 'folio', 'notas', 'evidencia',
 ]
 
 function es_duplicado(error) {
@@ -64,6 +79,8 @@ export function useprospectos() {
   const { mostrartoast } = usetoast()
   const [guardando, setguardando] = useState(false)
   const [moviendo, setmoviendo] = useState(null)
+  const [borrando, setborrando] = useState(null)
+  const [pagando, setpagando] = useState(false)
 
   const puede = motivo_bloqueo(usuario, 'pipeline_prospectos') === null
 
@@ -566,9 +583,356 @@ export function useprospectos() {
     ]
   )
 
+
+  // ── ELIMINAR PROSPECTO ───────────────────────────────────────
+  // espejo de eliminarProspecto(). `confirmacion` = { motivo } cuando la
+  // tarjeta tiene reservas (el llamador ya pidio contraseña); sin reservas
+  // basta un si/no.
+  //
+  // LA TARJETA CON RESERVA NO SE BORRA: se archiva con etapa 'descartado'. Esa
+  // fila-lapida conserva el vinculo reserva_ids, y sin ella la sincronizacion
+  // automatica —que crea tarjetas para reservas sin vincular— la resucitaba en
+  // cada recarga. Borrar la fila era justo lo que hacia reaparecer tarjetas
+  // "de la nada". Un prospecto puro, sin reservas, si se borra de verdad:
+  // nada lo recrea.
+  const eliminar = useCallback(
+    async (card, confirmacion) => {
+      const bloqueo = motivo_bloqueo(usuario, 'pipeline_prospectos')
+      if (bloqueo) {
+        mostrartoast(mensajes_bloqueo[bloqueo])
+        return { ok: false }
+      }
+      if (!puede_eliminarse(card)) {
+        mostrartoast(msg_no_eliminable, 8000)
+        return { ok: false, motivo: 'boletos' }
+      }
+      const tienereservas = (card.reservaids || []).length > 0
+      if (tienereservas && (!confirmacion || !confirmacion.motivo)) return { ok: false }
+
+      setborrando(card.id)
+      const avisos = []
+      try {
+        // 1. Los CREDITOS de la tarjeta dejan de ser cobrables. El dinero REAL
+        //    no se toca aqui: ese cobro existio y su registro debe sobrevivir
+        //    a la eliminacion. Los cobros reales se cancelan mas abajo, ya con
+        //    la tarjeta fuera.
+        const folios = folios_de_prospecto(card)
+
+        // 2. Reservas y secciones, con sus dos salvaguardas.
+        if (tienereservas) {
+          const lib = await liberar_reservas_de_prospecto(sb, usuario, card, {
+            reservas, areas, areasestados,
+          })
+          lib.avisos.forEach((a) => avisos.push(a))
+          if (lib.liberadas.length) {
+            mostrartoast('🟢 ' + lib.liberadas.length + ' sección(es) liberada(s) en el mapa')
+          }
+          registrar_movimiento(sb, {
+            tipo: 'ELIMINACIÓN_RESERVA',
+            desc: 'Reservas ' + (card.reservaids || []).map((x) => '#' + x).join(', ') +
+              ' canceladas al eliminar el prospecto · ' + card.nombre +
+              ' · Motivo: ' + confirmacion.motivo,
+            ref: card.folio || card.id,
+            usuario: usuario ? usuario.nombre : '—',
+          })
+        }
+
+        // 3. La tarjeta: lapida si tenia reservas, borrado real si no.
+        const res = tienereservas
+          ? await actualizar_verificado(
+            sb, usuario, 'pipeline_prospectos',
+            { etapa: 'descartado', badge: 'Descartado' }, card.id, ['etapa']
+          )
+          : await borrar_verificado(sb, usuario, 'pipeline_prospectos', card.id)
+        if (!res.ok) {
+          mostrartoast(
+            res.motivo === 'sin_filas'
+              ? '⚠️ La base no aceptó la eliminación (0 filas). Revisa las políticas RLS de `pipeline_prospectos`.'
+              : '⚠️ No se pudo eliminar en Supabase' +
+                ((res.error && res.error.message) ? ': ' + res.error.message : '.')
+          )
+          return { ok: false }
+        }
+
+        // 4. CASCADA DE COBROS: sin la tarjeta, sus pagos quedan sin dueño y
+        //    seguirian inflando el Registro de Cobros y los Ingresos de
+        //    Reportes. Se cancelan por las tres formas de folio.
+        try {
+          const r = await cancelar_cobros_de_folios(
+            sb, usuario, folios, 'se eliminó el prospecto ' + (card.folio || card.id),
+            { cobros, clientes, reservas }
+          )
+          r.avisos.forEach((a) => avisos.push(a))
+          if (r.cancelados > 0) {
+            mostrartoast('🧾 ' + r.cancelados + ' cobro(s) vinculado(s) cancelado(s)')
+          }
+        } catch (e) {
+          console.error('Cascada de cobros al eliminar el prospecto falló:', e)
+        }
+
+        registrar_movimiento(sb, {
+          tipo: 'Admin',
+          desc: 'Prospecto eliminado · ' + card.nombre +
+            (confirmacion && confirmacion.motivo ? ' · Motivo: ' + confirmacion.motivo : ''),
+          ref: card.folio || 'Pipeline Comercial',
+          usuario: usuario ? usuario.nombre : '—',
+        })
+        await recargar()
+        mostrartoast('🗑 Prospecto eliminado · ' + card.nombre)
+        if (avisos.length) mostrartoast(avisos.join(' · '), 9000)
+        return { ok: true, avisos }
+      } finally {
+        setborrando(null)
+      }
+    },
+    [
+      usuario, reservas, areas, areasestados, cobros, clientes,
+      mostrartoast, recargar,
+    ]
+  )
+
+  // ── REGISTRAR UN PAGO DESDE LA TARJETA ───────────────────────
+  // espejo de agregarPagoPD(). El cobro se inserta con el folio de la RESERVA
+  // vinculada cuando existe —asi el portal Mis Reservas lo suma a su
+  // historial— y con el del prospecto cuando todavia no hay reserva.
+  //
+  // datos = { concepto, forma, monto, requierefactura, archivo, pendiente }
+  const registrar_pago = useCallback(
+    async (card, datos) => {
+      const bloqueo = motivo_bloqueo(usuario, 'cobros')
+      if (bloqueo) {
+        mostrartoast(mensajes_bloqueo[bloqueo])
+        return { ok: false }
+      }
+      if (pagando) return { ok: false } // doble clic → un solo pago
+
+      const monto = parseFloat(datos.monto) || 0
+      if (!(monto > 0)) {
+        mostrartoast('⚠️ Ingresa un monto válido')
+        return { ok: false, campo: 'monto' }
+      }
+      const espendiente = !!datos.pendiente
+      const concepto = String(datos.concepto || 'ABONO')
+      const forma = espendiente ? 'PENDIENTE' : String(datos.forma || '')
+      const escredito = !espendiente && es_pago_credito(concepto, forma)
+      const essaldofavor = !espendiente && es_pago_desde_saldo_favor('', forma)
+
+      // COMPROBANTE obligatorio, con cuatro excepciones y cada una por su
+      // motivo: CREDITO no tiene archivo al momento; PENDIENTE todavia no es
+      // un pago; EFECTIVO se recibe en mano sin documento externo; y el SALDO
+      // A FAVOR ya entro antes con su propio comprobante.
+      const esefectivo = !espendiente && forma === 'EFECTIVO'
+      if (!escredito && !espendiente && !esefectivo && !essaldofavor && !datos.archivo) {
+        mostrartoast(
+          '⚠️ Por favor adjunta el comprobante de pago (imagen o PDF) para poder registrar el abono.',
+          8000
+        )
+        return { ok: false, campo: 'comprobante' }
+      }
+
+      // PAGO DESDE SALDO A FAVOR: se valida contra la BASE, no contra lo que
+      // muestra la pantalla. Entre abrir el detalle y pulsar Registrar, otra
+      // caja pudo gastar ese saldo, y aplicar de mas dejaria al cliente con
+      // saldo negativo: dinero que nunca entrego.
+      let clienteid = null
+      if (essaldofavor) {
+        clienteid = card.clienteid != null
+          ? card.clienteid
+          : cliente_id_de_cobro(
+            { cliente: card.nombre, email: card.email, tel: card.tel },
+            { clientes, reservas }
+          )
+        if (clienteid == null) {
+          mostrartoast(
+            '⚠️ Este prospecto no está ligado a una ficha de cliente: no se puede aplicar saldo a favor.',
+            8000
+          )
+          return { ok: false }
+        }
+        const saldoahora = await saldo_favor_de(sb, clienteid)
+        if (saldoahora == null) {
+          mostrartoast('⚠️ No se pudo consultar el saldo a favor. Intenta de nuevo.', 7000)
+          return { ok: false }
+        }
+        if (saldoahora <= 0) {
+          mostrartoast('⚠️ Este cliente no tiene saldo a favor disponible.', 7000)
+          return { ok: false }
+        }
+        if (monto > saldoahora + 0.009) {
+          mostrartoast(
+            '⚠️ El monto (' + money(monto) + ') supera el saldo a favor disponible (' +
+            money(saldoahora) + ').', 9000
+          )
+          return { ok: false }
+        }
+      }
+
+      setpagando(true)
+      const avisos = []
+      try {
+        // El comprobante SI frena aqui, al reves que en Registro de Cobros:
+        // alli el dinero ya se recibio y perder el registro seria peor; aqui
+        // el pago aun no existe y registrarlo sin su respaldo, habiendolo
+        // exigido, seria contradecirse.
+        let evidencia = ''
+        if (datos.archivo) {
+          const subida = await subir_comprobante(sb, datos.archivo, 'pipeline')
+          if (!subida.url) {
+            mostrartoast(
+              '⚠️ No se pudo subir el comprobante' +
+              (subida.error && subida.error.message ? ': ' + subida.error.message : '.') +
+              ' Intenta de nuevo.', 8000
+            )
+            return { ok: false }
+          }
+          evidencia = subida.url
+        }
+
+        const reservavinc = (card.reservaids || [])
+          .map((rid) => (reservas || []).find((r) => r.id === rid))
+          .find((r) => r && String(r.estado || '').toLowerCase() !== 'cancelada') || null
+        const zonanombre = reservavinc ? reservavinc.zona : card.zona || ''
+        const areamatch = area_por_nombre_zona(zonanombre, areas)
+        const fecha = hoy_hermosillo()
+        const messtr = new Date().toLocaleDateString('es-MX', {
+          month: 'long', timeZone: 'America/Hermosillo',
+        })
+
+        const res = await insertar_verificado(sb, usuario, 'cobros', {
+          fecha,
+          mes: messtr.charAt(0).toUpperCase() + messtr.slice(1),
+          cliente: String(reservavinc ? reservavinc.cliente : card.nombre).toUpperCase(),
+          email: (reservavinc ? reservavinc.email : card.email) || '',
+          area: 'ASADOR',
+          zona: zonanombre,
+          zona_id: areamatch ? areamatch.id : '',
+          concepto: concepto.toUpperCase(),
+          monto: redondear_dinero(monto),
+          forma_pago: forma,
+          fecha_reserva: '',
+          recibio: usuario ? usuario.nombre : '',
+          factura: datos.requierefactura ? 'REQUERIDA' : '',
+          folio: reservavinc ? String(reservavinc.id) : card.folio || '',
+          notas: (essaldofavor ? 'Pago aplicado desde Saldo a Favor · ' : '') +
+            'Pipeline Comercial · ' + card.nombre +
+            (card.folio ? ' · Folio pipeline ' + card.folio : ''),
+          evidencia,
+        }, claves_legacy_cobro)
+        if (!res.ok) {
+          console.error('Error exacto de Supabase al guardar el pago:', res.error)
+          mostrartoast(
+            res.error && res.error.code === '42501'
+              ? '⚠️ Tu rol no tiene permisos para registrar pagos.'
+              : res.motivo === 'sin_filas'
+                ? '⚠️ La base no aceptó el pago (0 filas). Revisa las políticas RLS de `cobros`.'
+                : '⚠️ No se pudo guardar el pago: ' +
+                  ((res.error && res.error.message) || 'error desconocido'),
+            8000
+          )
+          return { ok: false }
+        }
+        const guardado = (res.datos && res.datos[0]) || null
+
+        // Descontar del saldo a favor. DESPUES del insert: si el cobro no se
+        // guardo, el saldo no se toca.
+        let saldorestante = null
+        if (essaldofavor) {
+          const mov = await mover_saldo_favor(sb, usuario, clienteid, -redondear_dinero(monto))
+          if (mov.ok) saldorestante = mov.saldo
+          else {
+            avisos.push(
+              '⚠️ El pago quedó registrado, pero el saldo a favor del cliente NO se descontó' +
+              (mov.motivo === 'insuficiente' ? ' (saldo insuficiente).' : '.') +
+              ' Revísalo en su ficha.'
+            )
+          }
+        }
+
+        // Saldo de la reserva vinculada. Sin esto el abono quedaba solo en
+        // cobros y el portal del cliente seguia mostrando el saldo viejo.
+        let sync = null
+        if (reservavinc) {
+          try {
+            sync = await sincronizar_pago_reserva(
+              sb, usuario, reservavinc.id, redondear_dinero(monto), escredito
+            )
+            if (!sync.ok && sync.motivo !== 'reserva-no-encontrada') {
+              avisos.push(
+                '⚠️ El pago quedó registrado, pero el saldo de la reserva ' + reservavinc.id +
+                ' no se actualizó. Revísalo.'
+              )
+            }
+          } catch (e) {
+            console.error('Sincronización de saldo falló (el abono sí quedó registrado):', e)
+          }
+        }
+
+        mostrartoast(
+          '✅ ¡Pago registrado! · ' + money(redondear_dinero(monto)) +
+          (essaldofavor && saldorestante != null
+            ? ' · Aplicado desde Saldo a Favor · Restante: ' + money(saldorestante) : '') +
+          (sync && sync.liquidada ? ' · 💚 Reserva ' + reservavinc.id + ' LIQUIDADA' : '')
+        )
+        registrar_movimiento(sb, {
+          tipo: 'Pago',
+          desc: 'Pago registrado · ' + card.nombre + ' (' + concepto + ')' +
+            (essaldofavor
+              ? ' · Aplicado desde Saldo a Favor. Saldo restante: ' +
+                (saldorestante != null ? money(saldorestante) : 'sin confirmar')
+              : ''),
+          ref: card.folio || '—',
+          monto: redondear_dinero(monto),
+          usuario: usuario ? usuario.nombre : '—',
+        })
+
+        // LA ETAPA SE REEVALUA SIEMPRE, no solo al liquidar. Antes esto colgaba
+        // de "la reserva quedo liquidada", asi que un abono parcial —justo el
+        // que cubre el enganche— no movia nada y la tarjeta se quedaba en su
+        // columna hasta que alguien la arrastrara.
+        try {
+          const nuevo = guardado
+            ? {
+              id: guardado.id, folio: guardado.folio || '',
+              monto: Number(guardado.monto) || 0, concepto: guardado.concepto || '',
+              formapago: guardado.forma_pago || '', estado: guardado.estado || '',
+            }
+            : null
+          const reservasdespues = (reservavinc && sync && sync.ok && !sync.credito)
+            ? (reservas || []).map((r) => (r.id === reservavinc.id
+              ? { ...r, montopagado: sync.pagado, estadopago: sync.estadopago, pago: sync.pagolabel }
+              : r))
+            : reservas
+          const r = await sincronizar_etapa(sb, usuario, card, {
+            reservas: reservasdespues,
+            cobros: nuevo ? (cobros || []).concat([nuevo]) : cobros || [],
+            cotizaciones: [],
+            enganchemin: politica ? politica.enganche_minimo : 0,
+          })
+          if (r) mostrartoast(r.texto)
+        } catch (e) {
+          console.error('Sincronización de etapa tras el pago falló:', e)
+        }
+
+        await recargar()
+        if (avisos.length) mostrartoast(avisos.join(' · '), 9000)
+        return { ok: true, avisos }
+      } catch (err) {
+        console.error('registrar pago desde el prospecto:', err)
+        mostrartoast('⚠️ No se pudo registrar el pago. Intenta de nuevo.')
+        return { ok: false }
+      } finally {
+        setpagando(false)
+      }
+    },
+    [
+      usuario, pagando, reservas, cobros, clientes, areas, politica,
+      mostrartoast, recargar,
+    ]
+  )
+
   return {
-    puede, crear, editar, mover, generar_reserva, guardando, moviendo,
-    areasestados,
+    puede, crear, editar, mover, generar_reserva, eliminar, registrar_pago,
+    guardando, moviendo, borrando, pagando, areasestados,
   }
 }
 

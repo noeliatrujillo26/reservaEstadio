@@ -83,9 +83,11 @@ const ConfirmSeguro = () => <ConfirmarSeguro estado={{titulo:'🗑 Eliminar',des
 const ProspectoNuevo = () => <NuevoProspecto abierto oncerrar={()=>{}} oncrear={async()=>({ok:true})} guardando={false} />
 // dos estados que se comportan distinto: una tarjeta SIN reserva (ofrece
 // generarla) y otra CON reserva vinculada (la oferta desaparece).
-const ProspectoDetalle = () => <DetalleProspecto card={valor.pipeline[0]} puede oncerrar={()=>{}} oneditar={async()=>({ok:true})} ongenerar={async()=>({ok:true})} guardando={false} />
-const ProspectoSinReserva = () => <DetalleProspecto card={{...valor.pipeline[0], reservaids:[]}} puede oncerrar={()=>{}} oneditar={async()=>({ok:true})} ongenerar={async()=>({ok:true})} guardando={false} />
-const ProspectoSoloLectura = () => <DetalleProspecto card={valor.pipeline[0]} puede={false} oncerrar={()=>{}} oneditar={async()=>({ok:true})} ongenerar={async()=>({ok:true})} guardando={false} />
+const ProspectoDetalle = () => <DetalleProspecto card={valor.pipeline[0]} puede oncerrar={()=>{}} oneditar={async()=>({ok:true})} ongenerar={async()=>({ok:true})} oneliminar={async()=>{}} onpagar={async()=>({ok:true})} guardando={false} borrando={null} pagando={false} />
+const ProspectoSinReserva = () => <DetalleProspecto card={{...valor.pipeline[0], reservaids:[]}} puede oncerrar={()=>{}} oneditar={async()=>({ok:true})} ongenerar={async()=>({ok:true})} oneliminar={async()=>{}} onpagar={async()=>({ok:true})} guardando={false} borrando={null} pagando={false} />
+const ProspectoSoloLectura = () => <DetalleProspecto card={valor.pipeline[0]} puede={false} oncerrar={()=>{}} oneditar={async()=>({ok:true})} ongenerar={async()=>({ok:true})} oneliminar={async()=>{}} onpagar={async()=>({ok:true})} guardando={false} borrando={null} pagando={false} />
+// en Boletos enviados el borrado esta prohibido: el boton sale apagado.
+const ProspectoBoletos = () => <DetalleProspecto card={{...valor.pipeline[0], etapa:'boletos_entregados'}} puede oncerrar={()=>{}} oneditar={async()=>({ok:true})} ongenerar={async()=>({ok:true})} oneliminar={async()=>{}} onpagar={async()=>({ok:true})} guardando={false} borrando={null} pagando={false} />
 const ConfirmSeguroSinMotivo = () => <ConfirmarSeguro estado={{titulo:'🔒 Bloquear',descripcion:'Sale de venta.',textoconfirmar:'Bloquear',pedirmotivo:false}} oncerrar={()=>{}} />
 
 export const vistas={dashboard:Dashboard,cobros:Cobros,seccionesreservadas:Reservas,clientes:Clientes,
@@ -97,7 +99,8 @@ export const vistas={dashboard:Dashboard,cobros:Cobros,seccionesreservadas:Reser
  reservanueva:ReservaNueva,reservaeditar:ReservaEditar,
  confirmsimple:ConfirmSimple,confirmseguro:ConfirmSeguro,confirmseguro2:ConfirmSeguroSinMotivo,
  prospectonuevo:ProspectoNuevo,prospectodetalle:ProspectoDetalle,
- prospectosinreserva:ProspectoSinReserva,prospectosololectura:ProspectoSoloLectura}
+ prospectosinreserva:ProspectoSinReserva,prospectosololectura:ProspectoSoloLectura,
+ prospectoboletos:ProspectoBoletos}
 
 export function render(Comp){
   return renderToString(

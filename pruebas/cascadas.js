@@ -18,6 +18,7 @@ export {
   mover_saldo_favor, saldo_favor_de, revertir_saldo_favor_de_cobro,
   sincronizar_pago_reserva, restar_pago_reserva, sincronizar_etapa,
   tarjeta_de_folio, afecta_saldo_reserva, texto_reversion_saldo,
+  cancelar_cobros_de_folios,
 } from '../src/lib/cascadas'
 
 export {
@@ -42,7 +43,8 @@ export {
 } from '../src/lib/reservasadmin'
 export {
   estado_vivo, puede_bloquearse, set_estado_zona, alternar_bloqueo, estados_zona,
-  texto_fallo_estado,
+  texto_fallo_estado, liberar_reservas_de_prospecto, folios_de_prospecto,
+  puede_eliminarse, msg_no_eliminable,
 } from '../src/lib/mapaocupacion'
 
 export {

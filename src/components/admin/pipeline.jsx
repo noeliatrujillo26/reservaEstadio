@@ -18,6 +18,8 @@ import useadmindatos from '../../hooks/useadmindatos'
 import useprospectos from '../../hooks/useprospectos'
 import NuevoProspecto from './nuevoprospecto'
 import DetalleProspecto from './detalleprospecto'
+import { useconfirmarseguro } from './confirmarseguro'
+import { puede_eliminarse } from '../../lib/mapaocupacion'
 import {
   columna_lleva_abonado, dias_en_etapa, filtrar_tarjetas, pagos_de_tarjeta,
   pipeline_etapas, series_de, suma_pagos_dinero,
@@ -39,8 +41,10 @@ function tono_dias(d) {
 export default function pipeline() {
   const { pipeline: cards, juegos, cobros, usuarios, cargando, errores } = useadmindatos()
   const {
-    puede, crear, editar, mover, generar_reserva, guardando, moviendo,
+    puede, crear, editar, mover, generar_reserva, eliminar, registrar_pago,
+    guardando, moviendo, borrando, pagando,
   } = useprospectos()
+  const { confirmarseguro, dialogo } = useconfirmarseguro()
   const [abrirnuevo, setabrirnuevo] = useState(false)
   // se guarda el ID y no la tarjeta: tras cada escritura el panel relee de la
   // base, y con el objeto viejo el detalle seguiria mostrando lo anterior.
@@ -89,6 +93,37 @@ export default function pipeline() {
     () => (detalleid == null ? null : cards.find((c) => c.id === detalleid) || null),
     [detalleid, cards]
   )
+
+  // ELIMINAR. Con reserva vinculada la eliminacion LIBERA el espacio en el
+  // mapa, asi que exige motivo y contraseña — es la misma puerta que borrar
+  // una reserva desde su tabla. Un prospecto puro, sin reservas, solo pide
+  // confirmar: no hay nada que liberar ni dinero que descuadrar.
+  async function pedir_eliminar(card) {
+    if (!puede_eliminarse(card)) return
+    const tienereservas = (card.reservaids || []).length > 0
+    const conf = await confirmarseguro({
+      titulo: tienereservas ? '⚠️ Eliminar reserva del Pipeline' : '🗑 Eliminar prospecto',
+      descripcion: tienereservas ? (
+        <>
+          ¿Eliminar esta oportunidad y sus reservas{' '}
+          <strong>{(card.reservaids || []).map((x) => '#' + x).join(', ')}</strong>?
+          <br />
+          Al confirmar, el espacio se liberará en el mapa para que otros clientes
+          puedan reservarlo, y sus cobros se cancelarán.
+        </>
+      ) : (
+        <>¿Eliminar a <strong>{card.nombre}</strong> del Pipeline?</>
+      ),
+      etiquetamotivo: '¿Por qué se elimina? *',
+      pedirmotivo: tienereservas,
+      textoconfirmar: tienereservas ? 'Confirmar y Eliminar' : 'Sí, eliminar',
+    })
+    if (!conf) return
+    // Sin reservas la v1 no pide motivo; se deja constancia igual para que la
+    // bitacora nunca tenga una eliminacion sin explicacion.
+    const r = await eliminar(card, { motivo: conf.motivo || 'sin reserva vinculada' })
+    if (r && r.ok) setdetalleid(null)
+  }
 
   // Mover con TECLADO: ← una columna atras, → una adelante. El arrastre solo
   // funciona con raton, y el tablero tiene que poder operarse sin el.
@@ -283,9 +318,14 @@ export default function pipeline() {
         oncerrar={() => setdetalleid(null)}
         oneditar={editar}
         ongenerar={generar_reserva}
+        oneliminar={pedir_eliminar}
+        onpagar={registrar_pago}
         guardando={guardando}
+        borrando={borrando}
+        pagando={pagando}
       />
       )}
+      {dialogo}
     </div>
   )
 }
