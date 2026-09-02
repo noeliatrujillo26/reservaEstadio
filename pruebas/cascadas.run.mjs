@@ -1118,6 +1118,379 @@ for (let i = 0; i < 6000; i++) {
   afirmar('cajero: el estado de zona no se toca', r.ok === false && sb.escrituras.length === 0)
 }
 
+// ══ 8. PIPELINE: TOTAL DE LA COTIZACION Y REGLAS DE COLUMNA ═══════
+// El total de un prospecto es el precio que acaba cobrandose, y las reglas de
+// columna son las que dejan avanzar dinero. Las dos al diferencial.
+
+let descuentosVolumenData = []
+
+// _reglaVolumenActiva() y _descuentoVolumenAplicable().
+function _reglaVolumenActiva(rg) {
+  if (!rg) return false
+  const crudo = (rg.activo != null) ? rg.activo : rg.estado
+  if (crudo == null) return false
+  if (typeof crudo === 'boolean') return crudo
+  const n = String(crudo).trim().toLowerCase()
+  return n === 'true' || n === 'activo' || n === 'active' || n === '1' || n === 'si' || n === 'sí'
+}
+function _descuentoVolumenAplicable(personas, juegoId, zonaId) {
+  const reglas = descuentosVolumenData || []
+  let mejor = null
+  reglas.forEach(function (rg) {
+    if (!_reglaVolumenActiva(rg)) return
+    if (!((parseInt(personas, 10) || 0) >= (parseInt(rg.minPersonas, 10) || 0))) return
+    const js = Array.isArray(rg.juegos) && rg.juegos.length ? rg.juegos.map(String) : null
+    if (js && (!juegoId || js.indexOf(String(juegoId)) < 0)) return
+    const zs = Array.isArray(rg.zonas) && rg.zonas.length ? rg.zonas.map(String) : null
+    if (zs && (!zonaId || zs.indexOf(String(zonaId)) < 0)) return
+    if (!mejor || (Number(rg.porcentaje) || 0) > (Number(mejor.porcentaje) || 0)) mejor = rg
+  })
+  return mejor
+}
+
+// calcPipTotal(), con los valores del formulario como argumentos.
+function _calcPipTotalV1(f, cuponFijo, juegoId, zonaId) {
+  const area = parseFloat(f.area || 0) || 0
+  const consumo = parseFloat(f.consumo || 0) || 0
+  const extra = parseFloat(f.extra || 0) || 0
+  const adultoPrecio = parseFloat(f.adultoPrecio || 0) || 0
+  const adultoCant = parseInt(f.adultoCant, 10) || 0
+  const ninoPrecio = parseFloat(f.ninoPrecio || 0) || 0
+  const ninoCant = parseInt(f.ninoCant, 10) || 0
+  let desc = parseFloat(f.desc || 0) || 0
+  const minimo = parseInt(f.minimo, 10) || 0
+
+  const adultosExtra = adultoPrecio * adultoCant
+  const ninosExtra = ninoPrecio * ninoCant
+  const subtotal = area + consumo + extra + adultosExtra + ninosExtra
+  const totalAdultos = minimo + adultoCant
+  const personas = totalAdultos + ninoCant
+
+  const rg = _descuentoVolumenAplicable(personas, juegoId, zonaId)
+  const volPct = rg ? (Number(rg.porcentaje) || 0) : 0
+  if (cuponFijo) {
+    const pesos = Math.min(Number(cuponFijo.valor) || 0, subtotal)
+    desc = subtotal > 0 ? (pesos / subtotal) * 100 : 0
+  }
+  const pctTotal = Math.min(100, Math.max(0, desc + volPct))
+  const descuentoTotal = redondearDinero(subtotal * pctTotal / 100)
+  const total = Math.max(0, redondearDinero(subtotal - descuentoTotal))
+  return { subtotal: redondearDinero(subtotal), total, descuentoTotal, volumenPct: volPct,
+    personas, adultoCant, ninoCant, totalAdultos }
+}
+
+// _pdBrutoTarjeta(), con montoBase como argumento.
+function _pdBrutoTarjetaV1(card, montoBase) {
+  if (!card) return 0
+  const sub = (Number(montoBase) || 0) + (Number(card.consumoMonto) || 0) +
+    (Number(card.extraMonto) || 0) +
+    (Number(card.adultoExtraPrecio) || 0) * (Number(card.adultos) || 0) +
+    (Number(card.ninoExtraPrecio) || 0) * (Number(card.ninos) || 0)
+  return redondearDinero(sub > 0 ? sub : (Number(card.monto) || 0))
+}
+
+// _nuevoProspectoFolio(), derivando el contador como hace la carga inicial.
+function _nuevoProspectoFolioV1(pipelineData) {
+  const maxFolio = pipelineData.reduce((m, p) => {
+    const n = parseInt(String(p.folio || '').replace(/^PROS-0*/, ''), 10)
+    return isNaN(n) ? m : Math.max(m, n)
+  }, 0)
+  return 'PROS-' + String(maxFolio + 1).padStart(3, '0')
+}
+
+// Las CINCO reglas del handler de `drop`, devolviendo el motivo del bloqueo.
+function _validarMoverV1(card, destinoId, politicaEng) {
+  if (card.etapa === destinoId) return 'misma'
+  const origenIdx = pipelineEtapas.findIndex(e => e.id === card.etapa)
+  const destinoIdx = pipelineEtapas.findIndex(e => e.id === destinoId)
+  if (origenIdx !== -1 && destinoIdx !== -1 && (destinoIdx - origenIdx) > 1) return 'salto'
+
+  if (destinoId === 'reserva_momentanea') {
+    if (!_pdReservasActivas(card).length) return 'sin-reserva'
+  }
+  if (destinoId === 'reservado') {
+    const abonado = _pdAbonadoEtapa(card)
+    const requerido = redondearDinero(_pdNumMonto(card.monto) * politicaEng / 100)
+    if (abonado < requerido) return 'sin-enganche'
+    const vinc = (card.reservaIds || [])
+      .map(rid => reservasData.find(r => r.id === rid))
+      .filter(r => r && String(r.estado || '').toLowerCase() !== 'cancelada')
+    if (!vinc.length) return 'sin-reserva'
+  }
+  if (destinoId === 'cerrado') {
+    const ids = card.reservaIds || []
+    const res = ids.map(rid => reservasData.find(r => r.id === rid)).filter(Boolean)
+    if (res.length === 0) return 'sin-reserva'
+    const abonado = (pdPagos[card.id] || []).reduce((s, p) => s + (p.monto || 0), 0)
+    if (abonado < (card.monto || 0)) return 'sin-liquidar'
+  }
+  if (destinoId === 'boletos_entregados') {
+    const vinc = (card.reservaIds || [])
+      .map(rid => reservasData.find(r => r.id === rid))
+      .filter(r => r && String(r.estado || '').toLowerCase() !== 'cancelada')
+    if (!vinc.some(r => Array.isArray(r.folios) && r.folios.length > 0)) return 'sin-folio'
+  }
+  return null
+}
+
+// _pdPuedeGenerarReserva().
+function _puedeGenerarReservaV1(card, pendiente) {
+  if (_pdReservasActivas(card).length > 0) return false
+  if (_pdAbonadoEtapa(card) > 0) return true
+  return !!pendiente
+}
+
+for (let i = 0; i < 6000; i++) {
+  // ── reglas de volumen, en las DOS grafias
+  const nreglas = Math.floor(rnd() * 4)
+  const reg_v1 = []
+  const reg_v2 = []
+  for (let k = 0; k < nreglas; k++) {
+    const base = {
+      porcentaje: Math.floor(rnd() * 40),
+      juegos: rnd() < 0.3 ? ['j1'] : null,
+      zonas: rnd() < 0.3 ? ['sec-1'] : null,
+      activo: rnd() < 0.75,
+    }
+    const minp = Math.floor(rnd() * 60)
+    reg_v1.push({ ...base, minPersonas: minp })
+    reg_v2.push({ ...base, minpersonas: minp })
+  }
+  descuentosVolumenData = reg_v1
+
+  const f = {
+    area: dinero(0, 30000), consumo: dinero(0, 8000), extra: dinero(0, 4000),
+    adultoPrecio: dinero(0, 900), adultoCant: Math.floor(rnd() * 30),
+    ninoPrecio: dinero(0, 400), ninoCant: Math.floor(rnd() * 20),
+    desc: rnd() < 0.35 ? Math.floor(rnd() * 120) : 0,
+    minimo: Math.floor(rnd() * 30),
+  }
+  const cuponFijo = rnd() < 0.2 ? { tipo: 'fijo', valor: dinero(0, 6000) } : null
+  const juegoId = rnd() < 0.7 ? 'j1' : ''
+  const zonaId = rnd() < 0.7 ? 'sec-1' : ''
+
+  const v1calc = _calcPipTotalV1(f, cuponFijo, juegoId, zonaId)
+  const v2calc = v2.calc_total_prospecto({
+    areamonto: f.area, consumomonto: f.consumo, extramonto: f.extra,
+    adultoextraprecio: f.adultoPrecio, adultoextracant: f.adultoCant,
+    ninoextraprecio: f.ninoPrecio, ninoextracant: f.ninoCant,
+    descuento: f.desc, minpersonas: f.minimo, juegoid: juegoId, zonaid: zonaId,
+    cupon: cuponFijo,
+  }, { descuentosvolumen: reg_v2 })
+
+  if (!comparar('calc_total_prospecto.total', v1calc.total, v2calc.total, { f, cuponFijo })) fallos++
+  if (!comparar('calc_total_prospecto.subtotal', v1calc.subtotal, v2calc.subtotal, { f })) fallos++
+  if (!comparar('calc_total_prospecto.descuento', v1calc.descuentoTotal, v2calc.descuentototal, { f })) fallos++
+  if (!comparar('calc_total_prospecto.personas', v1calc.personas, v2calc.personas, { f })) fallos++
+  if (!comparar('calc_total_prospecto.volumen', v1calc.volumenPct, v2calc.volumenpct, { f })) fallos++
+
+  // ── bruto de la tarjeta, en las DOS grafias
+  const cbase = {
+    monto: dinero(0, 40000), consumo: dinero(0, 5000), extra: dinero(0, 3000),
+    ap: dinero(0, 800), np: dinero(0, 300),
+    ad: Math.floor(rnd() * 20), ni: Math.floor(rnd() * 15),
+  }
+  const card_v1 = { monto: cbase.monto, consumoMonto: cbase.consumo, extraMonto: cbase.extra,
+    adultoExtraPrecio: cbase.ap, ninoExtraPrecio: cbase.np, adultos: cbase.ad, ninos: cbase.ni }
+  const card_v2 = { monto: cbase.monto, consumomonto: cbase.consumo, extramonto: cbase.extra,
+    adultoextraprecio: cbase.ap, ninoextraprecio: cbase.np, adultos: cbase.ad, ninos: cbase.ni }
+  const mb = rnd() < 0.3 ? 0 : dinero(0, 20000)
+  if (!comparar('bruto_tarjeta', _pdBrutoTarjetaV1(card_v1, mb),
+    v2.bruto_tarjeta(card_v2, mb), { cbase, mb })) fallos++
+
+  // ── folio del prospecto
+  const pipe = []
+  for (let k = 0; k < Math.floor(rnd() * 5); k++) {
+    pipe.push({ folio: rnd() < 0.2 ? '' : 'PROS-' + String(Math.floor(rnd() * 400)).padStart(3, '0') })
+  }
+  if (!comparar('nuevo_folio_prospecto', _nuevoProspectoFolioV1(pipe),
+    v2.nuevo_folio_prospecto(pipe), { pipe })) fallos++
+}
+
+// ── LAS CINCO REGLAS DE COLUMNA (8,000 escenarios) ──
+for (let i = 0; i < 8000; i++) {
+  const nres = Math.floor(rnd() * 3)
+  const res_v1 = []
+  const res_v2 = []
+  for (let k = 0; k < nres; k++) {
+    const base = {
+      id: 'R' + i + '-' + k,
+      estado: rnd() < 0.25 ? 'cancelada' : 'activa',
+      folios: rnd() < 0.4 ? ['F' + k] : (rnd() < 0.5 ? [] : null),
+      monto: dinero(0, 30000),
+    }
+    res_v1.push({ ...base, montoPagado: dinero(0, base.monto), descuentoMonto: 0 })
+    res_v2.push({ ...base, montopagado: dinero(0, base.monto), descuentomonto: 0 })
+  }
+  const folio = 'PROS-' + String(i).padStart(3, '0')
+  const ids = res_v1.filter(() => rnd() < 0.8).map(r => r.id)
+  const monto = dinero(0, 50000)
+  const etapaOrigen = elige(pipelineEtapas).id
+  const destino = elige(pipelineEtapas).id
+  const eng = elige([30, 40, 50, 60, 100])
+
+  const cob = []
+  for (let k = 0; k < Math.floor(rnd() * 4); k++) {
+    const fol = elige([folio].concat(ids.map(String)).concat(['ajeno']))
+    cob.push({ id: i * 100 + k, folio: fol, monto: dinero(0, 25000),
+      concepto: elige(conceptos), estado: rnd() < 0.2 ? 'cancelado' : '' })
+  }
+  const cob_v1 = cob.map(c => ({ ...c, formaPago: elige(formas) }))
+  const cob_v2 = cob_v1.map(c => ({ ...c, formapago: c.formaPago }))
+
+  const card_v1 = { id: 'p' + i, folio, nombre: 'C', monto, etapa: etapaOrigen, reservaIds: ids }
+  const card_v2 = { id: 'p' + i, folio, nombre: 'C', monto, etapa: etapaOrigen, reservaids: ids }
+
+  reservasData = res_v1
+  pipelineData = [card_v1]
+  _politicaEngancheMin = eng
+  _reconstruirPagosPipeline(cob_v1)
+
+  const ctxv2 = { reservas: res_v2, cobros: cob_v2, enganchemin: eng }
+  const v1motivo = _validarMoverV1(card_v1, destino, eng)
+  const r2 = v2.validar_mover_etapa(card_v2, destino, ctxv2)
+  const v2motivo = r2 ? r2.motivo : null
+  if (!comparar('validar_mover_etapa', v1motivo, v2motivo,
+    { etapaOrigen, destino, ids, monto, eng })) fallos++
+
+  const pend = rnd() < 0.5
+  if (!comparar('puede_generar_reserva', _puedeGenerarReservaV1(card_v1, pend),
+    v2.puede_generar_reserva(card_v2, { reservas: res_v2, cobros: cob_v2, pendiente: pend }),
+    { ids, pend })) fallos++
+}
+
+// ── validaciones del alta y de la edicion ──
+{
+  const ok = { nombre: 'Ana', tel: '6621234567', email: 'a@x.com', juegoid: 'j1' }
+  afirmar('alta valida no reporta errores', v2.validar_prospecto(ok).length === 0)
+  afirmar('sin correo se rechaza',
+    v2.validar_prospecto({ ...ok, email: '' }).some(e => e.campo === 'email'))
+  afirmar('correo invalido se rechaza',
+    v2.validar_prospecto({ ...ok, email: 'sin-arroba' }).some(e => e.campo === 'email'))
+  afirmar('telefono de 9 digitos se rechaza',
+    v2.validar_prospecto({ ...ok, tel: '662123456' }).some(e => e.campo === 'tel'))
+  afirmar('sin juego se rechaza',
+    v2.validar_prospecto({ ...ok, juegoid: '' }).some(e => e.campo === 'juego'))
+  afirmar('el orden de los mensajes es el de la v1',
+    v2.validar_prospecto({ nombre: '', tel: '', email: '', juegoid: '' })
+      .map(e => e.campo).join(',') === 'nombre,tel,email,juego')
+
+  // La EDICION es mas laxa a proposito: correo y telefono solo se validan si
+  // vienen, porque una tarjeta vieja puede no tenerlos.
+  afirmar('editar sin correo se permite', v2.validar_edicion_prospecto({ nombre: 'Ana' }).length === 0)
+  afirmar('editar sin nombre se rechaza',
+    v2.validar_edicion_prospecto({ nombre: '' }).some(e => e.campo === 'nombre'))
+  afirmar('editar con correo invalido se rechaza',
+    v2.validar_edicion_prospecto({ nombre: 'Ana', email: 'malo' }).some(e => e.campo === 'email'))
+}
+
+// ── reglas de volumen: solo lo afirmativo cuenta ──
+{
+  afirmar('activo true aplica', v2.regla_volumen_activa({ activo: true }) === true)
+  afirmar('activo false no aplica', v2.regla_volumen_activa({ activo: false }) === false)
+  afirmar('sin señal explicita NO aplica', v2.regla_volumen_activa({}) === false)
+  afirmar('estado "Activo" aplica', v2.regla_volumen_activa({ estado: 'Activo' }) === true)
+  afirmar('estado "Inactivo" NO aplica', v2.regla_volumen_activa({ estado: 'Inactivo' }) === false)
+  // De dos reglas que aplican gana la de mayor porcentaje.
+  const mejor = v2.descuento_volumen_aplicable(
+    [{ minpersonas: 10, porcentaje: 5, activo: true }, { minpersonas: 10, porcentaje: 12, activo: true }],
+    20, 'j1', 'sec-1'
+  )
+  afirmar('gana la regla de mayor porcentaje', mejor && mejor.porcentaje === 12)
+  // Una regla con lista especifica NO aplica sin juego elegido.
+  afirmar('regla con juego especifico no aplica sin juego',
+    v2.descuento_volumen_aplicable([{ minpersonas: 1, porcentaje: 9, activo: true, juegos: ['j1'] }],
+      20, '', '') === null)
+}
+
+// ── el tope del 100% y el cupon fijo ──
+{
+  // 80% manual + 30% de grupo = 110% → se acota a 100, nunca total negativo.
+  const c = v2.calc_total_prospecto(
+    { areamonto: 10000, descuento: 80, minpersonas: 20 },
+    { descuentosvolumen: [{ minpersonas: 1, porcentaje: 30, activo: true }] }
+  )
+  afirmar('descuento combinado topado al 100%', c.total === 0 && c.descuentototal === 10000)
+
+  // $500 fijos siguen siendo $500 aunque cambie el area.
+  const c1 = v2.calc_total_prospecto(
+    { areamonto: 10000, cupon: { tipo: 'fijo', valor: 500 } }, { descuentosvolumen: [] })
+  const c2 = v2.calc_total_prospecto(
+    { areamonto: 20000, cupon: { tipo: 'fijo', valor: 500 } }, { descuentosvolumen: [] })
+  afirmar('cupon fijo vale lo mismo con otro subtotal',
+    c1.descuentototal === 500 && c2.descuentototal === 500)
+  // Y nunca descuenta mas que el subtotal.
+  const c3 = v2.calc_total_prospecto(
+    { areamonto: 300, cupon: { tipo: 'fijo', valor: 5000 } }, { descuentosvolumen: [] })
+  afirmar('cupon fijo no supera el subtotal', c3.total === 0 && c3.descuentototal === 300)
+}
+
+// ── mover: escrituras y bloqueos contra la base falsa ──
+{
+  // Saltarse etapas se bloquea.
+  const r = v2.validar_mover_etapa(
+    { id: 'p1', etapa: 'prospecto', monto: 1000, reservaids: [] },
+    'reservado', { reservas: [], cobros: [], enganchemin: 50 })
+  afirmar('no se pueden saltar etapas', r && r.motivo === 'salto')
+}
+{
+  // Retroceder SIEMPRE se permite: si se cae una reserva, la tarjeta baja.
+  const r = v2.validar_mover_etapa(
+    { id: 'p1', etapa: 'cerrado', monto: 1000, reservaids: [] },
+    'reservado', { reservas: [], cobros: [], enganchemin: 50 })
+  afirmar('retroceder no se bloquea por salto', !r || r.motivo !== 'salto')
+}
+{
+  // Misma columna: ni error ni escritura. Reiniciaba el contador de dias.
+  const r = v2.validar_mover_etapa(
+    { id: 'p1', etapa: 'cotizado', monto: 1000, reservaids: [] },
+    'cotizado', { reservas: [], cobros: [], enganchemin: 50 })
+  afirmar('misma columna no es cambio', r && r.motivo === 'misma' && r.mensaje === null)
+}
+{
+  // A Reserva Momentanea solo con reserva ACTIVA: una cancelada no cuenta.
+  const cancelada = [{ id: 'R1', estado: 'cancelada' }]
+  const r = v2.validar_mover_etapa(
+    { id: 'p1', etapa: 'cotizado', monto: 1000, reservaids: ['R1'] },
+    'reserva_momentanea', { reservas: cancelada, cobros: [], enganchemin: 50 })
+  afirmar('una reserva cancelada no habilita Reserva Momentánea', r && r.motivo === 'sin-reserva')
+}
+{
+  // El enganche que bloquea a mano es el MISMO que deja subir solo.
+  const reservas = [{ id: 'R1', estado: 'activa', monto: 1000, montopagado: 0, descuentomonto: 0 }]
+  const card = { id: 'p1', etapa: 'reserva_momentanea', monto: 1000, folio: 'F1', reservaids: ['R1'] }
+  const corto = [{ id: 1, folio: 'F1', monto: 400, concepto: 'ABONO', formapago: 'EFECTIVO', estado: '' }]
+  const justo = [{ id: 1, folio: 'F1', monto: 500, concepto: 'ABONO', formapago: 'EFECTIVO', estado: '' }]
+  afirmar('con 40% no sube a Reservas con enganche 50',
+    (v2.validar_mover_etapa(card, 'reservado', { reservas, cobros: corto, enganchemin: 50 }) || {}).motivo === 'sin-enganche')
+  afirmar('con 50% exacto si sube',
+    v2.validar_mover_etapa(card, 'reservado', { reservas, cobros: justo, enganchemin: 50 }) === null)
+  // El CREDITO cuenta para la etapa aunque no sea dinero cobrado.
+  const credito = [{ id: 1, folio: 'F1', monto: 500, concepto: 'CRÉDITO', formapago: 'CREDITO', estado: '' }]
+  afirmar('el credito habilita el avance de etapa',
+    v2.validar_mover_etapa(card, 'reservado', { reservas, cobros: credito, enganchemin: 50 }) === null)
+}
+{
+  // Boletos enviados exige folio de boletos registrado.
+  const sinfolio = [{ id: 'R1', estado: 'activa', folios: [] }]
+  const confolio = [{ id: 'R1', estado: 'activa', folios: ['ABC-1'] }]
+  const card = { id: 'p1', etapa: 'cerrado', monto: 100, folio: 'F1', reservaids: ['R1'] }
+  afirmar('sin folio de boletos se bloquea',
+    (v2.validar_mover_etapa(card, 'boletos_entregados', { reservas: sinfolio, cobros: [], enganchemin: 50 }) || {}).motivo === 'sin-folio')
+  afirmar('con folio de boletos pasa',
+    v2.validar_mover_etapa(card, 'boletos_entregados', { reservas: confolio, cobros: [], enganchemin: 50 }) === null)
+}
+{
+  // PERMISOS: el pipeline es su propio dueño.
+  const vendedora = { id: 9, nombre: 'Vero', rol: 'Vendedora', permisos: { pipeline: 'editar' } }
+  afirmar('vendedora con pipeline:editar mueve tarjetas',
+    v2.motivo_bloqueo(vendedora, 'pipeline_prospectos') === null)
+  afirmar('vendedora con pipeline:editar puede crear la reserva',
+    v2.motivo_bloqueo(vendedora, 'reservas') === null)
+  afirmar('cajero NO mueve tarjetas',
+    v2.motivo_bloqueo(cajero, 'pipeline_prospectos') === 'sin_permiso')
+}
+
 // ══ RESULTADO ═════════════════════════════════════════════════════
 console.log('\n── diferencial contra la v1 ──')
 console.log('  comparaciones: ' + casos.toLocaleString('es-MX'))

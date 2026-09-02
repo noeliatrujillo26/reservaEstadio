@@ -43,3 +43,9 @@ export {
 export {
   estado_vivo, puede_bloquearse, set_estado_zona, alternar_bloqueo, estados_zona,
 } from '../src/lib/mapaocupacion'
+
+export {
+  nuevo_folio_prospecto, regla_volumen_activa, descuento_volumen_aplicable,
+  calc_total_prospecto, bruto_tarjeta, validar_prospecto, validar_edicion_prospecto,
+  puede_generar_reserva, validar_mover_etapa,
+} from '../src/lib/prospectos'

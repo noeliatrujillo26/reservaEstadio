@@ -65,7 +65,17 @@ for (const modo of modos) {
     probadas++
     try {
       const h = render(Comp)
-      console.log('  ok   ' + nombre.padEnd(20) + ' (' + h.length + ' chars)')
+      // UN RENDER VACIO ES UN FALLO, no un exito silencioso. El detalle del
+      // prospecto pasaba esta prueba devolviendo 0 caracteres: cargaba su
+      // formulario en un useEffect, que aqui no se ejecuta, asi que salia por
+      // un `return null` y la prueba lo daba por bueno sin haber renderizado
+      // NADA. Es exactamente el punto ciego que este banco viene a cerrar.
+      if (!h.length) {
+        fallos++
+        console.log(' FALLA ' + nombre.padEnd(20) + ' -> renderizo 0 caracteres (¿estado en useEffect?)')
+      } else {
+        console.log('  ok   ' + nombre.padEnd(20) + ' (' + h.length + ' chars)')
+      }
     } catch (e) {
       fallos++
       console.log(' FALLA ' + nombre.padEnd(20) + ' -> ' + e.message)

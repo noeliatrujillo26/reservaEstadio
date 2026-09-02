@@ -3,14 +3,21 @@
 // espejo 1:1 de v1: #page-pipeline de index.html y renderPipelineBoard()
 // (js/modules/pipeline.js).
 //
-// MODO CONSULTA: el tablero de la v1 se opera arrastrando tarjetas entre
-// columnas, y ese movimiento ESCRIBE la etapa en la base. Aqui las tarjetas no
-// se arrastran ni se editan: se ven, se filtran y se consultan. Los totales
-// por columna, el reloj de dias en etapa y el abonado acumulado si estan.
+// ESCRITURA (Fase 2): alta de prospectos, detalle con edicion e historial,
+// generacion de la reserva y movimiento entre columnas.
+//
+// Las tarjetas se ARRASTRAN, igual que en la v1, y ademas se pueden mover con
+// el teclado (← →) o desde el detalle: el arrastre solo funciona con raton, y
+// dejar el tablero inoperable sin el no es aceptable. Las cinco reglas que
+// deciden si una tarjeta puede cambiar de columna viven en lib/prospectos.js,
+// probadas aparte.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useMemo, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
+import useprospectos from '../../hooks/useprospectos'
+import NuevoProspecto from './nuevoprospecto'
+import DetalleProspecto from './detalleprospecto'
 import {
   columna_lleva_abonado, dias_en_etapa, filtrar_tarjetas, pagos_de_tarjeta,
   pipeline_etapas, series_de, suma_pagos_dinero,
@@ -31,6 +38,14 @@ function tono_dias(d) {
 
 export default function pipeline() {
   const { pipeline: cards, juegos, cobros, usuarios, cargando, errores } = useadmindatos()
+  const {
+    puede, crear, editar, mover, generar_reserva, guardando, moviendo,
+  } = useprospectos()
+  const [abrirnuevo, setabrirnuevo] = useState(false)
+  // se guarda el ID y no la tarjeta: tras cada escritura el panel relee de la
+  // base, y con el objeto viejo el detalle seguiria mostrando lo anterior.
+  const [detalleid, setdetalleid] = useState(null)
+  const [arrastrando, setarrastrando] = useState(null)
 
   const [vendedora, setvendedora] = useState('')
   const [serie, setserie] = useState('')
@@ -69,6 +84,19 @@ export default function pipeline() {
   )
 
   const est_select = { fontSize: '13px', width: '180px' }
+
+  const detalle = useMemo(
+    () => (detalleid == null ? null : cards.find((c) => c.id === detalleid) || null),
+    [detalleid, cards]
+  )
+
+  // Mover con TECLADO: ← una columna atras, → una adelante. El arrastre solo
+  // funciona con raton, y el tablero tiene que poder operarse sin el.
+  function mover_relativo(card, paso) {
+    const i = pipeline_etapas.findIndex((e) => e.id === card.etapa)
+    const destino = pipeline_etapas[i + paso]
+    if (destino) mover(card, destino.id)
+  }
 
   return (
     <div className="page active" id="page-pipeline">
@@ -113,6 +141,11 @@ export default function pipeline() {
                 <option key={j.id} value={String(j.id)}>{j.fecha} · vs {j.rival}</option>
               ))}
             </select>
+            {puede && (
+              <button className="btn btn-primary btn-sm" onClick={() => setabrirnuevo(true)}>
+                + Nuevo prospecto
+              </button>
+            )}
           </div>
         </div>
 
@@ -130,7 +163,17 @@ export default function pipeline() {
             <div
               key={etapa.id}
               className="pipeline-col"
-              style={{ background: 'var(--surface-2)', borderRadius: 'var(--radius)', padding: '12px', border: '1px solid var(--border)', minHeight: '400px' }}
+              onDragOver={(e) => { if (puede && arrastrando) e.preventDefault() }}
+              onDrop={(e) => {
+                e.preventDefault()
+                if (puede && arrastrando) mover(arrastrando, etapa.id)
+                setarrastrando(null)
+              }}
+              style={{
+                background: 'var(--surface-2)', borderRadius: 'var(--radius)', padding: '12px',
+                border: '1px solid ' + (arrastrando && arrastrando.etapa !== etapa.id ? 'var(--naranja)' : 'var(--border)'),
+                minHeight: '400px',
+              }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '10px' }}>
                 <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: etapa.color, flexShrink: 0 }} />
@@ -157,7 +200,24 @@ export default function pipeline() {
                   return (
                     <div
                       key={c.id}
-                      style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', padding: '11px 12px' }}
+                      role="button"
+                      tabIndex={0}
+                      draggable={puede}
+                      onDragStart={() => setarrastrando(c)}
+                      onDragEnd={() => setarrastrando(null)}
+                      onClick={() => setdetalleid(c.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setdetalleid(c.id) }
+                        else if (puede && e.key === 'ArrowRight') { e.preventDefault(); mover_relativo(c, 1) }
+                        else if (puede && e.key === 'ArrowLeft') { e.preventDefault(); mover_relativo(c, -1) }
+                      }}
+                      title={puede ? 'Clic para ver el detalle · ← → para cambiar de columna' : 'Clic para ver el detalle'}
+                      style={{
+                        background: 'var(--surface)', border: '1px solid var(--border)',
+                        borderRadius: '8px', padding: '11px 12px',
+                        cursor: puede ? 'grab' : 'pointer',
+                        opacity: moviendo === c.id ? 0.5 : 1,
+                      }}
                     >
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
                         <div style={{ fontSize: '13px', fontWeight: 700, lineHeight: 1.3 }}>{c.nombre}</div>
@@ -208,6 +268,24 @@ export default function pipeline() {
           ))}
         </div>
       </div>
+
+      <NuevoProspecto
+        abierto={abrirnuevo}
+        oncerrar={() => setabrirnuevo(false)}
+        oncrear={crear}
+        guardando={guardando}
+      />
+      {detalle && (
+      <DetalleProspecto
+        key={detalle.id}
+        card={detalle}
+        puede={puede}
+        oncerrar={() => setdetalleid(null)}
+        oneditar={editar}
+        ongenerar={generar_reserva}
+        guardando={guardando}
+      />
+      )}
     </div>
   )
 }

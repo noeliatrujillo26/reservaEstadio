@@ -38,6 +38,8 @@ import DetalleCobro from '../src/components/admin/detallecobro'
 import NuevoCobro from '../src/components/admin/nuevocobro'
 import Evidencia from '../src/components/admin/evidencia'
 import ReservaForm from '../src/components/admin/reservaform'
+import NuevoProspecto from '../src/components/admin/nuevoprospecto'
+import DetalleProspecto from '../src/components/admin/detalleprospecto'
 import { Confirmar } from '../src/components/admin/confirmar'
 import { ConfirmarSeguro } from '../src/components/admin/confirmarseguro'
 
@@ -78,6 +80,12 @@ const ReservaNueva = () => <ReservaForm abierto editando={null} juegoinicial="j1
 const ReservaEditar = () => <ReservaForm abierto editando={reservas[0]} juegoinicial="j1" zonainicial="sec-1" oncerrar={()=>{}} onguardar={async()=>({ok:true})} guardando={false} />
 const ConfirmSimple = () => <Confirmar estado={{mensaje:'¿Cancelar este cobro?',textoconfirmar:'Sí, cancelar'}} oncerrar={()=>{}} />
 const ConfirmSeguro = () => <ConfirmarSeguro estado={{titulo:'🗑 Eliminar',descripcion:'Se borra la reserva.',etiquetamotivo:'¿Por qué? *',textoconfirmar:'Confirmar y Eliminar',pedirmotivo:true}} oncerrar={()=>{}} />
+const ProspectoNuevo = () => <NuevoProspecto abierto oncerrar={()=>{}} oncrear={async()=>({ok:true})} guardando={false} />
+// dos estados que se comportan distinto: una tarjeta SIN reserva (ofrece
+// generarla) y otra CON reserva vinculada (la oferta desaparece).
+const ProspectoDetalle = () => <DetalleProspecto card={valor.pipeline[0]} puede oncerrar={()=>{}} oneditar={async()=>({ok:true})} ongenerar={async()=>({ok:true})} guardando={false} />
+const ProspectoSinReserva = () => <DetalleProspecto card={{...valor.pipeline[0], reservaids:[]}} puede oncerrar={()=>{}} oneditar={async()=>({ok:true})} ongenerar={async()=>({ok:true})} guardando={false} />
+const ProspectoSoloLectura = () => <DetalleProspecto card={valor.pipeline[0]} puede={false} oncerrar={()=>{}} oneditar={async()=>({ok:true})} ongenerar={async()=>({ok:true})} guardando={false} />
 const ConfirmSeguroSinMotivo = () => <ConfirmarSeguro estado={{titulo:'🔒 Bloquear',descripcion:'Sale de venta.',textoconfirmar:'Bloquear',pedirmotivo:false}} oncerrar={()=>{}} />
 
 export const vistas={dashboard:Dashboard,cobros:Cobros,seccionesreservadas:Reservas,clientes:Clientes,
@@ -87,7 +95,9 @@ export const vistas={dashboard:Dashboard,cobros:Cobros,seccionesreservadas:Reser
  detallecobro:DetalleAbierto,detallecancelado:DetalleCancelado,nuevocobro:NuevoAbierto,
  evidenciapdf:EvidenciaPdf,evidenciasinliga:EvidenciaSinLiga,
  reservanueva:ReservaNueva,reservaeditar:ReservaEditar,
- confirmsimple:ConfirmSimple,confirmseguro:ConfirmSeguro,confirmseguro2:ConfirmSeguroSinMotivo}
+ confirmsimple:ConfirmSimple,confirmseguro:ConfirmSeguro,confirmseguro2:ConfirmSeguroSinMotivo,
+ prospectonuevo:ProspectoNuevo,prospectodetalle:ProspectoDetalle,
+ prospectosinreserva:ProspectoSinReserva,prospectosololectura:ProspectoSoloLectura}
 
 export function render(Comp){
   return renderToString(

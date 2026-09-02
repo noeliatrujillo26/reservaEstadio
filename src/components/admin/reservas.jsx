@@ -4,9 +4,16 @@
 // 2805-2867) y renderSeccionesResTabla()/renderSeccionesResKPIs() de
 // js/20-editor-mapa.js.
 //
-// ESCRITURA (Fase 2): crear y editar reservas, eliminar con confirmacion
-// segura y su cascada, y bloquear/desbloquear secciones. Todo pasa por los
-// tres candados de lib/escritura.js.
+// ESCRITURA (Fase 2): editar reservas, eliminar con confirmacion segura y su
+// cascada, y bloquear/desbloquear secciones. Todo pasa por los tres candados
+// de lib/escritura.js.
+//
+// AQUI NO SE CREAN RESERVAS, y es regla de negocio: una reserva nace SIEMPRE
+// desde el Pipeline, al registrar el prospecto. Crearla suelta desde esta
+// tabla la dejaria sin tarjeta comercial detras — sin cotizacion de origen,
+// sin historial de abonos y sin etapa que avanzar. La v1 tampoco ofrece ese
+// boton aqui: su formulario de reserva se abre desde el Pipeline, desde el
+// detalle de una seccion libre y desde Palcos.
 // Siguen sin migrar los botones de WhatsApp y de compartir codigo: disparan
 // efectos externos y no forman parte de esta tanda.
 // ═══════════════════════════════════════════════════════════════════
@@ -142,11 +149,6 @@ export default function reservas() {
             <h2>Reservas</h2>
             <p>Secciones con estado de reserva por juego de la temporada</p>
           </div>
-          {puede && (
-            <button className="btn btn-primary btn-sm" onClick={() => setform({ editando: null })}>
-              + Nueva reserva
-            </button>
-          )}
         </div>
 
         {/* ── KPIs ── */}
