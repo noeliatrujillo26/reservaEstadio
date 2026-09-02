@@ -4,16 +4,20 @@
 // js/modules/cobros.js (renderCobrosKPIs, filtrarCobros, getSortedCobros,
 // renderCobrosTabla, renderResumen, renderVendedoras).
 //
-// SOLO LECTURA: se omiten "Nuevo cobro", el interruptor de "Requiere factura",
-// cancelar cobros y el envio del reporte del dia — todos escriben o disparan
-// efectos externos. Quedan la tabla, los filtros, el orden, los KPIs y las
-// dos pestanas de resumen, que es donde vive la consulta.
+// ESCRITURA (Fase 2): registrar cobro, cancelar cobro (borrado suave) y el
+// interruptor de "Requiere factura". Las tres pasan por los tres candados de
+// lib/escritura.js y arrastran su cascada (lib/cascadas.js).
+// Sigue sin migrar el envio del reporte del dia: dispara correo, que es un
+// efecto externo y no forma parte de esta tanda.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useMemo, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
 import usefactura from '../../hooks/usefactura'
+import usecobrosescritura from '../../hooks/usecobrosescritura'
 import CobrosFiltros from './cobrosfiltros'
+import NuevoCobro from './nuevocobro'
+import { useconfirmar } from './confirmar'
 import {
   cobro_cancelado, estado_cobro, filtrar_cobros, kpis_cobros, meses_label,
   ordenar_cobros, requiere_factura, resumen_por_vendedora, resumen_por_zona,
@@ -61,6 +65,29 @@ export default function cobros() {
   const [pestana, setpestana] = useState('tabla')
   // primera escritura del panel: ver hooks/usefactura.js
   const { alternar: alternar_factura, guardando, puede: puede_editar } = usefactura()
+  // alta y cancelacion con toda su cascada: ver hooks/usecobrosescritura.js
+  const {
+    cancelar, cancelando, registrar, guardando: registrando,
+  } = usecobrosescritura()
+  const { confirmar, dialogo } = useconfirmar()
+  const [abrirnuevo, setabrirnuevo] = useState(false)
+
+  // CANCELACION: se pide confirmacion con el monto y el cliente a la vista, y
+  // se dice que el registro NO se borra. Es un borrado suave — el cobro se
+  // conserva para auditoria con la etiqueta CANCELADO.
+  async function pedir_cancelar(c) {
+    const ok = await confirmar(
+      <>
+        ¿Cancelar este cobro de <strong>{money(c.monto)}</strong> de{' '}
+        <strong>{c.cliente || '—'}</strong>?
+        <br />
+        El registro se conserva para auditoría con la etiqueta CANCELADO y deja de
+        sumar en totales y saldos.
+      </>,
+      'Sí, cancelar cobro'
+    )
+    if (ok) cancelar(c)
+  }
 
   // opciones de cada desplegable: las fijas del sistema mas TODA forma y
   // vendedor que aparezca de verdad en los cobros.
@@ -93,6 +120,13 @@ export default function cobros() {
             <h2>Registro de Cobros</h2>
             <p>Captura de anticipos, abonos, liquidaciones y consumos por juego · Reemplaza el control en Excel</p>
           </div>
+          {puede_editar && (
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button className="btn btn-primary btn-sm" onClick={() => setabrirnuevo(true)}>
+                + Nuevo Cobro
+              </button>
+            </div>
+          )}
         </div>
 
         {cargando && <p style={{ fontSize: '13px', color: 'var(--text-3)' }}>Cargando cobros…</p>}
@@ -152,6 +186,7 @@ export default function cobros() {
                       </th>
                     ))}
                     <th style={{ whiteSpace: 'nowrap' }}>Folio Reserva</th>
+                    {puede_editar && <th style={{ whiteSpace: 'nowrap' }}>Acciones</th>}
                   </tr>
                 </thead>
                 <tbody id="cobros-tbody">
@@ -200,6 +235,25 @@ export default function cobros() {
                         <td style={{ whiteSpace: 'nowrap' }}>
                           {folio_reserva(c, reservas, areas) || '—'}
                         </td>
+                        {puede_editar && (
+                          <td>
+                            {cancelado ? (
+                              <span className="badge badge-red" style={{ fontSize: '10px', fontWeight: 800 }}>
+                                CANCELADO
+                              </span>
+                            ) : (
+                              <button
+                                className="btn btn-outline btn-xs"
+                                onClick={() => pedir_cancelar(c)}
+                                disabled={cancelando === c.id}
+                                title="Cancelar cobro (se conserva para auditoría)"
+                                style={{ color: 'var(--rojo)', borderColor: 'var(--rojo-bg)', fontSize: '11px', whiteSpace: 'nowrap' }}
+                              >
+                                {cancelando === c.id ? '…' : '⛔ Cancelar'}
+                              </button>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     )
                   })}
@@ -287,6 +341,14 @@ export default function cobros() {
           </div>
         )}
       </div>
+
+      <NuevoCobro
+        abierto={abrirnuevo}
+        oncerrar={() => setabrirnuevo(false)}
+        onregistrar={registrar}
+        guardando={registrando}
+      />
+      {dialogo}
     </div>
   )
 }

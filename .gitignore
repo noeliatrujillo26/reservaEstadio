@@ -27,5 +27,8 @@ dist-ssr
 .env
 .env.local
 
-# salida del banco de pruebas de render
+# salidas de los bancos de pruebas (se regeneran al correrlos)
 pruebas/out
+pruebas/out-lectura
+pruebas/out-escritura
+pruebas/out-cascadas

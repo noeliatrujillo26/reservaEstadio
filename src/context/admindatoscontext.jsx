@@ -43,18 +43,36 @@ async function select_todas(tabla, orden) {
   return { data: filas, error: null }
 }
 
-// espejo de _mapCobroFila(): solo los campos que consume el dashboard.
+// MAPEADOR COMPLETO de _mapCobroFila(). Antes traia solo los campos que
+// consumia el dashboard, y la tabla de Cobros pinta ademas zona, area,
+// recibio y factura: salian vacios, y `requiere_factura` daba SIEMPRE false
+// porque `factura` ni siquiera llegaba. El interruptor de factura guardaba
+// bien en la base pero la fila releida volvia a decir "No requiere".
+// Se colo porque el banco de pruebas monta las vistas con datos de ejemplo
+// escritos a mano —mas completos que el mapeador real—, asi que renderizaba
+// sin fallar. La leccion de siempre: los nombres de campo de la BASE no se
+// renombran, y un mapeador se migra COMPLETO o no se migra.
 function map_cobro(c) {
   return {
     id: c.id,
     fecha: c.fecha || '',
     mes: c.mes || '',
     cliente: c.cliente || '—',
+    email: c.email || '',
+    area: c.area || '',
+    zona: c.zona || '',
+    zonaid: c.zona_id || '',
     concepto: c.concepto || '',
     monto: Number(c.monto) || 0,
     formapago: c.forma_pago || '',
+    fechareserva: c.fecha_reserva || '',
+    recibio: c.recibio || '',
+    factura: c.factura || '',
     folio: c.folio || '',
+    notas: c.notas || '',
     estado: c.estado || '', // 'cancelado' = borrado suave (no suma en nada)
+    evidencia: c.evidencia,
+    // hora exacta del pago (migracion-cobros-hora.sql). NULL en historicas.
     createdat: c.created_at || null,
   }
 }
@@ -158,6 +176,11 @@ export function admindatosprovider({ children }) {
   const [secciones, setsecciones] = useState([])
   const [cotizaciones, setcotizaciones] = useState([])
   const [pipeline, setpipeline] = useState([])
+  // politica_pagos: el enganche minimo VIGENTE. No es adorno — de el sale el
+  // corte con el que una tarjeta del Pipeline asciende sola de columna al
+  // registrarse un abono (_pdEngancheRequerido). Nunca un 50 escrito a mano:
+  // si el admin cambia la politica, el ascenso automatico se mueve con ella.
+  const [politica, setpolitica] = useState({ enganche_minimo: 30, dias_limite_liquidar: 5 })
   const [cargando, setcargando] = useState(true)
   const [errores, seterrores] = useState([])
 
@@ -168,7 +191,7 @@ export function admindatosprovider({ children }) {
     // cada consulta por separado: si una falla, las demas siguen y el panel
     // pinta lo que si tenga — mismo criterio de la v1, que aisla los renders.
     const [rcobros, rreservas, rjuegos, rareas, rsecciones, restados, rmovs, rclientes, rusuarios,
-      rdescuentos, rdescvolumen, rmetodos, rconfig, rslides, rcotiz, rpipe] = await Promise.allSettled([
+      rdescuentos, rdescvolumen, rmetodos, rconfig, rslides, rcotiz, rpipe, rpol] = await Promise.allSettled([
       select_todas('cobros', 'id'),
       select_todas('reservas', 'id'),
       sb.from('juegos').select('*').order('fecha'),
@@ -185,6 +208,7 @@ export function admindatosprovider({ children }) {
       sb.from('carousel_slides').select('*').order('order_index'),
       select_todas('cotizaciones', 'fecha'),
       select_todas('pipeline_prospectos', 'id'),
+      sb.from('politica_pagos').select('*').eq('id', 1).maybeSingle(),
     ])
 
     const ok = (r, etiqueta) => {
@@ -257,6 +281,16 @@ export function admindatosprovider({ children }) {
     const dpi = ok(rpipe, 'pipeline_prospectos')
     if (dpi) setpipeline(dpi.map(map_prospecto))
 
+    // los respaldos (30 y 5) solo aplican si la tabla no responde; el valor
+    // real SIEMPRE viene de politica_pagos, igual que en _cargarPoliticaEnganche().
+    if (rpol.status === 'fulfilled' && !rpol.value.error && rpol.value.data) {
+      const d = rpol.value.data
+      setpolitica({
+        enganche_minimo: d.enganche_minimo != null ? Number(d.enganche_minimo) : 30,
+        dias_limite_liquidar: d.dias_limite_liquidar != null ? Number(d.dias_limite_liquidar) : 5,
+      })
+    } else fallos.push('politica_pagos')
+
     seterrores(fallos)
     setcargando(false)
   }, [])
@@ -266,6 +300,7 @@ export function admindatosprovider({ children }) {
   const valor = {
     cobros, reservas, juegos, areas, areasestados, movimientos, clientes, usuarios,
     descuentos, descuentosvolumen, metodos, configlanding, slides, secciones, cotizaciones, pipeline,
+    politica,
     cargando, errores, recargar: cargar,
   }
 

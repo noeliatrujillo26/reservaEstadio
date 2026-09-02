@@ -175,3 +175,86 @@ export function ordenar_clientes(lista, col, dir) {
 }
 
 export const por_pagina = 25
+
+// ── CATALOGO PARA LOS BUSCADORES DE CLIENTE ─────────────────────
+// espejo 1:1 de v1: _resGetClientes(), _fichaMasCompleta() y _cliCoincide()
+// (js/20-editor-mapa.js). Lo usan los formularios que piden "elige un
+// cliente" — el alta de reserva y el registro de cobro.
+//
+// Sale de las fichas de `clientes` MAS los titulares que solo existen en una
+// reserva (los que reservaron en linea sin darse de alta). Se deduplica por
+// IDENTIDAD, no por id de fila: dos registros de la misma persona salian los
+// dos en el buscador, y elegir "el equivocado" mandaba el cobro a una ficha
+// sin saldo a favor.
+function ficha_mas_completa(a, b) {
+  if (!a) return b
+  if (!b) return a
+  const puntos = (c) =>
+    (c.id != null && c.id !== '' ? 4 : 0) +
+    (String(c.email || '').trim() && c.email !== '—' ? 2 : 0) +
+    (String(c.tel || '').trim() && c.tel !== '—' ? 2 : 0) +
+    (String(c.empresa || '').trim() ? 1 : 0) +
+    (String(c.nombre || '').trim() ? 1 : 0)
+  return puntos(b) > puntos(a) ? b : a
+}
+
+export function catalogo_clientes({ clientes, reservas }) {
+  const poridentidad = new Map()
+  const agregar = (c) => {
+    if (!c) return
+    // Sin nombre ni correo ni telefono no hay nada que ofrecer.
+    if (!String(c.nombre || '').trim() && !String(c.email || '').trim() && !String(c.tel || '').trim()) return
+    const k = clave_identidad(c)
+    if (!k) return
+    // De dos fichas de la misma persona se ofrece la MAS COMPLETA.
+    poridentidad.set(k, poridentidad.has(k) ? ficha_mas_completa(poridentidad.get(k), c) : c)
+  }
+
+  ;(clientes || []).forEach((c) =>
+    agregar({
+      id: c.id,
+      nombre: c.nombre || '',
+      email: c.email && c.email !== '—' ? c.email : '',
+      tel: c.tel && c.tel !== '—' ? c.tel : '',
+      empresa: c.empresa || '',
+    })
+  )
+  ;(reservas || []).forEach((r) =>
+    agregar({ nombre: r.cliente || '', email: r.email || '', tel: r.tel || '' })
+  )
+
+  // Alfabetico por nombre, que es como el usuario busca.
+  return Array.from(poridentidad.values()).sort((a, b) =>
+    String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es', { sensitivity: 'base' })
+  )
+}
+
+// ¿El cliente coincide con lo tecleado? Busca en nombre, correo, empresa Y
+// TELEFONO — el telefono comparado por DIGITOS, para que "662 123" encuentre
+// a quien tiene guardado "6621234567".
+export function cliente_coincide(c, q) {
+  const lq = String(q || '').trim().toLowerCase()
+  if (!lq) return true
+  if (String(c.nombre || '').toLowerCase().includes(lq)) return true
+  if (String(c.email || '').toLowerCase().includes(lq)) return true
+  if (String(c.empresa || '').toLowerCase().includes(lq)) return true
+  const digitos = lq.replace(/\D/g, '')
+  if (digitos && String(c.tel || '').replace(/\D/g, '').includes(digitos)) return true
+  return false
+}
+
+// Reservas VIVAS de un cliente. Solo las suyas y solo las vivas: cobrar contra
+// una reserva cancelada dejaria el dinero colgando de algo que ya no existe.
+// La identidad se compara por telefono y, a falta de el, por nombre — misma
+// regla que _ncReservasDelCliente().
+export function reservas_del_cliente(cliente, reservas) {
+  if (!cliente) return []
+  const tel = tel_norm(cliente.tel)
+  const nom = nombre_norm(cliente.nombre)
+  return (reservas || []).filter((r) => {
+    if (String(r.estado || '').toLowerCase() === 'cancelada') return false
+    const tr = tel_norm(r.tel)
+    if (tel && tr) return tel === tr
+    return nombre_norm(r.cliente) === nom
+  })
+}

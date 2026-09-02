@@ -19,11 +19,24 @@ function forma_de(c) {
   return (c && (c.formapago || c.formaPago || c.forma || c.forma_pago)) || ''
 }
 
-// ¿el concepto es un abono al saldo a favor? igualdad exacta normalizada.
+// ── SALDO A FAVOR: las dos mitades del flujo NO son lo mismo ────
+// El caso espejo del credito. El credito apunta dinero que todavia NO ha
+// entrado; el saldo a favor, dinero que entro ANTES y ahora se coloca sobre
+// una reserva. Por eso hay que distinguirlas:
+//
+//   · CONCEPTO "SALDO A FAVOR"       → el cliente ENTREGA el dinero. ES ingreso.
+//   · FORMA DE PAGO "SALDO A FAVOR"  → se APLICA lo ya entregado a una reserva.
+//     NO es ingreso nuevo: contarlo otra vez duplicaria la caja del dia.
+//
+// Esta funcion es la SEGUNDA mitad, y por eso mira SOLO la forma de pago —
+// espejo de _esPagoDesdeSaldoFavor() (js/modules/utils.js:420). Antes miraba
+// tambien el concepto, asi que un ABONO a saldo a favor se descontaba de los
+// ingresos: el dinero entraba a la caja y no aparecia en "Total cobrado",
+// "Cobrado hoy" ni en el "Total pagado" del cliente.
+// Para preguntar por las DOS mitades a la vez esta toca_saldo_favor()
+// (lib/cascadas.js), que es lo que decide si pedir comprobante.
 export function es_pago_desde_saldo_favor(concepto, forma) {
-  const n = norm_concepto(concepto)
-  const f = norm_concepto(forma)
-  return n === 'SALDO A FAVOR' || f === 'SALDO A FAVOR'
+  return norm_concepto(forma) === 'SALDO A FAVOR'
 }
 
 export function es_cobro_desde_saldo_favor(c) {

@@ -7,6 +7,8 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { cobro_cancelado, es_cobro_credito } from './cobros'
+import { redondear_dinero } from './dinero'
+import { reserva_liquidada } from './reservasadmin'
 
 // Etapas FIJAS del tablero, en su orden.
 export const pipeline_etapas = [
@@ -81,17 +83,21 @@ export function dias_en_etapa(card) {
 }
 
 // ── pagos de una tarjeta ────────────────────────────────────────
-// los cobros ligados al folio del prospecto. DINERO REAL: los de credito son
-// cuenta por cobrar y no cuentan como abonado, mismo criterio que el resto.
+// espejo EXACTO de _reconstruirPagosPipeline() (js/30-init.js): el historial
+// de una tarjeta son sus cobros activos, y un cobro puede venir etiquetado
+// con el folio del PROSPECTO (abonos antiguos) o con el ID de la RESERVA
+// vinculada — asi los guardan el webhook de Stripe y los abonos nuevos.
+//
+// Antes aqui solo se miraba el folio del prospecto y sus alias 'PROS-xxx',
+// y los ids de las reservas vinculadas quedaban fuera: una tarjeta pagada
+// por Stripe mostraba "Abonado —" con el dinero cobrado. Ese mismo conjunto
+// decide la etapa (ver abonado_etapa), asi que el fallo no era solo visual.
 export function pagos_de_tarjeta(card, cobros) {
-  const folio = String(card.folio || '')
-  if (!folio) return []
-  // un folio de prospecto puede vivir como 'PROS-002' o como '002' segun la
-  // epoca del registro: se aceptan AMBAS formas.
-  const alias = folio.toUpperCase().startsWith('PROS-')
-    ? [folio, folio.slice(5)]
-    : [folio, 'PROS-' + folio]
-  return cobros.filter((c) => !cobro_cancelado(c) && alias.indexOf(String(c.folio || '')) >= 0)
+  const folios = new Set(
+    [card.folio].concat(card.reservaids || []).filter(Boolean).map(String)
+  )
+  if (!folios.size) return []
+  return cobros.filter((c) => !cobro_cancelado(c) && folios.has(String(c.folio || '')))
 }
 
 export function suma_pagos_dinero(pagos) {
@@ -213,4 +219,198 @@ export function filtrar_completados(cards, { busqueda, juego, seriejuegoids }) {
 // reservas vinculadas, en una sola celda.
 export function folios_completado(c) {
   return [c.folio].concat(c.reservaids || []).filter(Boolean).join(' · ')
+}
+
+// ══ EN QUE COLUMNA LE TOCA ESTAR SEGUN LO ABONADO ══════════════════
+// espejo 1:1 de v1 (js/modules/pipeline.js 1746-1875): _pdNumMonto,
+// _pdSaldoPendienteCard, _pdReservasActivas, _pdAbonadoEtapa,
+// _pdEngancheRequerido, _pdIndiceEtapa, _pdEtapaPorAbono y _pdDebeReclasificar.
+//
+// Son PURAS a proposito: reciben los datos ya cargados y no tocan la base. La
+// escritura vive en cascadas.js, que las usa para decidir. Asi la regla del
+// dinero se puede probar con miles de casos sin conectarse a nada.
+//
+// `ctx` = { reservas, cobros, cotizaciones, enganchemin }
+
+export function num_monto(v) {
+  let x = v
+  if (typeof x === 'string') x = x.replace(/[$,\s]/g, '')
+  const n = Number(x)
+  return isNaN(n) ? 0 : n
+}
+
+export function reservas_activas(card, reservas) {
+  return (card.reservaids || [])
+    .map((rid) => (reservas || []).find((r) => r.id === rid))
+    .filter((r) => r && String(r.estado || '').toLowerCase() !== 'cancelada')
+}
+
+// Abonado que cuenta PARA LA ETAPA. Aqui SI entra el credito: no es ingreso
+// —por eso el encabezado de la columna y el "Abonado" de la tarjeta lo dejan
+// fuera— pero asegura el lugar, asi que sube la etapa comercial. Es el mismo
+// criterio con el que se valida el arrastre manual a Reservas: una sola
+// funcion para que el gate manual y el ascenso automatico no puedan divergir.
+export function abonado_etapa(card, cobros) {
+  if (!card) return 0
+  const pagos = pagos_de_tarjeta(card, cobros || [])
+  return redondear_dinero(pagos.reduce((s, p) => s + (Number(p.monto) || 0), 0))
+}
+
+// Enganche minimo en pesos segun la politica VIGENTE (tabla politica_pagos).
+// Nunca un porcentaje fijo en codigo: si el admin cambia la politica, el gate
+// manual y el ascenso automatico se mueven con ella.
+export function enganche_requerido(card, enganchemin) {
+  return redondear_dinero((num_monto(card && card.monto) * (Number(enganchemin) || 0)) / 100)
+}
+
+// Posicion de una etapa en el embudo, para no retroceder nunca.
+export function indice_etapa(etapaid) {
+  return pipeline_etapas.findIndex((e) => e.id === etapaid)
+}
+
+// Etapas desde las que una tarjeta puede ascender sola a Reservas.
+export const etapas_previas_reserva = ['prospecto', 'cotizado', 'reserva_momentanea']
+
+export function cotiz_origen(card, cotizaciones) {
+  if (!card || !card.cotizid) return null
+  if (!Array.isArray(cotizaciones)) return null
+  return cotizaciones.find((c) => c.id === card.cotizid) || null
+}
+
+// ── COTIZACION ESPECIAL ("Otros") ─────────────────────────────
+// Cuando la cotizacion se hizo con Juego u "Otro (especificar)" en Seccion, el
+// trato NO corresponde a una zona del catalogo: son varios juegos y varias
+// secciones con un importe negociado a mano. Su precio es el "Monto Area"
+// capturado en la cotizacion y NADA debe recalcularlo con las tarifas.
+//
+// Devuelve true (especial), false (normal) o NULL cuando todavia no se puede
+// afirmar — `cotizaciones` llega asincrona, y dar por normal lo que aun no se
+// sabe recalculaba el area acordada contra el catalogo.
+// Ante la duda NO se toca el dinero: hace falta un `false` explicito.
+export function es_cotiz_especial(card, cotizaciones) {
+  if (!card) return false
+  if (String(card.zonaid || '') === 'otro') return true
+  if (card.esespecial === true) return true
+  // Sin cotizacion de origen es una tarjeta normal, y eso si es concluyente.
+  if (!card.cotizid) return false
+  const cot = cotiz_origen(card, cotizaciones)
+  if (!cot) return null // aun no cargada: indeterminado
+  return String(cot.zonaid || '') === 'otro' || String(cot.juegoid || '') === 'otros'
+}
+
+// "No consta que sea normal": true tanto para las especiales como mientras no
+// se pueda determinar. Es la condicion con la que se BLOQUEA cualquier
+// recalculo del area.
+export function no_recalcular_area(card, cotizaciones) {
+  return es_cotiz_especial(card, cotizaciones) !== false
+}
+
+// espejo de _pdTotalReservaCard() SIN EL MODAL ABIERTO, que es el unico caso
+// que existe aqui: la v1 consulta ahi #pd-monto-inp y `prospectoActivo`, dos
+// cosas que solo viven mientras se edita una tarjeta en pantalla.
+//
+// Fuera del modal la v1 se comporta asi, y asi se migra:
+//   · especial o indeterminada → el monto de la TARJETA (nada lo recalcula)
+//   · normal con reservas activas → la suma de sus netos
+//   · normal SIN reservas activas → 0
+// Ese ultimo 0 puede sorprender —parece que deberia ser el monto de la
+// tarjeta— pero es lo que devuelve _pdMontoActual() sin modal, y cambiarlo
+// aqui haria que la v2 diera un total distinto al de la v1 sobre los mismos
+// datos. La cascada nunca llega a esa rama: saldo_pendiente_card solo llama
+// aqui dentro del caso "especial", que sale por la primera linea.
+export function total_reserva_card(card, ctx) {
+  if (!card) return 0
+  if (no_recalcular_area(card, ctx.cotizaciones)) return Number(card.monto) || 0
+  const activas = reservas_activas(card, ctx.reservas)
+  if (activas.length) {
+    return activas.reduce(
+      (s, r) => s + Math.max(0, num_monto(r.monto) - num_monto(r.descuentomonto)),
+      0
+    )
+  }
+  return 0
+}
+
+const TOL = 0.01 // tolerancia de centavos por redondeos
+
+export function saldo_pendiente_card(card, ctx) {
+  const activas = reservas_activas(card, ctx.reservas)
+  // Suma REAL de abonos del historial (la misma que pinta "Abonado" en la
+  // tarjeta): la validacion jamas debe contradecir lo que el usuario ve.
+  const abonadocard = pagos_de_tarjeta(card, ctx.cobros || [])
+    .reduce((s, p) => s + num_monto(p.monto), 0)
+
+  // COTIZACION ESPECIAL: el total lo manda la tarjeta. Con el neto de la
+  // reserva, el restante salia mal y la tarjeta se daba por liquidada con la
+  // mayor parte del trato sin cobrar.
+  if (no_recalcular_area(card, ctx.cotizaciones)) {
+    const totalesp = total_reserva_card(card, ctx)
+    const pagadoesp = Math.max(
+      abonadocard,
+      activas.reduce((s, r) => s + num_monto(r.montopagado), 0)
+    )
+    const saldoesp = totalesp - pagadoesp
+    return saldoesp <= TOL ? 0 : redondear_dinero(saldoesp)
+  }
+
+  if (activas.length) {
+    let netototal = 0
+    let pagadofilas = 0
+    let todasliquidadas = true
+    activas.forEach((r) => {
+      const neto = Math.max(0, num_monto(r.monto) - num_monto(r.descuentomonto))
+      const pagado = num_monto(r.montopagado)
+      netototal += neto
+      pagadofilas += pagado
+      // Liquidada por monto (incluye sobrepago con comision) o por marca
+      // valida. `modificada` solo existe mientras el Pipeline edita la reserva
+      // en memoria: no es columna de la base, y aqui siempre viene sin marcar.
+      const liq = pagado >= neto - TOL || (reserva_liquidada(r) && !r.modificada)
+      if (!liq) todasliquidadas = false
+    })
+    if (todasliquidadas) return 0
+    // total neto − lo MAYOR entre lo registrado en la fila y la suma real de
+    // abonos: cubre la fila desincronizada (monto_pagado en 0 con abonos
+    // completos en cobros) que inventaba un "saldo pendiente" fantasma.
+    const pagadoreal = Math.max(pagadofilas, abonadocard)
+    const saldo = netototal - pagadoreal
+    return saldo <= TOL ? 0 : redondear_dinero(saldo)
+  }
+
+  const sinreserva = num_monto(card.monto) - abonadocard
+  return sinreserva <= TOL ? 0 : redondear_dinero(sinreserva)
+}
+
+// Con una reserva activa vinculada, el porcentaje pagado decide la columna:
+//   sin abono            → Reserva Momentanea (el apartado sin cobro)
+//   abono < enganche     → Reserva Momentanea
+//   enganche ≤ x < total → Reservas (reserva firme)
+//   liquidada            → Reserva Completada
+// El corte NO es un 50 escrito a mano: es el % vigente de politica_pagos, el
+// mismo que valida el arrastre manual.
+export function etapa_por_abono(card, ctx) {
+  if (!card) return null
+  if (!reservas_activas(card, ctx.reservas).length) return null
+  const monto = num_monto(card.monto)
+  if (monto <= 0) return null
+  const abonado = abonado_etapa(card, ctx.cobros)
+  if (abonado <= 0) return 'reserva_momentanea'
+  if (saldo_pendiente_card(card, ctx) <= 0 || abonado >= monto) return 'cerrado'
+  return abonado >= enganche_requerido(card, ctx.enganchemin) ? 'reservado' : 'reserva_momentanea'
+}
+
+// Porcentaje abonado, solo para explicarlo en avisos e historial.
+export function pct_abonado(card, ctx) {
+  const monto = num_monto(card && card.monto)
+  if (monto <= 0) return 0
+  return Math.floor((abonado_etapa(card, ctx.cobros) / monto) * 100)
+}
+
+// ¿Le toca cambiar de columna sola? Solo ASCIENDE: una cancelacion de cobro no
+// devuelve la tarjeta a una columna anterior — eso sigue siendo decision de
+// quien la arrastra.
+export function debe_reclasificar(card, ctx) {
+  const destino = etapa_por_abono(card, ctx)
+  if (!destino || !card) return null
+  return indice_etapa(destino) > indice_etapa(card.etapa) ? destino : null
 }

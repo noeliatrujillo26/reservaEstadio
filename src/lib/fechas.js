@@ -50,3 +50,11 @@ export function hora12(hora) {
   const min = String(hora).split(':')[1]
   return (h > 12 ? h - 12 : h) + ':' + min + (h >= 12 ? ' PM' : ' AM')
 }
+
+// espejo de _fechaLocal(): 'YYYY-MM-DD' → Date SIN corrimiento de dia. Parsear
+// solo la fecha la interpreta como medianoche UTC y en Hermosillo (UTC-7) el
+// dia retrocede (el 28 se pintaba como 27). Anclarla a mediodia local lo evita.
+export function fecha_local(f) {
+  const s = String(f || '')
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T12:00') : new Date(s)
+}

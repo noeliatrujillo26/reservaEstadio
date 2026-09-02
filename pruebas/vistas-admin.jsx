@@ -12,6 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { renderToString } from 'react-dom/server'
+import { escritura_admin } from '../src/lib/escritura'
 import { admindatoscontext } from '../src/context/admindatoscontext'
 import { admincontext } from '../src/context/admincontext'
 import ToastProvider from '../src/context/toastcontext'
@@ -54,11 +55,12 @@ const valor={secciones,areas,juegos,reservas,cobros,areasestados:{j1:{'sec-1':'r
  cotizaciones:[{id:'COT-0001',fecha:'2026-08-01',cliente:'Ana',empresa:'',vendedora:'FER',total:12000,valida:'2026-09-01',estado:'Activa',areamonto:9000,consumomonto:3000,subtotal:12000,iva:0,descuento:0,adultoextracant:0,ninoextracant:0,extramonto:0,metodospago:[],tipocomida:'carne_asada',volumenpct:0,personasincluidas:20}],
  pipeline:[{id:'p-1735689600000',folio:'002',nombre:'Luis',zona:'Terraza Derecha 1',juego:'j1',monto:9750,etapa:'reservado',vendedora:'FER',adultos:20,ninos:2,reservaids:['1'],tipocomida:'carne_asada',etapacambiadaen:'2026-08-01T10:00:00Z'},
   {id:'p-2',folio:'003',nombre:'Eva',zona:'Palco All-Inc 2',juego:'j1',monto:5000,etapa:'completado',vendedora:'MELI',reservaids:['9'],tipocomida:'discada'}],
+ politica:{enganche_minimo:50,dias_limite_liquidar:5},
  cargando:false,errores:[]}
 const sesion={usuario:{id:1,nombre:'Admin Uno',email:'a@n.mx',rol:'Administrador',permisos:{},iniciales:'AU'},estado:'dentro',error:'',seterror(){},iniciar_sesion(){},cerrar_sesion(){},escritura_admin:false}
 
 export const vistas={dashboard:Dashboard,cobros:Cobros,seccionesreservadas:Reservas,clientes:Clientes,
- usuarios:Usuarios,consumos:Consumos,temporadas:Temporadas,descuentos:Descuentos,metodos:Metodos,
+ usuarios:Usuarios,movimientos:Movimientos,consumos:Consumos,temporadas:Temporadas,descuentos:Descuentos,metodos:Metodos,
  reportes:Reportes,mensajes:Mensajes,landing:Landing,precios:Precios,cotizaciones:Cotizaciones,
  pipeline:Pipeline,palcos:Palcos,completados:Completados}
 
@@ -70,3 +72,8 @@ export function render(Comp){
       </ToastProvider>
     </admincontext.Provider>)
 }
+
+// el runner comprueba con esto que la bandera de compilacion llego de verdad
+// al bundle: sin esta senal, el modo escritura podria estar repitiendo en
+// silencio el de lectura y la prueba pasaria sin probar nada nuevo.
+export const escritura_activa = escritura_admin
