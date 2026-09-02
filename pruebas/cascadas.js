@@ -34,3 +34,12 @@ export { mensaje_reporte_dia, cobros_del_dia } from '../src/lib/reportedia'
 export { buscar_facturacion_cliente, regimen_legible } from '../src/lib/facturacion'
 export { html_recibo_cobro } from '../src/lib/recibo'
 export { ruta_de_url, es_ruta_bucket, es_recibo_auto } from '../src/lib/storage'
+
+export {
+  generar_folio_reserva, economia_reserva, cobro_inicial, estado_pago_reserva,
+  email_valido, tel_valido, etiqueta_juego, folios_de_reserva_borrada,
+  precio_seccion, min_seccion, folio_visible, reserva_liquidada,
+} from '../src/lib/reservasadmin'
+export {
+  estado_vivo, puede_bloquearse, set_estado_zona, alternar_bloqueo, estados_zona,
+} from '../src/lib/mapaocupacion'

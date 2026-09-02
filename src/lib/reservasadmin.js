@@ -8,6 +8,7 @@
 
 import { cobro_cancelado, es_cobro_credito } from './cobros'
 import { categoria_sec, estado_zona } from './dashboard'
+import { redondear_dinero } from './dinero'
 
 // la reserva viva de una seccion en un juego. Una seccion "Libre" jamas
 // muestra cliente, por eso el llamador pasa null explicito.
@@ -169,4 +170,141 @@ export const badge_categoria = {
   Platea: 'badge-blue',
   'Jardín': 'badge-green',
   General: 'badge-gray',
+}
+
+// ══ ESCRITURA: LO QUE HACE FALTA PARA GUARDAR UNA RESERVA ══════════
+// espejo 1:1 de v1: generarFolioReserva() (js/modules/utils.js),
+// _resEconomiaAGuardar(), _emailValido() y el calculo de estado_pago de
+// _guardarReservaManualInterno() (js/20-editor-mapa.js 2402-2495).
+// Todo PURO: se prueba con el banco diferencial, sin tocar la base.
+
+// Folios con distintivo de ORIGEN: 'admin' → NRJ-ADM-XXXXX (creadas desde el
+// panel), 'web' → NRJ-WEB-XXXXX (el checkout genera el suyo con la misma
+// regla en el serverless).
+//
+// 5 caracteres SIN 0/O ni 1/I/L: se dictan por telefono sin confusion. Con
+// 28.6 millones de combinaciones, 20 colisiones seguidas es practicamente
+// imposible; aun asi queda el respaldo por tiempo.
+//
+// La verificacion local no basta —otra sesion puede generar el mismo codigo
+// en el mismo instante— y por eso quien inserta reintenta ante un 23505.
+const abc_folio = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+
+export function generar_folio_reserva(origen, reservas, aleatorio) {
+  const rnd = aleatorio || Math.random
+  const pref = 'NRJ-' + (origen === 'web' ? 'WEB' : 'ADM') + '-'
+  for (let intento = 0; intento < 20; intento++) {
+    let cod = ''
+    for (let i = 0; i < 5; i++) cod += abc_folio[Math.floor(rnd() * abc_folio.length)]
+    const folio = pref + cod
+    if (!(reservas || []).some((r) => String(r.id) === folio)) return folio
+  }
+  return pref + Date.now().toString(36).toUpperCase().slice(-5)
+}
+
+// Economia persistida: monto = BRUTO y descuento_monto aparte. Todo lo que se
+// cobra o se compara va contra el NETO. Cobrar el precio de lista de una
+// reserva con descuento era el bug del portal.
+export function economia_reserva(bruto, descuentopct) {
+  const b = Number(bruto) || 0
+  const descuento = Math.min(redondear_dinero(b * (Number(descuentopct) || 0)), b)
+  return { bruto: b, descuento, neto: Math.max(0, b - descuento) }
+}
+
+// Cuanto se cobra HOY segun la opcion de pago elegida.
+export function cobro_inicial(pago, neto, montomanual, engancheminpct) {
+  if (pago === 'Sin pago') return 0
+  if (pago === 'Monto') return parseFloat(montomanual) || 0
+  // "Enganche 30%" es la etiqueta historica del <select> de la v1, que aplica
+  // un 0.3 fijo. Se conserva el literal para no cambiar lo que ya se guardo,
+  // pero el porcentaje sale de la politica vigente cuando se conoce — es el
+  // mismo criterio del resto del sistema: nunca un numero escrito a mano.
+  if (String(pago).indexOf('Enganche') === 0) {
+    const pct = Number(engancheminpct) > 0 ? Number(engancheminpct) : 30
+    return redondear_dinero(neto * (pct / 100))
+  }
+  return neto
+}
+
+// estado_pago es INDEPENDIENTE de `estado` (que es el status general de la
+// reserva): pendiente/parcial/pagado segun cuanto se cobro contra el neto.
+export function estado_pago_reserva(cobrado, neto) {
+  if (cobrado <= 0) return 'pendiente'
+  return cobrado >= neto ? 'pagado' : 'parcial'
+}
+
+export function email_valido(v) {
+  return /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(String(v || '').trim())
+}
+
+// 10 digitos, la regla de la casa para telefonos mexicanos.
+export function tel_valido(v) {
+  return String(v || '').trim().length === 10
+}
+
+// Etiqueta del juego tal como se guarda en `reservas.juego`: "14 oct · Juego 3".
+export function etiqueta_juego(j) {
+  if (!j) return ''
+  return new Date(j.fecha + 'T12:00').toLocaleDateString('es-MX', {
+    day: '2-digit', month: 'short',
+  }) + ' · Juego ' + j.num
+}
+
+// ── BORRAR UNA RESERVA: QUE COBROS SE CAEN CON ELLA ─────────────
+// Al desaparecer la reservacion sus cobros quedan huerfanos: seguirian sumando
+// en el Registro de Cobros y en los Ingresos de Reportes sin nada que los
+// respalde. Se cancelan por el folio de la reserva Y por los de la tarjeta del
+// Pipeline vinculada, en sus dos formas ('PROS-002' y '002') — las tres
+// maneras con las que un cobro puede estar etiquetado.
+export function folios_de_reserva_borrada(reserva, pipeline) {
+  const folios = [String(reserva.id)]
+  ;(pipeline || []).forEach((p) => {
+    if (!(p.reservaids || []).map(String).includes(String(reserva.id))) return
+    const f = String(p.folio || '').trim()
+    if (!f) return
+    folios.push(f)
+    folios.push(f.toUpperCase().startsWith('PROS-') ? f.slice(5) : 'PROS-' + f)
+  })
+  return folios
+}
+
+// ── PRECIO Y AFORO DE UNA SECCION (catalogo del panel) ──────────
+// espejo 1:1 de v1: getPrecioSec(), getMinSec() y getCategoriaSec()
+// (js/20-editor-mapa.js). El catalogo son las filas de mapa_secciones ya
+// mapeadas por map_precio().
+//
+// El match va SIEMPRE por el id unico del pin primero: dos zonas con el mismo
+// nombre (dos "Platea Izquierda") tienen precios independientes, y buscarlas
+// por nombre las confundia. El nombre queda de respaldo, exigiendo que TODAS
+// las palabras del catalogo aparezcan en el nombre de la seccion.
+function fila_catalogo(area, catalogo) {
+  if (!area) return null
+  const lista = catalogo || []
+  if (area.id) {
+    const porid = lista.find((p) => p.pinid && p.pinid === area.id)
+    if (porid) return porid
+  }
+  const n = String(area.nombre || '').toLowerCase()
+  return lista.find((p) => String(p.zona || '').toLowerCase().split(' ').every((w) => n.includes(w))) || null
+}
+
+// Respaldos por categoria: solo aplican cuando la seccion no esta en el
+// catalogo. Son los mismos numeros de la v1.
+const precio_respaldo = { Terraza: 8000, Palco: 12000, Platea: 7000, 'Jardín': 6000, General: 5500 }
+const min_respaldo = { Terraza: 20, Palco: 20, Platea: 15, 'Jardín': 10, General: 10 }
+
+export function precio_seccion(area, catalogo) {
+  const fila = fila_catalogo(area, catalogo)
+  if (fila) return fila.precio
+  return precio_respaldo[categoria_sec(area && area.nombre)] || null
+}
+
+// Personas INCLUIDAS en la seccion. Jueves, viernes y sabado usan la columna
+// alterna (min2) cuando esta configurada — la misma regla de dia que los
+// precios.
+export function min_seccion(area, catalogo, juego) {
+  const finde = !!(juego && juego.fecha && new Date(juego.fecha + 'T12:00').getDay() >= 4)
+  const fila = fila_catalogo(area, catalogo)
+  if (fila) return finde && fila.min2 != null ? fila.min2 || 1 : fila.min || 1
+  return min_respaldo[categoria_sec(area && area.nombre)] || 1
 }

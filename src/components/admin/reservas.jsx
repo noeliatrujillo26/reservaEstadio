@@ -4,13 +4,22 @@
 // 2805-2867) y renderSeccionesResTabla()/renderSeccionesResKPIs() de
 // js/20-editor-mapa.js.
 //
-// SOLO LECTURA: se omite la columna de Acciones (ver detalle, WhatsApp,
-// compartir codigo, eliminar reserva y bloquear/desbloquear seccion) y los
-// botones de reporte — todos escriben o disparan efectos externos.
+// ESCRITURA (Fase 2): crear y editar reservas, eliminar con confirmacion
+// segura y su cascada, y bloquear/desbloquear secciones. Todo pasa por los
+// tres candados de lib/escritura.js.
+// Siguen sin migrar los botones de WhatsApp y de compartir codigo: disparan
+// efectos externos y no forman parte de esta tanda.
 // ═══════════════════════════════════════════════════════════════════
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
+import { usetoast } from '../../context/toastcontext'
+import usereservasescritura from '../../hooks/usereservasescritura'
+import { useconfirmarseguro } from './confirmarseguro'
+import ReservaForm from './reservaform'
+import { alternar_bloqueo, estado_vivo } from '../../lib/mapaocupacion'
+import { sb } from '../../supabaseclient'
+import useadmin from '../../hooks/useadmin'
 import {
   badge_categoria, badge_estado, es_palco_compartido, filas_reservas,
   folio_visible, label_estado, total_personas_seccion,
@@ -18,20 +27,34 @@ import {
 import { hoy_hermosillo } from '../../lib/fechas'
 
 export default function reservas() {
-  const { reservas: todas, cobros, juegos, areas, areasestados, cargando } = useadmindatos()
+  const { reservas: todas, cobros, juegos, areas, areasestados, cargando, recargar } = useadmindatos()
+  const { usuario } = useadmin()
+  const { mostrartoast } = usetoast()
+  const {
+    puede, puede_estados, guardar, guardando, eliminar, borrando,
+  } = usereservasescritura()
+  const { confirmarseguro, dialogo } = useconfirmarseguro()
+  const [form, setform] = useState(null) // { editando } | null
+  const [bloqueando, setbloqueando] = useState(null)
 
-  const [juegoid, setjuegoid] = useState('')
+  const [juegoelegido, setjuegoelegido] = useState('')
   const [soloocupadas, setsoloocupadas] = useState(false)
   const [tipozona, settipozona] = useState('')
 
-  // al llegar los juegos se preselecciona el proximo, igual que hace
-  // seleccionarProximoJuegoRes() en la v1.
-  useEffect(() => {
-    if (juegoid || !juegos.length) return
+  // El proximo juego se PRESELECCIONA, igual que seleccionarProximoJuegoRes()
+  // en la v1. Va DERIVADO y no en un useEffect: los juegos llegan asincronos,
+  // asi que con un efecto la vista pintaba primero vacia y luego con datos —
+  // y en el banco de pruebas, que renderiza sin ejecutar efectos, la tabla
+  // salia siempre sin filas y no probaba nada de lo que hay dentro.
+  const juegoauto = useMemo(() => {
+    if (!juegos.length) return ''
     const hoy = hoy_hermosillo()
     const prox = juegos.find((j) => (j.fecha || '') >= hoy) || juegos[0]
-    if (prox) setjuegoid(String(prox.id))
-  }, [juegos, juegoid])
+    return prox ? String(prox.id) : ''
+  }, [juegos])
+
+  // lo elegido a mano manda; si no, el proximo juego.
+  const juegoid = juegoelegido || juegoauto
 
   // String() en ambos lados: el value del select es texto y el id del juego
   // puede ser numerico — la comparacion estricta dejaba la tabla vacia.
@@ -54,6 +77,63 @@ export default function reservas() {
       ? datos.filas.length + ' de ' + datos.total + ' secciones'
       : datos.total + ' secciones'
 
+  // ELIMINAR: la v1 exige MOTIVO y CONTRASEÑA antes de borrar. Se conserva
+  // igual — es la unica accion del panel que no tiene vuelta atras.
+  async function pedir_eliminar(f) {
+    const conf = await confirmarseguro({
+      titulo: '🗑 Eliminar la reserva ' + folio_visible(f.reserva),
+      descripcion: (
+        <>
+          Reserva de <strong>{f.reserva.cliente}</strong> en <strong>{f.a.nombre}</strong>.
+          <br />
+          La sección quedará libre, sus cobros se cancelarán y el prospecto del
+          Pipeline (si existe) se desvinculará. Esta acción no se puede deshacer.
+        </>
+      ),
+      etiquetamotivo: '¿Por qué se elimina esta reservación? *',
+      textoconfirmar: 'Confirmar y Eliminar',
+    })
+    if (conf) eliminar(f.reserva, conf)
+  }
+
+  // BLOQUEAR / DESBLOQUEAR: sacar una seccion de venta tambien pide la
+  // contraseña. La v1 la pide contra un '1234' escrito en el codigo; aqui se
+  // valida la contraseña REAL de quien tiene la sesion (ver confirmarseguro).
+  async function pedir_bloqueo(f) {
+    const vivo = estado_vivo(areasestados, juegoid, f.a.id)
+    if (vivo === 'reservada') {
+      mostrartoast('⛔ No se puede bloquear una sección reservada')
+      return
+    }
+    const siguiente = vivo === 'bloqueada' ? 'liberar' : 'bloquear'
+    const conf = await confirmarseguro({
+      titulo: (siguiente === 'bloquear' ? '🔒 Bloquear ' : '🔓 Liberar ') + f.a.nombre,
+      descripcion: siguiente === 'bloquear'
+        ? 'La sección dejará de estar disponible para venta en este juego.'
+        : 'La sección volverá a estar disponible para venta en este juego.',
+      pedirmotivo: false,
+      textoconfirmar: siguiente === 'bloquear' ? 'Bloquear sección' : 'Liberar sección',
+    })
+    if (!conf) return
+    setbloqueando(f.a.id)
+    const r = await alternar_bloqueo(sb, usuario, {
+      juegoid, zonaid: f.a.id, nombre: f.a.nombre, areasestados,
+    })
+    setbloqueando(null)
+    if (!r.ok) {
+      mostrartoast(
+        r.motivo === 'reservada'
+          ? '⛔ No se puede bloquear una sección reservada'
+          : r.motivo === 'sin_filas'
+            ? '⚠️ La base no aceptó el cambio (0 filas). Revisa las políticas RLS de `zona_juego_estado`.'
+            : '⚠️ No se pudo cambiar el estado de la sección.'
+      )
+      return
+    }
+    mostrartoast((r.estado === 'bloqueada' ? '🔒 ' : '🔓 ') + f.a.nombre)
+    recargar()
+  }
+
   return (
     <div className="page active" id="page-seccionesreservadas">
       <div className="page-inner" style={{ padding: '28px' }}>
@@ -62,6 +142,11 @@ export default function reservas() {
             <h2>Reservas</h2>
             <p>Secciones con estado de reserva por juego de la temporada</p>
           </div>
+          {puede && (
+            <button className="btn btn-primary btn-sm" onClick={() => setform({ editando: null })}>
+              + Nueva reserva
+            </button>
+          )}
         </div>
 
         {/* ── KPIs ── */}
@@ -94,7 +179,7 @@ export default function reservas() {
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
           <select
             id="sr-filtro-juego" className="input select" style={{ width: '280px' }}
-            value={juegoid} onChange={(e) => setjuegoid(e.target.value)}
+            value={juegoid} onChange={(e) => setjuegoelegido(e.target.value)}
           >
             <option value="">— Selecciona un juego —</option>
             {juegos.map((j) => (
@@ -148,12 +233,13 @@ export default function reservas() {
                   <th style={{ width: '12%' }}>Estado</th>
                   <th style={{ width: '16%' }}>Cliente</th>
                   <th style={{ width: '12%' }}>Pago</th>
+                  {(puede || puede_estados) && <th style={{ width: '11%' }}>Acciones</th>}
                 </tr>
               </thead>
               <tbody id="sr-tbody">
                 {!juego && (
                   <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-3)' }}>
+                    <td colSpan={(puede || puede_estados) ? 9 : 8} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-3)' }}>
                       {cargando ? 'Cargando datos…' : 'Selecciona un juego para ver la disponibilidad'}
                     </td>
                   </tr>
@@ -161,7 +247,7 @@ export default function reservas() {
 
                 {juego && datos && datos.filas.length === 0 && (
                   <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-3)' }}>
+                    <td colSpan={(puede || puede_estados) ? 9 : 8} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-3)' }}>
                       {tipozona === 'compartida' ? (
                         <>
                           No hay palcos compartidos configurados.
@@ -229,6 +315,48 @@ export default function reservas() {
                           '—'
                         )}
                       </td>
+                      {(puede || puede_estados) && (
+                        <td>
+                          <div style={{ display: 'flex', gap: '4px', whiteSpace: 'nowrap' }}>
+                            {puede && f.reserva && (
+                              <button
+                                className="btn btn-ghost btn-xs"
+                                title="Editar reserva"
+                                onClick={() => setform({ editando: f.reserva })}
+                                style={{ border: '1px solid var(--border)', borderRadius: '6px', padding: '3px 8px' }}
+                              >
+                                ✎
+                              </button>
+                            )}
+                            {puede && f.reserva && (
+                              <button
+                                className="btn btn-ghost btn-xs"
+                                title="Eliminar reserva"
+                                onClick={() => pedir_eliminar(f)}
+                                disabled={borrando === f.reserva.id}
+                                style={{ border: '1px solid var(--border)', borderRadius: '6px', padding: '3px 8px', color: 'var(--rojo)' }}
+                              >
+                                {borrando === f.reserva.id ? '…' : '🗑'}
+                              </button>
+                            )}
+                            {puede_estados && (
+                              <button
+                                className={'btn btn-xs ' + (f.est === 'bloqueada' ? 'btn-danger' : 'btn-outline')}
+                                title={
+                                  f.est === 'reservada'
+                                    ? 'No se puede bloquear una sección reservada'
+                                    : f.est === 'bloqueada' ? 'Liberar sección' : 'Bloquear sección'
+                                }
+                                onClick={() => pedir_bloqueo(f)}
+                                disabled={f.est === 'reservada' || bloqueando === f.a.id}
+                                style={f.est === 'reservada' ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+                              >
+                                {bloqueando === f.a.id ? '…' : f.est === 'bloqueada' ? '🔓' : '🔒'}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
@@ -237,6 +365,17 @@ export default function reservas() {
           </div>
         </div>
       </div>
+
+      <ReservaForm
+        abierto={!!form}
+        editando={form ? form.editando : null}
+        juegoinicial={juegoid}
+        zonainicial=""
+        oncerrar={() => setform(null)}
+        onguardar={guardar}
+        guardando={guardando}
+      />
+      {dialogo}
     </div>
   )
 }

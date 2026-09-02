@@ -37,6 +37,9 @@ import Completados from '../src/components/admin/completados'
 import DetalleCobro from '../src/components/admin/detallecobro'
 import NuevoCobro from '../src/components/admin/nuevocobro'
 import Evidencia from '../src/components/admin/evidencia'
+import ReservaForm from '../src/components/admin/reservaform'
+import { Confirmar } from '../src/components/admin/confirmar'
+import { ConfirmarSeguro } from '../src/components/admin/confirmarseguro'
 
 const secciones=[{id:'sec-1',num:1,nombre:'Terraza Derecha 1',cap:64,es_compartida:false,min_personas:20,precio:9750,precio_extra:500,precio_nino:200,sku:'TD1',descripcion:'Carne asada incluida',short_description:'Vista al diamante',img:'https://x/a.png',img2:null},
  {id:'sec-2',num:2,nombre:'Palco All-Inc 2',cap:60,es_compartida:true,capacidad_maxima:40,precio2:12000,img:null,img2:'https://x/b.png'}]
@@ -71,13 +74,20 @@ const DetalleCancelado = () => <DetalleCobro cobro={cobros[1]} oncerrar={()=>{}}
 const NuevoAbierto = () => <NuevoCobro abierto oncerrar={()=>{}} onregistrar={async()=>({ok:true})} guardando={false} />
 const EvidenciaPdf = () => <Evidencia abierto archivo={cobros[0].evidencia} concepto="ABONO" monto={5000} fecha="5 ago 26" oncerrar={()=>{}} />
 const EvidenciaSinLiga = () => <Evidencia abierto archivo="comprobante.jpg" concepto="ABONO" monto={null} fecha="" oncerrar={()=>{}} />
+const ReservaNueva = () => <ReservaForm abierto editando={null} juegoinicial="j1" zonainicial="" oncerrar={()=>{}} onguardar={async()=>({ok:true})} guardando={false} />
+const ReservaEditar = () => <ReservaForm abierto editando={reservas[0]} juegoinicial="j1" zonainicial="sec-1" oncerrar={()=>{}} onguardar={async()=>({ok:true})} guardando={false} />
+const ConfirmSimple = () => <Confirmar estado={{mensaje:'¿Cancelar este cobro?',textoconfirmar:'Sí, cancelar'}} oncerrar={()=>{}} />
+const ConfirmSeguro = () => <ConfirmarSeguro estado={{titulo:'🗑 Eliminar',descripcion:'Se borra la reserva.',etiquetamotivo:'¿Por qué? *',textoconfirmar:'Confirmar y Eliminar',pedirmotivo:true}} oncerrar={()=>{}} />
+const ConfirmSeguroSinMotivo = () => <ConfirmarSeguro estado={{titulo:'🔒 Bloquear',descripcion:'Sale de venta.',textoconfirmar:'Bloquear',pedirmotivo:false}} oncerrar={()=>{}} />
 
 export const vistas={dashboard:Dashboard,cobros:Cobros,seccionesreservadas:Reservas,clientes:Clientes,
  usuarios:Usuarios,movimientos:Movimientos,consumos:Consumos,temporadas:Temporadas,descuentos:Descuentos,metodos:Metodos,
  reportes:Reportes,mensajes:Mensajes,landing:Landing,precios:Precios,cotizaciones:Cotizaciones,
  pipeline:Pipeline,palcos:Palcos,completados:Completados,
  detallecobro:DetalleAbierto,detallecancelado:DetalleCancelado,nuevocobro:NuevoAbierto,
- evidenciapdf:EvidenciaPdf,evidenciasinliga:EvidenciaSinLiga}
+ evidenciapdf:EvidenciaPdf,evidenciasinliga:EvidenciaSinLiga,
+ reservanueva:ReservaNueva,reservaeditar:ReservaEditar,
+ confirmsimple:ConfirmSimple,confirmseguro:ConfirmSeguro,confirmseguro2:ConfirmSeguroSinMotivo}
 
 export function render(Comp){
   return renderToString(

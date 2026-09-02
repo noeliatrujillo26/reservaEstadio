@@ -507,6 +507,8 @@ function base_falsa(filas, opciones) {
         _tabla: tabla, _op: null, _payload: null, _filtros: {},
         update(p) { q._op = 'update'; q._payload = p; return q },
         insert(p) { q._op = 'insert'; q._payload = p; return q },
+        upsert(p) { q._op = 'upsert'; q._payload = p; return q },
+        delete() { q._op = 'delete'; return q },
         eq(col, val) { q._filtros[col] = val; return q },
         select() { return q },
         maybeSingle() {
@@ -876,6 +878,244 @@ for (let i = 0; i < 4000; i++) {
   afirmar('regimen legible', v2.regimen_legible('626') === '626 · Régimen Simplificado de Confianza (RESICO)')
   afirmar('sin regimen', v2.regimen_legible('') === '—')
   afirmar('regimen desconocido no inventa nombre', v2.regimen_legible('999') === '999 · ')
+}
+
+// ══ 7. RESERVAS: ECONOMIA, FOLIOS Y ESTADO DE ZONA ════════════════
+// La economia de una reserva es dinero puro, y el renombrado de campos
+// (montoPagado → montopagado, descuentoMonto → descuentomonto) la atraviesa
+// entera. Va al diferencial como todo lo demas.
+
+// _resEconomiaAGuardar(), con el bruto y el pct ya resueltos por el llamador.
+function _resEconomiaAGuardar(brutoHeredado, precioBase, descuentoPct) {
+  const bruto = brutoHeredado != null ? brutoHeredado : (Number(precioBase) || 0)
+  const descuento = Math.min(redondearDinero(bruto * descuentoPct), bruto)
+  return { bruto: bruto, descuento: descuento, neto: Math.max(0, bruto - descuento) }
+}
+
+// _resHeredarEconomia(): de (monto, descuento_monto) al par (bruto, pct).
+function _resHeredarEconomia(bruto, descuento) {
+  const b = Math.max(0, redondearDinero(Number(bruto) || 0))
+  const d = Math.min(Math.max(0, redondearDinero(Number(descuento) || 0)), b)
+  return { brutoHeredado: b > 0 ? b : null, descuentoPct: b > 0 ? d / b : 0 }
+}
+
+// El calculo de `cobrar` y `estadoPago` de _guardarReservaManualInterno().
+function _cobrarV1(pago, neto, montoManual) {
+  if (pago === 'Enganche 30%') return redondearDinero(neto * 0.3)
+  if (pago === 'Sin pago') return 0
+  if (pago === 'Monto') return parseFloat(montoManual) || 0
+  return neto
+}
+function _estadoPagoV1(cobrar, neto) {
+  return cobrar <= 0 ? 'pendiente' : (cobrar >= neto ? 'pagado' : 'parcial')
+}
+
+function _emailValidoV1(v) { return /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(String(v || '').trim()) }
+
+// getPrecioSec() y getMinSec(), con preciosData pasado como argumento.
+function _getCategoriaSecV1(nombre) {
+  const n = String(nombre || '').toUpperCase()
+  if (n.includes('TERRAZA')) return 'Terraza'
+  if (n.includes('PALCO')) return 'Palco'
+  if (n.includes('PLATEA')) return 'Platea'
+  if (n.includes('JARD')) return 'Jardín'
+  return 'General'
+}
+function _getPrecioSecV1(area, preciosData) {
+  const porId = area.id ? preciosData.find(p => p.pinId && p.pinId === area.id) : null
+  if (porId) return porId.precio
+  const n = (area.nombre || '').toLowerCase()
+  for (const p of preciosData) {
+    const palabras = p.zona.toLowerCase().split(' ')
+    if (palabras.every(w => n.includes(w))) return p.precio
+  }
+  const cat = _getCategoriaSecV1(area.nombre)
+  return { Terraza: 8000, Palco: 12000, Platea: 7000, 'Jardín': 6000, General: 5500 }[cat] || null
+}
+function _getMinSecV1(area, preciosData, finde) {
+  const minDe = (p) => (finde && p.min2 != null) ? (p.min2 || 1) : (p.min || 1)
+  const porId = area.id ? preciosData.find(p => p.pinId && p.pinId === area.id) : null
+  if (porId) return minDe(porId)
+  const n = (area.nombre || '').toLowerCase()
+  for (const p of preciosData) {
+    const palabras = p.zona.toLowerCase().split(' ')
+    if (palabras.every(w => n.includes(w))) return minDe(p)
+  }
+  const cat = _getCategoriaSecV1(area.nombre)
+  return { Terraza: 20, Palco: 20, Platea: 15, 'Jardín': 10, General: 10 }[cat] || 1
+}
+
+// Los folios que se cancelan al borrar una reserva (eliminarReservaSec).
+function _foliosBorradoV1(reserva, pipelineData) {
+  return [String(reserva.id)].concat(
+    pipelineData
+      .filter(p => (p.reservaIds || []).map(String).includes(String(reserva.id)))
+      .flatMap(p => {
+        const f = String(p.folio || '').trim()
+        if (!f) return []
+        return [f, f.toUpperCase().startsWith('PROS-') ? f.slice(5) : 'PROS-' + f]
+      }))
+}
+
+const nombres_sec = ['Terraza Derecha 1', 'PALCO ALL-INC 2', 'Platea Izquierda', 'Jardín Central',
+  'Bleachers 9', 'Zona Rara']
+const pagos = ['Sin pago', 'Enganche 30%', 'Completo', 'Monto']
+const correos = ['a@x.com', 'sin-arroba', 'b@y', 'c@z.mx', '  d@w.com  ', '']
+
+for (let i = 0; i < 6000; i++) {
+  // ── economia
+  const brutoCrudo = rnd() < 0.15 ? 0 : dinero(0, 60000)
+  const descCrudo = rnd() < 0.4 ? dinero(0, brutoCrudo * 1.4) : 0
+  const her = _resHeredarEconomia(brutoCrudo, descCrudo)
+  const v1eco = _resEconomiaAGuardar(her.brutoHeredado, 0, her.descuentoPct)
+  const v2eco = v2.economia_reserva(her.brutoHeredado != null ? her.brutoHeredado : 0, her.descuentoPct)
+  if (!comparar('economia_reserva', v1eco, v2eco, { brutoCrudo, descCrudo })) fallos++
+
+  // ── cobro inicial y estado de pago
+  const pago = elige(pagos)
+  const montoManual = dinero(0, 50000)
+  // 'Enganche 30%' con la politica en 30 debe dar EXACTAMENTE lo mismo que la
+  // v1, que lleva el 0.3 escrito a mano.
+  const v1cobrar = _cobrarV1(pago, v1eco.neto, montoManual)
+  const v2cobrar = v2.cobro_inicial(pago, v2eco.neto, montoManual, 30)
+  if (!comparar('cobro_inicial', v1cobrar, v2cobrar, { pago, neto: v1eco.neto })) fallos++
+  if (!comparar('estado_pago_reserva', _estadoPagoV1(v1cobrar, v1eco.neto),
+    v2.estado_pago_reserva(v2cobrar, v2eco.neto), { v1cobrar, neto: v1eco.neto })) fallos++
+
+  // ── validaciones
+  const correo = elige(correos)
+  if (!comparar('email_valido', _emailValidoV1(correo), v2.email_valido(correo), { correo })) fallos++
+
+  // ── precio y aforo de la seccion, en las DOS grafias del catalogo
+  const nsec = Math.floor(rnd() * 4)
+  const cat_v1 = []
+  const cat_v2 = []
+  for (let k = 0; k < nsec; k++) {
+    const base = {
+      zona: elige(nombres_sec),
+      precio: dinero(1000, 30000),
+      min: Math.floor(rnd() * 30) + 1,
+      min2: rnd() < 0.5 ? Math.floor(rnd() * 30) + 1 : null,
+    }
+    const pin = rnd() < 0.7 ? 'sec-' + k : null
+    cat_v1.push({ pinId: pin, zona: base.zona, precio: base.precio, min: base.min, min2: base.min2 })
+    cat_v2.push({ pinid: pin, zona: base.zona, precio: base.precio, min: base.min, min2: base.min2 })
+  }
+  const areaCaso = { id: rnd() < 0.6 ? 'sec-' + Math.floor(rnd() * 4) : null, nombre: elige(nombres_sec) }
+  const finde = rnd() < 0.5
+  const juegoCaso = { fecha: finde ? '2026-10-16' : '2026-10-13' } // viernes / martes
+  if (!comparar('precio_seccion', _getPrecioSecV1(areaCaso, cat_v1),
+    v2.precio_seccion(areaCaso, cat_v2), { areaCaso })) fallos++
+  if (!comparar('min_seccion', _getMinSecV1(areaCaso, cat_v1, finde),
+    v2.min_seccion(areaCaso, cat_v2, juegoCaso), { areaCaso, finde })) fallos++
+
+  // ── folios que se cancelan al borrar
+  const rid = 'NRJ-ADM-' + i
+  const pipe_v1 = []
+  const pipe_v2 = []
+  for (let k = 0; k < Math.floor(rnd() * 3); k++) {
+    const folio = rnd() < 0.3 ? 'PROS-00' + k : (rnd() < 0.5 ? '00' + k : '')
+    const ids = rnd() < 0.7 ? [rid] : ['otro']
+    pipe_v1.push({ id: 'p' + k, folio, reservaIds: ids })
+    pipe_v2.push({ id: 'p' + k, folio, reservaids: ids })
+  }
+  if (!comparar('folios_de_reserva_borrada', _foliosBorradoV1({ id: rid }, pipe_v1),
+    v2.folios_de_reserva_borrada({ id: rid }, pipe_v2), { rid })) fallos++
+}
+
+// ── folios: unicidad y forma ──
+{
+  const usados = new Set()
+  let choques = 0
+  for (let i = 0; i < 20000; i++) {
+    const f = v2.generar_folio_reserva('admin', [])
+    if (!/^NRJ-ADM-[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/.test(f)) choques = -1
+    if (usados.has(f)) choques++
+    usados.add(f)
+  }
+  afirmar('folio con la forma NRJ-ADM-XXXXX y sin 0/O/1/I/L', choques >= 0)
+  // 20,000 folios sobre 28.6M combinaciones: por el problema del cumpleaños se
+  // esperan ~7 colisiones. El generador las evita mirando las reservas ya
+  // existentes; aqui la lista va vacia a proposito, para medir el espacio.
+  afirmar('espacio de folios suficientemente grande', choques < 40)
+  afirmar('folio web usa su propio prefijo',
+    v2.generar_folio_reserva('web', []).startsWith('NRJ-WEB-'))
+  // El generador NO devuelve un folio que ya exista.
+  const existentes = []
+  for (let i = 0; i < 200; i++) existentes.push({ id: v2.generar_folio_reserva('admin', existentes) })
+  afirmar('nunca repite un folio ya usado',
+    new Set(existentes.map(r => r.id)).size === existentes.length)
+}
+
+// ── estado de zona: escrituras contra la base falsa ──
+{
+  const estados = { j1: { 'sec-1': 'reservada', 'sec-2': 'bloqueada' } }
+  afirmar('sin fila, la seccion nace libre', v2.estado_vivo(estados, 'j1', 'sec-9') === 'libre')
+  afirmar('estado vivo se lee tal cual', v2.estado_vivo(estados, 'j1', 'sec-2') === 'bloqueada')
+  afirmar('una seccion reservada NO se puede bloquear',
+    v2.puede_bloquearse(estados, 'j1', 'sec-1') === false)
+  afirmar('una libre si se puede bloquear', v2.puede_bloquearse(estados, 'j1', 'sec-9') === true)
+}
+{
+  const sb = base_falsa({ zona_juego_estado: { juego_id: 'j1', zona_id: 'sec-9' } })
+  const r = await v2.set_estado_zona(sb, admin, 'j1', 'sec-9', 'reservada')
+  afirmar('estado de zona: escribe el upsert', r.ok === true && sb.escrituras[0].tabla === 'zona_juego_estado')
+  afirmar('estado de zona: manda juego, zona y estado',
+    sb.escrituras[0].payload.juego_id === 'j1' && sb.escrituras[0].payload.estado === 'reservada')
+}
+{
+  // Un estado inventado no llega a la base.
+  const sb = base_falsa({ zona_juego_estado: {} })
+  const r = await v2.set_estado_zona(sb, admin, 'j1', 'sec-9', 'ocupadisima')
+  afirmar('estado invalido: no escribe', r.ok === false && sb.escrituras.length === 0)
+}
+{
+  // 0 filas sin error tambien aqui es fallo, no exito.
+  const sb = base_falsa({ zona_juego_estado: {} }, { filas: 0 })
+  const r = await v2.set_estado_zona(sb, admin, 'j1', 'sec-9', 'libre')
+  afirmar('estado de zona: 0 filas es fallo', r.ok === false && r.motivo === 'sin_filas')
+}
+{
+  // Bloquear una RESERVADA se rechaza y deja rastro del intento.
+  const sb = base_falsa({ zona_juego_estado: {}, movimientos: {} })
+  const r = await v2.alternar_bloqueo(sb, admin, {
+    juegoid: 'j1', zonaid: 'sec-1', nombre: 'Terraza 1',
+    areasestados: { j1: { 'sec-1': 'reservada' } },
+  })
+  afirmar('bloqueo de reservada: rechazado', r.ok === false && r.motivo === 'reservada')
+  afirmar('bloqueo de reservada: no toca zona_juego_estado',
+    !sb.escrituras.some(w => w.tabla === 'zona_juego_estado'))
+  afirmar('bloqueo de reservada: queda el intento en movimientos',
+    sb.escrituras.some(w => w.tabla === 'movimientos' && /RECHAZADO/.test(w.payload.descripcion)))
+}
+{
+  // Alternar de verdad: libre → bloqueada → libre.
+  const sb1 = base_falsa({ zona_juego_estado: {}, movimientos: {} })
+  const r1 = await v2.alternar_bloqueo(sb1, admin, {
+    juegoid: 'j1', zonaid: 'sec-9', nombre: 'Platea 9', areasestados: {},
+  })
+  afirmar('libre → bloqueada', r1.ok === true && r1.estado === 'bloqueada')
+
+  const sb2 = base_falsa({ zona_juego_estado: {}, movimientos: {} })
+  const r2 = await v2.alternar_bloqueo(sb2, admin, {
+    juegoid: 'j1', zonaid: 'sec-9', nombre: 'Platea 9',
+    areasestados: { j1: { 'sec-9': 'bloqueada' } },
+  })
+  afirmar('bloqueada → libre', r2.ok === true && r2.estado === 'libre')
+  afirmar('liberar deja rastro', sb2.escrituras.some(w => w.tabla === 'movimientos'))
+}
+{
+  // PERMISOS: la v1 deja zona_juego_estado FUERA de su guardia por tabla, asi
+  // que cualquiera con sesion podia sacar una seccion de venta. Aqui pide el
+  // mismo nivel que reservar esa seccion.
+  const vendedora = { id: 9, nombre: 'Vero', rol: 'Vendedora', permisos: { seccionesreservadas: 'editar' } }
+  afirmar('vendedora con reservas:editar puede cambiar estados',
+    v2.motivo_bloqueo(vendedora, 'zona_juego_estado') === null)
+  afirmar('cajero NO puede cambiar estados de zona',
+    v2.motivo_bloqueo(cajero, 'zona_juego_estado') === 'sin_permiso')
+  const sb = base_falsa({ zona_juego_estado: {} })
+  const r = await v2.set_estado_zona(sb, cajero, 'j1', 'sec-9', 'bloqueada')
+  afirmar('cajero: el estado de zona no se toca', r.ok === false && sb.escrituras.length === 0)
 }
 
 // ══ RESULTADO ═════════════════════════════════════════════════════

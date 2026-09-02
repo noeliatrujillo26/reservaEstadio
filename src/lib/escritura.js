@@ -32,6 +32,12 @@ export const tabla_modulo_edicion = {
   pipeline_prospectos: ['pipeline'],
   cotizaciones: ['cotizaciones'],
   descuentos_volumen: ['descuentos'],
+  // AGREGADA AQUI, no la trae la v1. Su _TABLA_MODULO_EDICION no declara
+  // `zona_juego_estado`, asi que la guardia por tabla la deja pasar sin mirar
+  // el rol: bloquear o liberar una seccion —sacarla de venta— quedaba al
+  // alcance de cualquier cuenta con sesion. Aqui pide el mismo nivel 'editar'
+  // que reservar esa seccion, que es la accion equivalente.
+  zona_juego_estado: ['seccionesreservadas', 'crear', 'palcos'],
 }
 
 // motivo por el que una escritura no procede, o null si puede proceder.
@@ -105,6 +111,17 @@ export async function insertar_verificado(sb, usuario, tabla, payload, clavesleg
     res = await sb.from(tabla).insert(subset_legacy(payload, claveslegacy)).select()
   }
   return interpretar(res, 'insert', tabla)
+}
+
+// El BORRADO real (no el suave). Se usa unicamente donde el negocio lo pide:
+// una reservacion eliminada desaparece de la base. Todo lo demas —cobros,
+// prospectos— se cancela con estado, para conservar la auditoria.
+// Verificado igual que los otros: cero filas es fallo, no exito.
+export async function borrar_verificado(sb, usuario, tabla, id) {
+  const bloqueo = motivo_bloqueo(usuario, tabla)
+  if (bloqueo) return { ok: false, motivo: bloqueo }
+  const res = await sb.from(tabla).delete().eq('id', id).select()
+  return interpretar(res, 'delete', tabla)
 }
 
 // ── bitacora ────────────────────────────────────────────────────

@@ -67,6 +67,7 @@ function confirmar_modal({ estado, oncerrar }) {
   )
 }
 
-const Confirmar = confirmar_modal
+// igual que ConfirmarSeguro: exportado para el banco de pruebas.
+export const Confirmar = confirmar_modal
 
 export default useconfirmar
