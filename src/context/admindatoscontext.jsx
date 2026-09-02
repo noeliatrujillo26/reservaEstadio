@@ -72,6 +72,12 @@ function map_cobro(c) {
     notas: c.notas || '',
     estado: c.estado || '', // 'cancelado' = borrado suave (no suma en nada)
     evidencia: c.evidencia,
+    // CFDI adjunto (migracion-cobros-cfdi.sql). La v1 lo guardaba SOLO en
+    // memoria, asi que se perdia al recargar; aqui vive en Storage y estas
+    // columnas llevan su liga. Sin la migracion llegan undefined y la vista
+    // simplemente ofrece adjuntarlo.
+    facturapdf: c.factura_pdf || '',
+    facturaxml: c.factura_xml || '',
     // hora exacta del pago (migracion-cobros-hora.sql). NULL en historicas.
     createdat: c.created_at || null,
   }

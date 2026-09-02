@@ -282,3 +282,65 @@ export function folio_reserva(c, reservas, areas) {
   })
   return r ? r.id : ''
 }
+
+// ── DETALLE DEL COBRO ───────────────────────────────────────────
+// espejo 1:1 de v1: CONCEPTO_COLOR, formatFecha(), _instanteCobro(),
+// _horaCobro() y _badgeEstadoCobro() (js/modules/cobros.js 17-167).
+
+export const concepto_color = {
+  ANTICIPO: 'badge-blue',
+  ABONO: 'badge-yellow',
+  LIQUIDACION: 'badge-green',
+  CONSUMO: 'badge-orange',
+  'CRÉDITO': 'badge-orange',
+  CREDITO: 'badge-orange',
+}
+
+export function formato_fecha(str) {
+  if (!str || str.length < 8) return str || '—'
+  try {
+    return new Date(str + 'T12:00:00').toLocaleDateString('es-MX', {
+      day: 'numeric', month: 'short', year: '2-digit',
+    })
+  } catch (e) {
+    return str
+  }
+}
+
+// El timestamp del que cuelga la hora: created_at si existe y, para las filas
+// historicas anteriores a migracion-cobros-hora.sql, el ISO que quedo escrito
+// dentro de las notas.
+function ts_de_cobro(c) {
+  let ts = (c && c.createdat) || null
+  if (!ts && c && c.notas) {
+    const m = String(c.notas).match(
+      /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?/
+    )
+    if (m) ts = m[0]
+  }
+  return ts
+}
+
+export function instante_cobro(c) {
+  if (!c) return 0
+  const ts = ts_de_cobro(c)
+  if (ts) {
+    const t = Date.parse(ts)
+    if (!isNaN(t)) return t
+  }
+  return typeof c.id === 'number' ? c.id : 0
+}
+
+// Hora del NEGOCIO (America/Hermosillo), igual que en Movimientos. Sin la zona
+// explicita cada navegador pintaba SU reloj: un admin conectado desde otra
+// zona veia horas distintas para el mismo cobro, y no cuadraban con las de
+// Movimientos.
+export function hora_cobro(c) {
+  const ts = ts_de_cobro(c)
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleTimeString('es-MX', {
+    hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Hermosillo',
+  }) + ' hrs'
+}

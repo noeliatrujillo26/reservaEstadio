@@ -75,3 +75,63 @@ export async function subir_comprobante(sb, file, carpeta) {
     return { url: null, ruta: null, error: e }
   }
 }
+
+// ── LEER LO YA GUARDADO ─────────────────────────────────────────
+// espejo 1:1 de v1: _rutaComprobante(), _esRutaBucket(), _firmarComprobante()
+// y _esReciboAuto() (js/modules/utils.js 988-1050).
+
+// Carpetas que existen de verdad en el bucket. Sirve para no confundir una
+// ruta ('recibos/1_x.pdf') con cualquier otra cadena que no lo es — un
+// '/api/recibo?f=…', por ejemplo, no debe tratarse como objeto de Storage.
+const carpetas_bucket = ['recibos', 'cotizaciones', 'pipeline', 'zonas', 'cobros', 'facturas']
+// Una hora: es lo que dura mirar un comprobante en el visor.
+export const expira_url_visor = 60 * 60
+
+// Extrae `carpeta/archivo.ext` de una URL de Storage, sea publica
+// (/object/public/<bucket>/…) o firmada (/object/sign/<bucket>/…?token=…).
+// Devuelve null si la URL no apunta a este bucket — asi los recibos
+// automaticos de /api/recibo y las ligas viejas sin ruta se dejan intactos.
+export function ruta_de_url(url) {
+  const txt = String(url || '')
+  const m = txt.match(
+    new RegExp('/storage/v1/object/(?:public|sign)/' + bucket + '/([^?#]+)')
+  )
+  if (!m) return null
+  try {
+    return decodeURIComponent(m[1])
+  } catch (e) {
+    return m[1]
+  }
+}
+
+// ¿La cadena es una ruta del bucket tal cual, sin envolverla en una URL?
+export function es_ruta_bucket(v) {
+  const t = String(v || '')
+  if (!t || /^https?:\/\//i.test(t) || t.charAt(0) === '/') return false
+  return carpetas_bucket.indexOf(t.split('/')[0]) !== -1
+}
+
+// Una evidencia que apunta a /api/recibo es el RECIBO DIGITAL que genera el
+// sistema solo (pagos en efectivo sin comprobante manual), no un archivo que
+// subio alguien — la interfaz lo etiqueta distinto.
+export function es_recibo_auto(evidencia) {
+  return /\/api\/recibo\?/.test(String(evidencia || ''))
+}
+
+// Firma una ruta, o re-firma una URL ya guardada. Ante CUALQUIER fallo
+// devuelve la entrada sin tocar: mas vale una liga vieja que ninguna.
+//
+// Con esto los registros antiguos —que guardaron una URL publica— se reparan
+// solos al abrirlos, sin tocar la base.
+export async function firmar_comprobante(sb, urloruta, expiraseg) {
+  const ruta = ruta_de_url(urloruta) || (es_ruta_bucket(urloruta) ? String(urloruta) : null)
+  if (!ruta || es_carpeta_publica(ruta)) return urloruta
+  try {
+    const { data, error } = await sb.storage
+      .from(bucket).createSignedUrl(ruta, expiraseg || expira_url_visor)
+    if (error || !data || !data.signedUrl) return urloruta
+    return data.signedUrl
+  } catch (e) {
+    return urloruta
+  }
+}

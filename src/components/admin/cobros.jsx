@@ -13,31 +13,24 @@
 
 import { useMemo, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
+import { usetoast } from '../../context/toastcontext'
 import usefactura from '../../hooks/usefactura'
 import usecobrosescritura from '../../hooks/usecobrosescritura'
 import CobrosFiltros from './cobrosfiltros'
 import NuevoCobro from './nuevocobro'
+import DetalleCobro from './detallecobro'
 import { useconfirmar } from './confirmar'
+import { abrir_recibo_cobro } from '../../lib/recibo'
+import { mensaje_reporte_dia, url_whatsapp_reporte } from '../../lib/reportedia'
+import { hoy_hermosillo } from '../../lib/fechas'
 import {
   cobro_cancelado, estado_cobro, filtrar_cobros, kpis_cobros, meses_label,
   ordenar_cobros, requiere_factura, resumen_por_vendedora, resumen_por_zona,
-  colores_vendedora, folio_reserva,
+  colores_vendedora, folio_reserva, formato_fecha,
 } from '../../lib/cobros'
 import { redondear_dinero, mxn2 } from '../../lib/dinero'
 
 const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2)
-
-// espejo de formatFecha() de la v1.
-function formato_fecha(str) {
-  if (!str || str.length < 8) return str || '—'
-  try {
-    return new Date(str + 'T12:00:00').toLocaleDateString('es-MX', {
-      day: 'numeric', month: 'short', year: '2-digit',
-    })
-  } catch (e) {
-    return str
-  }
-}
 
 const filtros_vacios = {
   busqueda: '', mes: [], concepto: [], forma: [], recibio: [], factura: [],
@@ -59,6 +52,7 @@ const columnas = [
 
 export default function cobros() {
   const { cobros: todos, reservas, areas, cargando, errores } = useadmindatos()
+  const { mostrartoast } = usetoast()
 
   const [filtros, setfiltros] = useState(filtros_vacios)
   const [orden, setorden] = useState({ col: 'fecha', dir: 'desc' })
@@ -71,6 +65,22 @@ export default function cobros() {
   } = usecobrosescritura()
   const { confirmar, dialogo } = useconfirmar()
   const [abrirnuevo, setabrirnuevo] = useState(false)
+  // id del cobro abierto en el detalle. Se guarda el ID y no el objeto: tras
+  // una escritura el panel relee de la base, y con el objeto viejo el modal
+  // seguiria mostrando el estado anterior.
+  const [detalleid, setdetalleid] = useState(null)
+  const detalle = useMemo(
+    () => (detalleid == null ? null : todos.find((c) => c.id === detalleid) || null),
+    [detalleid, todos]
+  )
+
+  // REPORTE DEL DIA: arma el mensaje (lib/reportedia.js, probado con el banco
+  // diferencial) y abre WhatsApp. No escribe nada.
+  function enviar_reporte_dia() {
+    const msg = mensaje_reporte_dia(todos, hoy_hermosillo())
+    window.open(url_whatsapp_reporte(msg), '_blank')
+    mostrartoast('📤 Abriendo WhatsApp con el reporte del día…')
+  }
 
   // CANCELACION: se pide confirmacion con el monto y el cliente a la vista, y
   // se dice que el registro NO se borra. Es un borrado suave — el cobro se
@@ -87,6 +97,14 @@ export default function cobros() {
       'Sí, cancelar cobro'
     )
     if (ok) cancelar(c)
+  }
+
+  // El recibo se abre en pestana nueva. Si el navegador bloquea la ventana
+  // emergente hay que decirlo, o el boton parece no hacer nada.
+  function descargar_recibo(c) {
+    if (!abrir_recibo_cobro(c, { reservas, areas })) {
+      mostrartoast('⚠️ Permite ventanas emergentes para ver el recibo')
+    }
   }
 
   // opciones de cada desplegable: las fijas del sistema mas TODA forma y
@@ -120,13 +138,16 @@ export default function cobros() {
             <h2>Registro de Cobros</h2>
             <p>Captura de anticipos, abonos, liquidaciones y consumos por juego · Reemplaza el control en Excel</p>
           </div>
-          {puede_editar && (
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button className="btn btn-outline btn-sm" onClick={enviar_reporte_dia}>
+              📤 Enviar reporte del día
+            </button>
+            {puede_editar && (
               <button className="btn btn-primary btn-sm" onClick={() => setabrirnuevo(true)}>
                 + Nuevo Cobro
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {cargando && <p style={{ fontSize: '13px', color: 'var(--text-3)' }}>Cargando cobros…</p>}
@@ -186,7 +207,8 @@ export default function cobros() {
                       </th>
                     ))}
                     <th style={{ whiteSpace: 'nowrap' }}>Folio Reserva</th>
-                    {puede_editar && <th style={{ whiteSpace: 'nowrap' }}>Acciones</th>}
+                    <th style={{ whiteSpace: 'nowrap' }}>Recibo</th>
+                    <th style={{ whiteSpace: 'nowrap' }}>Acciones</th>
                   </tr>
                 </thead>
                 <tbody id="cobros-tbody">
@@ -235,13 +257,31 @@ export default function cobros() {
                         <td style={{ whiteSpace: 'nowrap' }}>
                           {folio_reserva(c, reservas, areas) || '—'}
                         </td>
-                        {puede_editar && (
-                          <td>
+                        <td>
+                          <button
+                            className="btn btn-ghost btn-xs"
+                            title="Descargar recibo PDF"
+                            onClick={() => descargar_recibo(c)}
+                            style={{ border: '1px solid var(--border)', borderRadius: '6px', padding: '3px 9px', fontSize: '13px', lineHeight: 1, whiteSpace: 'nowrap' }}
+                          >
+                            📄 PDF
+                          </button>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '4px', whiteSpace: 'nowrap', alignItems: 'center' }}>
+                            <button
+                              className="btn btn-ghost btn-xs"
+                              title="Ver detalle"
+                              onClick={() => setdetalleid(c.id)}
+                              style={{ border: '1px solid var(--border)', borderRadius: '6px', padding: '3px 9px', fontSize: '16px', lineHeight: 1 }}
+                            >
+                              ···
+                            </button>
                             {cancelado ? (
                               <span className="badge badge-red" style={{ fontSize: '10px', fontWeight: 800 }}>
                                 CANCELADO
                               </span>
-                            ) : (
+                            ) : puede_editar ? (
                               <button
                                 className="btn btn-outline btn-xs"
                                 onClick={() => pedir_cancelar(c)}
@@ -251,9 +291,9 @@ export default function cobros() {
                               >
                                 {cancelando === c.id ? '…' : '⛔ Cancelar'}
                               </button>
-                            )}
-                          </td>
-                        )}
+                            ) : null}
+                          </div>
+                        </td>
                       </tr>
                     )
                   })}
@@ -347,6 +387,12 @@ export default function cobros() {
         oncerrar={() => setabrirnuevo(false)}
         onregistrar={registrar}
         guardando={registrando}
+      />
+      <DetalleCobro
+        cobro={detalle}
+        oncerrar={() => setdetalleid(null)}
+        oncancelar={(c) => { setdetalleid(null); pedir_cancelar(c) }}
+        cancelando={cancelando}
       />
       {dialogo}
     </div>

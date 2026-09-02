@@ -1066,6 +1066,29 @@ body.vista-solo-ver .modal select,
 .pagina-admin .w-full {
   width: 100%;
 }
+
+/* ── info-chip ────────────────────────────────────────────────────
+   DESVIACION DELIBERADA, y menor. La v1 usa .info-chip en el detalle del
+   cobro y en el del prospecto, pero NUNCA la define dentro del panel: solo
+   existe en panel-inicio.html, que es otra pagina y otro ambito. En el panel
+   de la v1 estos chips salen sin estilo, como divs sueltos.
+   Se porta aqui la misma definicion de panel-inicio, traducida a los tokens
+   del panel, porque un descuido de CSS no es una regla de negocio que haya
+   que conservar. */
+.pagina-admin .info-chip {
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.pagina-admin .info-chip-label {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 2px;
+}
+.pagina-admin .info-chip-val {
+  font-size: 14px;
+  font-weight: 600;
+}
 .pagina-admin .cobros-tab-pane {
   display: none;
 }

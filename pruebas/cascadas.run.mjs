@@ -705,6 +705,179 @@ function afirmar(desc, cond) {
     v2.afecta_saldo_reserva({ folio: 'PROS-1', monto: 100, concepto: 'ABONO', formapago: 'EFECTIVO' }, reservas) === false)
 }
 
+// ══ 5. REPORTE DEL DIA, HORA Y DATOS FISCALES ═════════════════════
+// El reporte del dia es una cuenta de dinero (el total de la caja), asi que
+// entra al diferencial como todo lo demas.
+
+function formatFecha(str) {
+  if (!str || str.length < 8) return str || '—'
+  try {
+    const d = new Date(str + 'T12:00:00')
+    return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: '2-digit' })
+  } catch { return str }
+}
+
+// enviarReporteDia(), sin el window.open final.
+function _mensajeReporteDia(cobros, hoy) {
+  const hoyData = cobros.filter(c => c.fecha === hoy && !_cobroCancelado(c))
+  const total = hoyData.reduce((s, c) => s + (_cobroSinDineroNuevo(c) ? 0 : c.monto), 0)
+  const creditoDia = hoyData.reduce((s, c) => s + (_esCobroCredito(c) ? c.monto : 0), 0)
+  const porConcepto = {}
+  hoyData.forEach(c => { porConcepto[c.concepto] = (porConcepto[c.concepto] || 0) + c.monto })
+
+  let msg = '📊 *Reporte de cobros — ' + formatFecha(hoy) + '*\n\n'
+  if (hoyData.length === 0) {
+    msg += 'Sin cobros registrados hoy.'
+  } else {
+    hoyData.forEach(c => {
+      msg += '• ' + c.cliente.split('/')[0].trim() + ' — ' + c.zona + ' — ' + c.concepto +
+        (_esCobroCredito(c) ? ' (CRÉDITO · por cobrar)' : '') +
+        ' — $' + c.monto.toLocaleString('es-MX', _MXN2) + '\n'
+    })
+    msg += '\n'
+    Object.entries(porConcepto).forEach(([k, v]) => {
+      msg += k + ': $' + v.toLocaleString('es-MX', _MXN2) + '\n'
+    })
+    msg += '\n*Total del día: $' + total.toLocaleString('es-MX', _MXN2) + '* (' + hoyData.length + ' cobros)'
+    if (creditoDia > 0) msg += '\n💳 A crédito (NO cobrado): $' + creditoDia.toLocaleString('es-MX', _MXN2)
+  }
+  return msg
+}
+
+// _horaCobro() e _instanteCobro().
+function _tsDeCobro(c) {
+  let ts = c.createdAt || null
+  if (!ts && c.notas) {
+    const m = String(c.notas).match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?/)
+    if (m) ts = m[0]
+  }
+  return ts
+}
+function _instanteCobro(c) {
+  if (!c) return 0
+  const ts = _tsDeCobro(c)
+  if (ts) { const t = Date.parse(ts); if (!isNaN(t)) return t }
+  return typeof c.id === 'number' ? c.id : 0
+}
+function _horaCobro(c) {
+  const ts = _tsDeCobro(c)
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleTimeString('es-MX', {
+    hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Hermosillo',
+  }) + ' hrs'
+}
+
+// _buscarFacturacionCliente(), solo con la fuente de la BASE (la v2 no migra
+// el espejo de localStorage a proposito).
+function _buscarFacturacionCliente(email, nombre, tel, lista) {
+  const norm = s => String(s || '').toLowerCase().trim()
+  const telBuscado = _telNorm(tel)
+  const nomBuscado = _nombreNorm(nombre)
+  let c = null
+  if (telBuscado) {
+    c = lista.find(x => {
+      const t = _telNorm(x.tel)
+      if (!t || t !== telBuscado) return false
+      const n = _nombreNorm(x.nombre)
+      return !n || !nomBuscado || n === nomBuscado
+    })
+  }
+  if (!c && nomBuscado) c = lista.find(x => _nombreNorm(x.nombre) === nomBuscado)
+  if (!c && email) c = lista.find(x => norm(x.email) === norm(email))
+  if (c && c.facturacion) return c.facturacion
+  return null
+}
+
+const _MXN2 = { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+const zonas = ['Terraza Derecha 1', 'Palco All-Inc 2', 'Platea Izq 3', '']
+const fechas = ['2026-09-02', '2026-09-01', '2026-10-14', '']
+
+for (let i = 0; i < 4000; i++) {
+  const hoy = elige(fechas.filter(Boolean))
+  const n = Math.floor(rnd() * 6)
+  const lista_v1 = []
+  const lista_v2 = []
+  for (let k = 0; k < n; k++) {
+    const base = {
+      id: i * 10 + k,
+      fecha: elige(fechas),
+      cliente: elige(nombres) + (rnd() < 0.2 ? ' / SEGUNDO' : ''),
+      zona: elige(zonas),
+      concepto: elige(conceptos),
+      monto: dinero(0, 20000),
+      estado: rnd() < 0.2 ? 'cancelado' : '',
+      notas: rnd() < 0.3 ? 'Registrado 2026-09-02T14:35:07Z' : '',
+    }
+    const forma = elige(formas)
+    lista_v1.push({ ...base, formaPago: forma, createdAt: rnd() < 0.5 ? '2026-09-02T21:35:07Z' : null })
+    lista_v2.push({ ...base, formapago: forma, createdat: lista_v1[k].createdAt })
+  }
+
+  if (!comparar('mensaje_reporte_dia', _mensajeReporteDia(lista_v1, hoy),
+    v2.mensaje_reporte_dia(lista_v2, hoy), { hoy, n })) fallos++
+
+  lista_v1.forEach((c, k) => {
+    if (!comparar('hora_cobro', _horaCobro(c), v2.hora_cobro(lista_v2[k]), { c })) fallos++
+    if (!comparar('instante_cobro', _instanteCobro(c), v2.instante_cobro(lista_v2[k]), { c })) fallos++
+    if (!comparar('formato_fecha', formatFecha(c.fecha), v2.formato_fecha(c.fecha), { f: c.fecha })) fallos++
+  })
+
+  // datos fiscales
+  const fichas = []
+  for (let k = 0; k < Math.floor(rnd() * 4); k++) {
+    fichas.push({
+      id: k + 1,
+      nombre: elige(nombres),
+      email: rnd() < 0.6 ? 'x@y.com' : '',
+      tel: rnd() < 0.6 ? '66212345' + Math.floor(rnd() * 90 + 10) : '',
+      facturacion: rnd() < 0.7 ? { rfc: 'XAXX010101000', regimen: '626', cp: '83000' } : null,
+    })
+  }
+  const ref = { email: rnd() < 0.5 ? 'x@y.com' : '', nombre: elige(nombres), tel: rnd() < 0.5 ? '6621234511' : '' }
+  if (!comparar('buscar_facturacion_cliente',
+    _buscarFacturacionCliente(ref.email, ref.nombre, ref.tel, fichas),
+    v2.buscar_facturacion_cliente(ref.email, ref.nombre, ref.tel, fichas), { ref })) fallos++
+}
+
+// ══ 6. RECIBO Y STORAGE ═══════════════════════════════════════════
+{
+  // El recibo lleva datos que captura un usuario y acaban dentro de un
+  // documento HTML: tienen que salir escapados.
+  const html = v2.html_recibo_cobro(
+    { id: 1, folio: 'R-1', cliente: '<script>alert(1)</script>', fecha: '2026-09-02',
+      area: 'ASADOR', zona: 'Terraza & Palco', concepto: 'ABONO', formapago: 'EFECTIVO',
+      recibio: 'FER', monto: 1234.5, notas: 'nota "con comillas" & <b>' },
+    { reservas: [], areas: [] }
+  )
+  afirmar('recibo: escapa el nombre del cliente', !html.includes('<script>alert(1)</script>'))
+  afirmar('recibo: escapa el ampersand de la zona', html.includes('Terraza &amp; Palco'))
+  afirmar('recibo: escapa las comillas de las notas', html.includes('&quot;con comillas&quot;'))
+  afirmar('recibo: imprime el monto con dos decimales', html.includes('$1,234.50 MXN'))
+  afirmar('recibo: incluye las dos leyendas legales',
+    html.includes('Consérvalo para cualquier aclaración') && html.includes('solicitarla dentro del mes'))
+}
+{
+  const base = 'https://x.supabase.co/storage/v1/object'
+  afirmar('ruta de URL firmada',
+    v2.ruta_de_url(base + '/sign/comprobantes_pagos/cobros/1_x.pdf?token=abc') === 'cobros/1_x.pdf')
+  afirmar('ruta de URL publica',
+    v2.ruta_de_url(base + '/public/comprobantes_pagos/zonas/a.png') === 'zonas/a.png')
+  afirmar('URL ajena: no es del bucket', v2.ruta_de_url('https://otro.com/a.pdf') === null)
+  afirmar('ruta suelta reconocida', v2.es_ruta_bucket('facturas/1_cfdi.pdf') === true)
+  afirmar('una URL no es una ruta suelta', v2.es_ruta_bucket(base + '/sign/x/y') === false)
+  afirmar('recibo automatico detectado', v2.es_recibo_auto('/api/recibo?f=recibos/1.html') === true)
+  afirmar('comprobante subido no es recibo automatico',
+    v2.es_recibo_auto(base + '/sign/comprobantes_pagos/cobros/1_x.pdf') === false)
+}
+{
+  // El regimen se lee con su clave Y su nombre: emitir con el equivocado es grave.
+  afirmar('regimen legible', v2.regimen_legible('626') === '626 · Régimen Simplificado de Confianza (RESICO)')
+  afirmar('sin regimen', v2.regimen_legible('') === '—')
+  afirmar('regimen desconocido no inventa nombre', v2.regimen_legible('999') === '999 · ')
+}
+
 // ══ RESULTADO ═════════════════════════════════════════════════════
 console.log('\n── diferencial contra la v1 ──')
 console.log('  comparaciones: ' + casos.toLocaleString('es-MX'))

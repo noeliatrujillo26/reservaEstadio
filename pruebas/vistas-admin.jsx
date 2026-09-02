@@ -34,6 +34,9 @@ import Cotizaciones from '../src/components/admin/cotizaciones'
 import Pipeline from '../src/components/admin/pipeline'
 import Palcos from '../src/components/admin/palcos'
 import Completados from '../src/components/admin/completados'
+import DetalleCobro from '../src/components/admin/detallecobro'
+import NuevoCobro from '../src/components/admin/nuevocobro'
+import Evidencia from '../src/components/admin/evidencia'
 
 const secciones=[{id:'sec-1',num:1,nombre:'Terraza Derecha 1',cap:64,es_compartida:false,min_personas:20,precio:9750,precio_extra:500,precio_nino:200,sku:'TD1',descripcion:'Carne asada incluida',short_description:'Vista al diamante',img:'https://x/a.png',img2:null},
  {id:'sec-2',num:2,nombre:'Palco All-Inc 2',cap:60,es_compartida:true,capacidad_maxima:40,precio2:12000,img:null,img2:'https://x/b.png'}]
@@ -41,11 +44,12 @@ const areas=[{id:'sec-1',nombre:'Terraza Derecha 1',cap:64,escompartida:false,es
  {id:'sec-2',nombre:'Palco All-Inc 2',cap:60,escompartida:true,capacidadmaxima:40,estado:'libre'}]
 const juegos=[{id:'j1',mes:'oct',fecha:'2026-10-14',hora:'19:30',rival:'Mayos',num:1,serie:'S1',estado:'Confirmado'}]
 const reservas=[{id:1,cliente:'Ana',zona:'Terraza Derecha 1',juego:'vs Mayos',juegoid:'j1',zonaid:'sec-1',monto:9750,montopagado:5000,descuentomonto:0,estadopago:'parcial',pago:'',estado:'activa',email:'a@x.com',tel:'6621234567',personas:20,adultos:null,ninos:2,saldoconsumo:500}]
-const cobros=[{id:1,fecha:'2026-08-05',mes:'Agosto',cliente:'Ana',concepto:'ABONO',monto:5000,formapago:'EFECTIVO',folio:'1',estado:'',createdat:null,zona:'Terraza Derecha 1',recibio:'FER',factura:'REQUERIDA'}]
+const cobros=[{id:1,fecha:'2026-08-05',mes:'Agosto',cliente:'Ana',concepto:'ABONO',monto:5000,formapago:'EFECTIVO',folio:'1',estado:'',createdat:'2026-08-05T17:24:00Z',zona:'Terraza Derecha 1',area:'ASADOR',recibio:'FER',factura:'REQUERIDA',email:'a@x.com',notas:'captura manual',evidencia:'https://x.supabase.co/storage/v1/object/sign/comprobantes_pagos/cobros/1_v.pdf?token=t',facturapdf:'',facturaxml:''},
+ {id:2,fecha:'2026-08-06',mes:'Agosto',cliente:'Luis',concepto:'CRÉDITO',monto:3000,formapago:'CREDITO',folio:'1',estado:'cancelado',createdat:null,zona:'Palco All-Inc 2',area:'ASADOR',recibio:'MELI',factura:'',email:'',notas:'',evidencia:'',facturapdf:'https://x/cfdi.pdf',facturaxml:''}]
 
 const valor={secciones,areas,juegos,reservas,cobros,areasestados:{j1:{'sec-1':'reservada'}},
  movimientos:[{id:1,fecha:'2026-08-05',ts:'5 ago · 10:24',tipo:'Pago',desc:'Abono',ref:'1',usuario:'FER',monto:5000}],
- clientes:[{id:1,nombre:'Ana',email:'a@x.com',tel:'6621234567'}],
+ clientes:[{id:1,nombre:'Ana',email:'a@x.com',tel:'6621234567',facturacion:{rfc:'XAXX010101000',regimen:'626',razonSocial:'ANA SA',usoCfdi:'G03',cp:'83000',constanciaUrl:'https://x/csf.pdf',constanciaArchivo:'csf.pdf'}}],
  usuarios:[{id:1,nombre:'Admin Uno',email:'a@n.mx',rol:'Administrador',estado:'Activo',permisos:{}}],
  descuentos:[{id:1,codigo:'NRJ10',tipo:'porcentaje',valor:10,descripcion:'x',usos:2,usosmax:10,vigencia:'2099-01-01',estado:'Activo',juegosaplicables:[]}],
  descuentosvolumen:[{id:1,nombre:'Grupo',minpersonas:20,porcentaje:5,juegos:null,zonas:null,activo:true}],
@@ -59,10 +63,21 @@ const valor={secciones,areas,juegos,reservas,cobros,areasestados:{j1:{'sec-1':'r
  cargando:false,errores:[]}
 const sesion={usuario:{id:1,nombre:'Admin Uno',email:'a@n.mx',rol:'Administrador',permisos:{},iniciales:'AU'},estado:'dentro',error:'',seterror(){},iniciar_sesion(){},cerrar_sesion(){},escritura_admin:false}
 
+// Los MODALES no se montan solos desde la vista: hay que abrirlos. Envueltos
+// asi entran al banco como una vista mas — si no, su codigo no se renderiza
+// nunca y volveriamos al punto ciego de "Miniatura is not defined".
+const DetalleAbierto = () => <DetalleCobro cobro={cobros[0]} oncerrar={()=>{}} oncancelar={()=>{}} cancelando={null} />
+const DetalleCancelado = () => <DetalleCobro cobro={cobros[1]} oncerrar={()=>{}} oncancelar={()=>{}} cancelando={null} />
+const NuevoAbierto = () => <NuevoCobro abierto oncerrar={()=>{}} onregistrar={async()=>({ok:true})} guardando={false} />
+const EvidenciaPdf = () => <Evidencia abierto archivo={cobros[0].evidencia} concepto="ABONO" monto={5000} fecha="5 ago 26" oncerrar={()=>{}} />
+const EvidenciaSinLiga = () => <Evidencia abierto archivo="comprobante.jpg" concepto="ABONO" monto={null} fecha="" oncerrar={()=>{}} />
+
 export const vistas={dashboard:Dashboard,cobros:Cobros,seccionesreservadas:Reservas,clientes:Clientes,
  usuarios:Usuarios,movimientos:Movimientos,consumos:Consumos,temporadas:Temporadas,descuentos:Descuentos,metodos:Metodos,
  reportes:Reportes,mensajes:Mensajes,landing:Landing,precios:Precios,cotizaciones:Cotizaciones,
- pipeline:Pipeline,palcos:Palcos,completados:Completados}
+ pipeline:Pipeline,palcos:Palcos,completados:Completados,
+ detallecobro:DetalleAbierto,detallecancelado:DetalleCancelado,nuevocobro:NuevoAbierto,
+ evidenciapdf:EvidenciaPdf,evidenciasinliga:EvidenciaSinLiga}
 
 export function render(Comp){
   return renderToString(
