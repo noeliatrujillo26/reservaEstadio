@@ -13,11 +13,21 @@ export function toastprovider({ children }) {
   const [visible, setvisible] = useState(false)
   const temporizador = useRef(null)
 
-  const mostrartoast = useCallback((msg) => {
+  // mostrartoast(msg, ms?) — espejo de toast(msg, ms) de la v1.
+  //
+  // La duracion NO es cosmetica. Se migro sin el segundo parametro y con un
+  // 3000 fijo, asi que un aviso largo como "la reserva se creó pero la sección
+  // NO se marcó como reservada" duraba lo mismo que un "✅ guardado" y se
+  // perdia. Aqui vuelve la regla de la v1: los avisos de ERROR duran 8 s para
+  // alcanzar a leerlos y los informativos 1.8 s, con `ms` para forzar una
+  // duracion concreta.
+  const mostrartoast = useCallback((msg, ms) => {
     setmensaje(msg)
     setvisible(true)
     clearTimeout(temporizador.current)
-    temporizador.current = setTimeout(() => setvisible(false), 3000)
+    const t = String(msg || '').trim()
+    const eserror = t.startsWith('⚠') || t.startsWith('⛔') || t.startsWith('❌') || t.startsWith('🚫')
+    temporizador.current = setTimeout(() => setvisible(false), ms || (eserror ? 8000 : 1800))
   }, [])
 
   return (

@@ -28,7 +28,7 @@ import {
 } from '../lib/escritura'
 import { revertir_saldo_favor_de_cobro, texto_reversion_saldo } from '../lib/cascadas'
 import { cobro_cancelado } from '../lib/cobros'
-import { set_estado_zona } from '../lib/mapaocupacion'
+import { set_estado_zona, texto_fallo_estado } from '../lib/mapaocupacion'
 import {
   cobro_inicial, economia_reserva, email_valido, estado_pago_reserva, etiqueta_juego,
   folio_visible, folios_de_reserva_borrada, generar_folio_reserva, tel_valido,
@@ -130,6 +130,9 @@ export function usereservasescritura() {
       const editando = datos.editando || null
 
       setguardando(true)
+      // Se juntan y se enseñan AL FINAL: el toast tiene UNA sola ranura, y el
+      // "✅ Reserva creada" borraba la advertencia de la seccion sin apartar.
+      const avisos = []
       try {
         const comun = {
           cliente: nombre,
@@ -173,12 +176,8 @@ export function usereservasescritura() {
               sb, usuario, editando.juegoid, editando.zonaid, 'libre'
             )
             const ocupa = await set_estado_zona(sb, usuario, j.id, a.id, 'reservada')
-            if (!libera.ok || !ocupa.ok) {
-              mostrartoast(
-                '⚠️ La reserva se guardó, pero el estado de las secciones no se ' +
-                'actualizó del todo. Revísalo en el mapa.', 9000
-              )
-            }
+            if (!libera.ok) avisos.push(texto_fallo_estado(libera, 'sección anterior'))
+            if (!ocupa.ok) avisos.push(texto_fallo_estado(ocupa, a.nombre))
           }
 
           mostrartoast('✅ Reserva actualizada')
@@ -188,8 +187,9 @@ export function usereservasescritura() {
             ref: nombre,
             usuario: usuario ? usuario.nombre : '—',
           })
-          recargar()
-          return { ok: true, id: editando.id }
+          await recargar()
+          if (avisos.length) mostrartoast(avisos.join(' · '), 9000)
+          return { ok: true, id: editando.id, avisos }
         }
 
         // ── ALTA ──
@@ -240,8 +240,9 @@ export function usereservasescritura() {
           monto: cobrar || null,
           usuario: usuario ? usuario.nombre : '—',
         })
-        recargar()
-        return { ok: true, id: nuevoid }
+        await recargar()
+        if (avisos.length) mostrartoast(avisos.join(' · '), 9000)
+        return { ok: true, id: nuevoid, avisos }
       } catch (err) {
         console.error('guardar reserva:', err)
         mostrartoast('⚠️ No se pudo guardar la reserva. Intenta de nuevo.')
@@ -267,6 +268,7 @@ export function usereservasescritura() {
       if (!confirmacion || !confirmacion.motivo) return { ok: false }
 
       setborrando(reserva.id)
+      const avisos = []
       try {
         const res = await borrar_verificado(sb, usuario, 'reservas', reserva.id)
         if (!res.ok) {
@@ -296,9 +298,10 @@ export function usereservasescritura() {
         //    la reserva ya no existe y la zona quedaria bloqueada sin dueño.
         const libera = await set_estado_zona(sb, usuario, reserva.juegoid, reserva.zonaid, 'libre')
         if (!libera.ok) {
-          mostrartoast(
-            '⚠️ La reserva se eliminó, pero la sección NO se pudo liberar en la base. ' +
-            'Libérala a mano desde el mapa o vuelve a intentarlo.', 9000
+          avisos.push(
+            '⚠️ La reserva se eliminó, pero la sección NO se pudo liberar' +
+            (libera.motivo === 'sin_permiso' ? ' (sin permiso sobre secciones).' : ' en la base.') +
+            ' Libérala a mano desde el mapa.'
           )
         }
 
@@ -312,11 +315,11 @@ export function usereservasescritura() {
             sb, usuario, 'pipeline_prospectos', { reserva_ids: quedan }, p.id, null
           )
           if (!desv.ok) {
-            mostrartoast(
+            avisos.push(
               '⚠️ La reserva se eliminó, pero el prospecto ' + (p.folio || p.id) +
               ' no se pudo desvincular' +
               (desv.motivo === 'sin_permiso' ? ' (no tienes permiso sobre Pipeline).' : '.') +
-              ' Recarga e inténtalo de nuevo.', 8000
+              ' Recarga e inténtalo de nuevo.'
             )
           }
         }
@@ -330,8 +333,9 @@ export function usereservasescritura() {
           ref: folio_visible(reserva),
           usuario: usuario ? usuario.nombre : '—',
         })
-        recargar()
-        return { ok: true }
+        await recargar()
+        if (avisos.length) mostrartoast(avisos.join(' · '), 9000)
+        return { ok: true, avisos }
       } finally {
         setborrando(null)
       }

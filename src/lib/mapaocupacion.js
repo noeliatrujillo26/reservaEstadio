@@ -45,22 +45,25 @@ export async function set_estado_zona(sb, usuario, juegoid, zonaid, estado) {
   if (bloqueo) return { ok: false, motivo: bloqueo }
   if (estados_zona.indexOf(estado) < 0) return { ok: false, motivo: 'estado-invalido' }
 
-  const res = await sb
-    .from('zona_juego_estado')
-    .upsert({ juego_id: juegoid, zona_id: zonaid, estado })
-    .select()
+  // Se mandan los ids TAL CUAL llegan y ademas se dejan en el diagnostico: si
+  // alguna vez no cuadran con lo que la tabla guarda (un juego_id numerico
+  // contra uno de texto, por ejemplo), el mensaje lo enseña en vez de dejar
+  // adivinando por que la seccion sigue libre.
+  const fila = { juego_id: juegoid, zona_id: zonaid, estado }
+  const res = await sb.from('zona_juego_estado').upsert(fila).select()
+
   if (res.error) {
-    console.error('escritura/upsert en zona_juego_estado:', res.error)
-    return { ok: false, motivo: 'error', error: res.error }
+    console.error('escritura/upsert en zona_juego_estado:', res.error, '· fila:', fila)
+    return { ok: false, motivo: 'error', error: res.error, fila }
   }
   if (!(res.data || []).length) {
     console.error(
       'escritura/upsert en zona_juego_estado: 0 filas afectadas ' +
-      '(¿política RLS, o falta la clave única (juego_id, zona_id)?)'
+      '(¿política RLS, o falta la clave única (juego_id, zona_id)?) · fila:', fila
     )
-    return { ok: false, motivo: 'sin_filas' }
+    return { ok: false, motivo: 'sin_filas', fila }
   }
-  return { ok: true, filas: res.data.length, estado }
+  return { ok: true, filas: res.data.length, estado, fila }
 }
 
 // Bloquear o liberar, con su rastro. El movimiento se registra TAMBIEN cuando
@@ -90,4 +93,23 @@ export async function alternar_bloqueo(sb, usuario, { juegoid, zonaid, nombre, a
     usuario: usuario ? usuario.nombre : '—',
   })
   return { ok: true, estado: siguiente, etiqueta }
+}
+
+// Aviso comun de un estado de seccion que no se pudo escribir. Nombra la causa
+// probable, porque las tres se arreglan de forma distinta: sin permiso es un
+// rol mal configurado, sin filas es RLS o la clave unica, y error es la base.
+export function texto_fallo_estado(res, nombre) {
+  if (!res || res.ok) return null
+  const donde = nombre ? ' (' + nombre + ')' : ''
+  if (res.motivo === 'sin_permiso') {
+    return '⚠️ La sección' + donde + ' NO se marcó: tu perfil no tiene permiso para ' +
+      'cambiar el estado de las secciones. Pídelo y márcala a mano mientras tanto.'
+  }
+  if (res.motivo === 'sin_filas') {
+    return '⚠️ La sección' + donde + ' NO se marcó: la base no aceptó el cambio (0 filas). ' +
+      'Revisa las políticas RLS de `zona_juego_estado` y su clave única (juego_id, zona_id).'
+  }
+  return '⚠️ La sección' + donde + ' NO se marcó como reservada' +
+    (res.error && res.error.message ? ': ' + res.error.message : '.') +
+    ' Márcala a mano desde el mapa.'
 }

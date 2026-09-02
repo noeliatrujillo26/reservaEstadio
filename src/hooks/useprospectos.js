@@ -25,7 +25,7 @@ import {
   actualizar_verificado, insertar_verificado, mensajes_bloqueo, motivo_bloqueo,
   registrar_movimiento,
 } from '../lib/escritura'
-import { set_estado_zona } from '../lib/mapaocupacion'
+import { set_estado_zona, texto_fallo_estado } from '../lib/mapaocupacion'
 import { sincronizar_etapa } from '../lib/cascadas'
 import { pipeline_etapas, reservas_activas } from '../lib/pipeline'
 import {
@@ -407,6 +407,12 @@ export function useprospectos() {
       }
 
       setguardando(true)
+      // Los avisos NO se enseñan segun van saliendo: el toast tiene UNA sola
+      // ranura, asi que el "✅ Reserva creada" del final borraba la
+      // advertencia de la seccion sin apartar y el usuario nunca se enteraba.
+      // Se juntan y se enseñan AL FINAL, despues del exito, para que lo ultimo
+      // en pantalla sea lo que hay que atender.
+      const avisos = []
       try {
         // 1. ECONOMIA HEREDADA: bruto de la tarjeta y el descuento en pesos
         //    que la separa de su monto neto.
@@ -458,12 +464,7 @@ export function useprospectos() {
         // 3. ESTADO DEL MAPA. Si falla, la reserva existe pero el mapa la
         //    muestra libre y alguien puede venderla otra vez.
         const ocupa = await set_estado_zona(sb, usuario, j.id, a.id, 'reservada')
-        if (!ocupa.ok) {
-          mostrartoast(
-            '⚠️ La reserva se creó, pero la sección NO se marcó como reservada. ' +
-            'Márcala a mano desde el mapa.', 9000
-          )
-        }
+        if (!ocupa.ok) avisos.push(texto_fallo_estado(ocupa, a.nombre))
 
         // 4. VINCULO tarjeta ↔ reserva. Es la columna vertebral del historial
         //    de pagos: un fallo silencioso aqui deja los cobros huerfanos.
@@ -472,9 +473,9 @@ export function useprospectos() {
           sb, usuario, 'pipeline_prospectos', { reserva_ids: ids }, card.id, null
         )
         if (!vinc.ok) {
-          mostrartoast(
+          avisos.push(
             '⚠️ La reserva se creó, pero NO quedó vinculada al prospecto ' +
-            (card.folio || '') + '. Vincúlala manualmente desde el detalle.', 8000
+            (card.folio || '') + '. Vincúlala manualmente desde el detalle.'
           )
         }
 
@@ -506,9 +507,7 @@ export function useprospectos() {
             pago: liquidada ? 'Completo' : 'Parcial',
           }, nuevoid, ['monto_pagado', 'estado_pago', 'pago'])
           if (!r.ok) {
-            mostrartoast(
-              '⚠️ La reserva se creó, pero su saldo inicial no se pudo fijar. Revísalo.', 9000
-            )
+            avisos.push('⚠️ La reserva se creó, pero su saldo inicial no se pudo fijar. Revísalo.')
           }
         }
 
@@ -544,8 +543,15 @@ export function useprospectos() {
           console.error('Sincronización de etapa tras generar la reserva falló:', e)
         }
 
-        recargar()
-        return { ok: true, id: nuevoid }
+        // El mapa se repinta con lo que la base tiene AHORA, y se ESPERA: sin
+        // el await la vista podia quedarse un instante con la seccion todavia
+        // libre justo despues de apartarla.
+        await recargar()
+
+        // Los avisos van al final, ya sin nada que los pise. Duran 9 s: no son
+        // confirmaciones, son cosas que alguien tiene que ir a arreglar.
+        if (avisos.length) mostrartoast(avisos.join(' · '), 9000)
+        return { ok: true, id: nuevoid, avisos }
       } catch (err) {
         console.error('generar reserva desde prospecto:', err)
         mostrartoast('⚠️ No se pudo generar la reserva. Intenta de nuevo.')

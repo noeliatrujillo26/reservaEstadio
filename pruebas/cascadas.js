@@ -42,6 +42,7 @@ export {
 } from '../src/lib/reservasadmin'
 export {
   estado_vivo, puede_bloquearse, set_estado_zona, alternar_bloqueo, estados_zona,
+  texto_fallo_estado,
 } from '../src/lib/mapaocupacion'
 
 export {

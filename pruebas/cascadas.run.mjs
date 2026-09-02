@@ -1491,6 +1491,99 @@ for (let i = 0; i < 8000; i++) {
     v2.motivo_bloqueo(cajero, 'pipeline_prospectos') === 'sin_permiso')
 }
 
+// ══ 9. LA GUARDIA NO PUEDE PARTIR UN ACTO EN DOS ══════════════════
+// El fallo que motiva estas pruebas: generar una reserva desde el Pipeline
+// creaba la fila en `reservas` (permitida por el modulo pipeline) y despues
+// NO podia marcar la seccion, porque zona_juego_estado no incluia 'pipeline'
+// entre sus dueños. La reserva quedaba vendida y la seccion libre a la vez.
+//
+// La regla, escrita como prueba: QUIEN PUEDE CREAR UNA RESERVA TIENE QUE PODER
+// MARCAR SU SECCION. Cualquier perfil, sin excepciones.
+{
+  const perfiles = [
+    { nombre: 'Administrador', rol: 'Administrador', permisos: {} },
+    { nombre: 'Vendedora (pipeline)', rol: 'Vendedora', permisos: { pipeline: 'editar' } },
+    { nombre: 'Vendedora (reservas)', rol: 'Vendedora', permisos: { seccionesreservadas: 'editar' } },
+    { nombre: 'Cajero (cobros)', rol: 'Cajero', permisos: { cobros: 'editar' } },
+    { nombre: 'Palcos', rol: 'Vendedora', permisos: { palcos: 'editar' } },
+    { nombre: 'Editor del mapa', rol: 'Vendedora', permisos: { crear: 'editar' } },
+    { nombre: 'Solo lectura', rol: 'Solo lectura', permisos: { reportes: 'ver' } },
+  ]
+  // La invariante es sobre quien CREA O LIBERA reservas, no sobre todo el que
+  // toca la tabla: Cajero escribe `reservas` para mover el saldo de una que ya
+  // existe, y eso no aparta ninguna seccion.
+  const crea_reservas = ['pipeline', 'seccionesreservadas', 'palcos']
+  perfiles.forEach((p) => {
+    const crea = p.rol === 'Administrador' ||
+      crea_reservas.some((m) => (p.permisos || {})[m] === 'editar')
+    const puedeMapa = v2.motivo_bloqueo(p, 'zona_juego_estado') === null
+    afirmar('quien aparta secciones puede marcarlas · ' + p.nombre, !crea || puedeMapa)
+  })
+  afirmar('cajero escribe reservas pero NO aparta secciones',
+    v2.motivo_bloqueo({ rol: 'Cajero', permisos: { cobros: 'editar' } }, 'reservas') === null &&
+    v2.motivo_bloqueo({ rol: 'Cajero', permisos: { cobros: 'editar' } }, 'zona_juego_estado') === 'sin_permiso')
+  // Y en concreto el perfil que provoco el fallo.
+  const soloPipeline = { rol: 'Vendedora', permisos: { pipeline: 'editar' } }
+  afirmar('pipeline:editar puede escribir zona_juego_estado',
+    v2.motivo_bloqueo(soloPipeline, 'zona_juego_estado') === null)
+  // El editor del mapa bloquea zonas sin pasar por una reserva: tambien entra.
+  const soloCrear = { rol: 'Vendedora', permisos: { crear: 'editar' } }
+  afirmar('crear:editar puede escribir zona_juego_estado',
+    v2.motivo_bloqueo(soloCrear, 'zona_juego_estado') === null)
+  // Pero no se abre a cualquiera: sin ninguno de esos modulos, no.
+  const soloClientes = { rol: 'Vendedora', permisos: { clientes: 'editar' } }
+  afirmar('clientes:editar NO puede sacar secciones de venta',
+    v2.motivo_bloqueo(soloClientes, 'zona_juego_estado') === 'sin_permiso')
+}
+
+// El diagnostico tiene que NOMBRAR la causa: las tres se arreglan distinto.
+{
+  const sinPermiso = { ok: false, motivo: 'sin_permiso' }
+  const sinFilas = { ok: false, motivo: 'sin_filas' }
+  const error = { ok: false, motivo: 'error', error: { message: 'boom' } }
+  afirmar('sin permiso se explica como permiso',
+    /permiso/.test(v2.texto_fallo_estado(sinPermiso, 'Terraza 1')))
+  afirmar('0 filas apunta a RLS y a la clave unica',
+    /RLS/.test(v2.texto_fallo_estado(sinFilas)) && /clave única/.test(v2.texto_fallo_estado(sinFilas)))
+  afirmar('el error de la base se muestra tal cual',
+    /boom/.test(v2.texto_fallo_estado(error)))
+  afirmar('un exito no genera aviso', v2.texto_fallo_estado({ ok: true }) === null)
+  afirmar('el aviso nombra la seccion',
+    /Terraza 1/.test(v2.texto_fallo_estado(sinPermiso, 'Terraza 1')))
+}
+
+// La fila que se manda viaja en el resultado, para poder comparar los ids con
+// lo que la tabla guarda cuando algo no cuadra.
+{
+  const sb = base_falsa({ zona_juego_estado: {} })
+  const r = await v2.set_estado_zona(sb, admin, 'j7', 'sec-2', 'reservada')
+  afirmar('el resultado lleva la fila enviada',
+    r.fila && r.fila.juego_id === 'j7' && r.fila.zona_id === 'sec-2' && r.fila.estado === 'reservada')
+  const sb2 = base_falsa({ zona_juego_estado: {} }, { filas: 0 })
+  const r2 = await v2.set_estado_zona(sb2, admin, 'j7', 'sec-2', 'reservada')
+  afirmar('al fallar tambien se sabe que se intento escribir',
+    r2.ok === false && r2.fila && r2.fila.juego_id === 'j7')
+}
+
+// Los estados se escriben con el vocabulario que el mapa LEE. 'reservado' en
+// masculino no existe: estado_vivo devolveria 'libre' y la seccion seguiria
+// apareciendo disponible.
+{
+  afirmar('el vocabulario de estados es el que lee el mapa',
+    v2.estados_zona.join(',') === 'libre,reservada,bloqueada')
+  const sb = base_falsa({ zona_juego_estado: {} })
+  const r = await v2.set_estado_zona(sb, admin, 'j1', 'sec-1', 'reservado')
+  afirmar('"reservado" (masculino) se rechaza, no se escribe',
+    r.ok === false && r.motivo === 'estado-invalido' && sb.escrituras.length === 0)
+  afirmar('lo escrito se lee igual',
+    v2.estado_vivo({ j1: { 'sec-1': 'reservada' } }, 'j1', 'sec-1') === 'reservada')
+  // Y los ids se comparan como TEXTO en los dos sentidos: un juego_id numerico
+  // en la base y un id de texto en el panel tienen que cruzar igual.
+  afirmar('los ids cruzan aunque cambie el tipo',
+    v2.estado_vivo({ 7: { 'sec-1': 'reservada' } }, '7', 'sec-1') === 'reservada' &&
+    v2.estado_vivo({ 7: { 'sec-1': 'reservada' } }, 7, 'sec-1') === 'reservada')
+}
+
 // ══ RESULTADO ═════════════════════════════════════════════════════
 console.log('\n── diferencial contra la v1 ──')
 console.log('  comparaciones: ' + casos.toLocaleString('es-MX'))

@@ -120,6 +120,9 @@ export function usecobrosescritura() {
 
       const montotxt = money(c.monto)
       setcancelando(c.id)
+      // Al final, no segun salen: el toast tiene UNA ranura y el mensaje de
+      // exito borraba las advertencias de la cascada.
+      const avisos = []
       try {
         const res = await actualizar_verificado(
           sb, usuario, 'cobros', { estado: 'cancelado' }, c.id, null
@@ -143,7 +146,7 @@ export function usecobrosescritura() {
           const aviso = texto_reversion_saldo(
             await revertir_saldo_favor_de_cobro(sb, usuario, c, { clientes, reservas })
           )
-          if (aviso) mostrartoast(aviso, 9000)
+          if (aviso) avisos.push(aviso)
         } catch (e) {
           console.error('Reversión de saldo a favor falló:', e)
         }
@@ -156,9 +159,9 @@ export function usecobrosescritura() {
           if (afecta_saldo_reserva(c, reservas)) {
             sync = await restar_pago_reserva(sb, usuario, String(c.folio), Number(c.monto) || 0)
             if (!sync.ok) {
-              mostrartoast(
+              avisos.push(
                 '⚠️ El cobro se canceló, pero el saldo de la reserva ' + c.folio +
-                ' no se pudo recalcular. Revísalo antes de cobrar de nuevo.', 9000
+                ' no se pudo recalcular. Revísalo antes de cobrar de nuevo.'
               )
             }
           }
@@ -184,8 +187,9 @@ export function usecobrosescritura() {
           ref: c.zona || '—',
           usuario: usuario ? usuario.nombre : '—',
         })
-        recargar()
-        return { ok: true }
+        await recargar()
+        if (avisos.length) mostrartoast(avisos.join(' · '), 9000)
+        return { ok: true, avisos }
       } finally {
         setcancelando(null)
       }
@@ -249,6 +253,7 @@ export function usecobrosescritura() {
           : (reservas || []).find((x) => String(x.id) === String(datos.reservaid)) || null
 
       setguardando(true)
+      const avisos = []
       try {
         // Comprobante: si la subida falla NO se aborta el cobro — el dinero ya
         // se recibio, y perder el registro por un archivo seria peor. Se avisa.
@@ -317,10 +322,10 @@ export function usecobrosescritura() {
           const mov = await mover_saldo_favor(sb, usuario, cliente.id, redondear_dinero(monto))
           if (mov.ok) saldonuevo = mov.saldo
           else {
-            mostrartoast(
+            avisos.push(
               '⚠️ El cobro se registró, pero el saldo a favor del cliente NO se actualizó' +
               (mov.motivo === 'sin-columna' ? ' (falta correr migracion-saldo-favor.sql).' : '.') +
-              ' Revísalo antes de aplicarlo.', 9000
+              ' Revísalo antes de aplicarlo.'
             )
           }
         }
@@ -334,9 +339,9 @@ export function usecobrosescritura() {
               sb, usuario, reserva.id, redondear_dinero(monto), escredito
             )
             if (!sync.ok) {
-              mostrartoast(
+              avisos.push(
                 '⚠️ El cobro se registró, pero el saldo de la reserva ' + reserva.id +
-                ' no se actualizó. Revísalo.', 9000
+                ' no se actualizó. Revísalo.'
               )
             }
           } catch (e) {
@@ -381,8 +386,9 @@ export function usecobrosescritura() {
           monto: redondear_dinero(monto),
           usuario: usuario ? usuario.nombre : '—',
         })
-        recargar()
-        return { ok: true }
+        await recargar()
+        if (avisos.length) mostrartoast(avisos.join(' · '), 9000)
+        return { ok: true, avisos }
       } catch (err) {
         console.error('registrar cobro:', err)
         mostrartoast('⚠️ No se pudo registrar el cobro. Intenta de nuevo.')

@@ -25,6 +25,17 @@ export const escritura_admin = import.meta.env.VITE_ESCRITURA_ADMIN === 'true'
 // registrar un abono desde el Pipeline inserta en `cobros`, asi que una
 // Vendedora con pipeline:'editar' escribe ahi aunque no tenga la seccion
 // Cobros en su menu.
+// Modulos cuyos flujos APARTAN O LIBERAN una seccion: generar la reserva desde
+// una tarjeta, editarla o borrarla, vender un palco, o bloquear zonas desde el
+// editor del mapa. Todos ellos tienen que poder escribir `zona_juego_estado`,
+// porque crear la reserva y marcar su seccion son DOS MITADES DEL MISMO ACTO.
+//
+// `cobros` NO esta aqui a proposito, aunque si escribe en `reservas`: lo unico
+// que toca desde ahi es el SALDO de una reserva que ya existe. Registrar o
+// cancelar un cobro nunca aparta ni libera una seccion, asi que darle ese
+// permiso seria abrir de mas.
+const modulos_estado_seccion = ['seccionesreservadas', 'pipeline', 'palcos', 'crear']
+
 export const tabla_modulo_edicion = {
   reservas: ['seccionesreservadas', 'pipeline', 'cobros', 'palcos'],
   clientes: ['clientes'],
@@ -34,10 +45,16 @@ export const tabla_modulo_edicion = {
   descuentos_volumen: ['descuentos'],
   // AGREGADA AQUI, no la trae la v1. Su _TABLA_MODULO_EDICION no declara
   // `zona_juego_estado`, asi que la guardia por tabla la deja pasar sin mirar
-  // el rol: bloquear o liberar una seccion —sacarla de venta— quedaba al
-  // alcance de cualquier cuenta con sesion. Aqui pide el mismo nivel 'editar'
-  // que reservar esa seccion, que es la accion equivalente.
-  zona_juego_estado: ['seccionesreservadas', 'crear', 'palcos'],
+  // el rol: bloquear una seccion —sacarla de venta— quedaba al alcance de
+  // cualquier cuenta con sesion.
+  //
+  // CORREGIDA: la lista era ['seccionesreservadas','crear','palcos'] y dejaba
+  // fuera 'pipeline'. Generar la reserva desde una tarjeta escribe en
+  // `reservas` (permitido por pipeline) y despues en `zona_juego_estado`
+  // (bloqueado), asi que un perfil con pipeline:editar y sin
+  // seccionesreservadas:editar creaba la reserva y NO apartaba la seccion:
+  // quedaba vendida y libre a la vez.
+  zona_juego_estado: modulos_estado_seccion,
 }
 
 // motivo por el que una escritura no procede, o null si puede proceder.
