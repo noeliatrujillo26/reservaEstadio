@@ -21,7 +21,7 @@ import {
 import { msg_sin_pago, msg_ya_generada, puede_generar_reserva } from '../../lib/prospectos'
 import { msg_no_eliminable, puede_eliminarse } from '../../lib/mapaocupacion'
 import { es_pago_desde_saldo_favor } from '../../lib/cobros'
-import { es_pago_credito } from '../../lib/dashboard'
+import { es_forma_efectivo, es_pago_credito, nombres_formas_pago } from '../../lib/dashboard'
 import { map_precio } from '../../lib/preciosadmin'
 import { min_seccion, precio_seccion } from '../../lib/reservasadmin'
 import { formato_fecha } from '../../lib/cobros'
@@ -95,23 +95,24 @@ function detalle_prospecto({
     await ongenerar(card, { juegoid: d.juegoid, zonaid: d.zonaid, areamonto })
   }
 
-  // Formas de pago del catalogo REAL (metodos_pago), mas SALDO A FAVOR, que no
-  // es un metodo del catalogo sino la aplicacion de dinero que ya entro.
-  const formas = (metodos || [])
-    .filter((m) => String(m.estado || 'Activo') !== 'Inactivo')
-    .map((m) => m.nombre)
-  const formaspago = (formas.length ? formas : ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA'])
-    .concat(['CRÉDITO', 'SALDO A FAVOR'])
+  // Formas de pago del catalogo REAL (metodos_pago) + SALDO A FAVOR, que no es
+  // un metodo del catalogo sino la aplicacion de dinero que ya entro.
+  // 'Caja taquilla estadio' se garantiza SIEMPRE presente (ver
+  // nombres_formas_pago): es la via mas comun para cerrar un abono en
+  // persona, y su ausencia bloquearia ese flujo.
+  const formaspago = nombres_formas_pago(metodos).concat(['CRÉDITO', 'SALDO A FAVOR'])
 
   const setp = (k, v) => setpago((x) => ({ ...x, [k]: v }))
   const formaefectiva = pago.pendiente ? 'PENDIENTE' : pago.forma
   const pagoescredito = !pago.pendiente && es_pago_credito(pago.concepto, formaefectiva)
   const pagoessaldo = !pago.pendiente && es_pago_desde_saldo_favor('', formaefectiva)
   // El comprobante es obligatorio salvo en cuatro casos, cada uno por su
-  // motivo: credito (no hay archivo aun), pendiente (no hay pago), efectivo
-  // (se recibe en mano) y saldo a favor (ese dinero ya entro con el suyo).
+  // motivo: credito (no hay archivo aun), pendiente (no hay pago), EFECTIVO
+  // en cualquiera de sus formas del catalogo — incluida 'Caja taquilla
+  // estadio' — (se recibe en mano) y saldo a favor (ese dinero ya entro con
+  // el suyo).
   const comprobanteobligatorio = !pagoescredito && !pago.pendiente &&
-    formaefectiva !== 'EFECTIVO' && !pagoessaldo
+    !es_forma_efectivo(formaefectiva, metodos) && !pagoessaldo
 
   async function pagar() {
     seterrorpago(null)

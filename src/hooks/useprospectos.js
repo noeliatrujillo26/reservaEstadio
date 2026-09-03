@@ -47,7 +47,7 @@ import {
 import { map_precio } from '../lib/preciosadmin'
 import { buscar_cliente, tel_norm } from '../lib/clientes'
 import { area_por_nombre_zona, cobro_cancelado, es_pago_desde_saldo_favor } from '../lib/cobros'
-import { es_cobro_credito, es_pago_credito } from '../lib/dashboard'
+import { es_cobro_credito, es_forma_efectivo, es_pago_credito } from '../lib/dashboard'
 import { mxn2, redondear_dinero } from '../lib/dinero'
 import { hoy_hermosillo } from '../lib/fechas'
 
@@ -74,7 +74,7 @@ function es_duplicado(error) {
 export function useprospectos() {
   const { usuario } = useadmin()
   const {
-    pipeline, reservas, cobros, clientes, juegos, areas, secciones,
+    pipeline, reservas, cobros, clientes, juegos, areas, secciones, metodos,
     descuentosvolumen, politica, areasestados, recargar,
   } = useadmindatos()
   const { mostrartoast } = usetoast()
@@ -720,9 +720,10 @@ export function useprospectos() {
 
       // COMPROBANTE obligatorio, con cuatro excepciones y cada una por su
       // motivo: CREDITO no tiene archivo al momento; PENDIENTE todavia no es
-      // un pago; EFECTIVO se recibe en mano sin documento externo; y el SALDO
-      // A FAVOR ya entro antes con su propio comprobante.
-      const esefectivo = !espendiente && forma === 'EFECTIVO'
+      // un pago; EFECTIVO en cualquiera de sus formas del catalogo —incluida
+      // 'Caja taquilla estadio'— se recibe en mano sin documento externo; y
+      // el SALDO A FAVOR ya entro antes con su propio comprobante.
+      const esefectivo = !espendiente && es_forma_efectivo(forma, metodos)
       if (!escredito && !espendiente && !esefectivo && !essaldofavor && !datos.archivo) {
         mostrartoast(
           '⚠️ Por favor adjunta el comprobante de pago (imagen o PDF) para poder registrar el abono.',
@@ -966,7 +967,7 @@ export function useprospectos() {
       }
     },
     [
-      usuario, pagando, reservas, cobros, clientes, areas, secciones, juegos, politica,
+      usuario, pagando, reservas, cobros, clientes, areas, secciones, juegos, metodos, politica,
       mostrartoast, recargar,
     ]
   )

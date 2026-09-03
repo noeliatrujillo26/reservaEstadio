@@ -26,7 +26,9 @@ export {
   es_cobro_desde_saldo_favor, es_pago_desde_saldo_favor, cobro_sin_dinero_nuevo,
 } from '../src/lib/cobros'
 
-export { es_cobro_credito } from '../src/lib/dashboard'
+export {
+  es_cobro_credito, es_pago_credito, es_forma_efectivo, nombres_formas_pago,
+} from '../src/lib/dashboard'
 export { redondear_dinero } from '../src/lib/dinero'
 export { escritura_admin, motivo_bloqueo, actualizar_verificado } from '../src/lib/escritura'
 export { ruta_comprobante, comprobante_excede_limite } from '../src/lib/storage'

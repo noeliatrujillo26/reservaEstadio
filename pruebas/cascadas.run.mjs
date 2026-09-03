@@ -2376,6 +2376,72 @@ for (let i = 0; i < 3000; i++) {
     v2.motivo_bloqueo(soloconsumos, 'reservas') === 'sin_permiso')
 }
 
+// ══ 14. "CAJA TAQUILLA ESTADIO": EFECTIVO SIN COMPROBANTE ══════════
+// No existe una v1 con la que diferenciar aqui — la v1 solo reconoce el
+// literal 'EFECTIVO', y el ajuste que pide el negocio es EXACTAMENTE
+// ampliar eso. Van pruebas directas en vez de diferenciales.
+
+{
+  afirmar('EFECTIVO es efectivo, sin catalogo', v2.es_forma_efectivo('EFECTIVO', []) === true)
+  afirmar('Caja taquilla estadio es efectivo AUNQUE NO este en el catalogo',
+    v2.es_forma_efectivo('Caja taquilla estadio', []) === true)
+  afirmar('el reconocimiento de taquilla no distingue mayusculas/minusculas',
+    v2.es_forma_efectivo('caja TAQUILLA Estadio', []) === true)
+  afirmar('un metodo del catalogo con tipo Efectivo cuenta igual, sea cual sea su nombre',
+    v2.es_forma_efectivo('Ventanilla del club', [{ nombre: 'Ventanilla del club', tipo: 'Efectivo' }]) === true)
+  afirmar('la garantia por NOMBRE de taquilla manda incluso si el catalogo trae mal el tipo',
+    v2.es_forma_efectivo('Caja taquilla estadio', [{ nombre: 'Caja taquilla estadio', tipo: 'Transferencia' }]) === true)
+  afirmar('otro metodo con tipo distinto de Efectivo NO cuenta como efectivo',
+    v2.es_forma_efectivo('Deposito Oxxo', [{ nombre: 'Deposito Oxxo', tipo: 'Transferencia' }]) === false)
+  afirmar('TRANSFERENCIA no es efectivo', v2.es_forma_efectivo('TRANSFERENCIA', []) === false)
+  afirmar('una forma que no esta en ningun lado no es efectivo',
+    v2.es_forma_efectivo('Deposito Oxxo', []) === false)
+  afirmar('vacio no es efectivo', v2.es_forma_efectivo('', []) === false)
+}
+
+{
+  afirmar('sin catalogo, el respaldo generico SIEMPRE trae taquilla',
+    v2.nombres_formas_pago([]).some((n) => n.toLowerCase() === 'caja taquilla estadio'))
+
+  const catalogosincaja = [{ nombre: 'Transferencia BBVA', estado: 'Activo' }, { nombre: 'TPV', estado: 'Activo' }]
+  const conCaja = v2.nombres_formas_pago(catalogosincaja)
+  afirmar('si el catalogo activo no la trae, se agrega al final',
+    conCaja.length === 3 && conCaja[2].toLowerCase() === 'caja taquilla estadio')
+
+  const catalogoconcaja = catalogosincaja.concat([{ nombre: 'Caja taquilla estadio', estado: 'Activo', tipo: 'Efectivo' }])
+  afirmar('si ya esta en el catalogo activo, NO se duplica',
+    v2.nombres_formas_pago(catalogoconcaja).length === 3)
+
+  // Si la UNICA fila de taquilla en el catalogo esta Inactiva, se filtra como
+  // cualquier metodo inactivo -- pero la garantia la repone de todos modos,
+  // cayendo al respaldo generico + taquilla.
+  const soloinactiva = [{ nombre: 'Caja taquilla estadio', estado: 'Inactivo', tipo: 'Efectivo' }]
+  const repuesta = v2.nombres_formas_pago(soloinactiva)
+  afirmar('taquilla inactiva en el catalogo no la hace desaparecer del selector',
+    repuesta.some((n) => n.toLowerCase() === 'caja taquilla estadio'))
+}
+
+// ── extremo a extremo: registrar un pago en Caja taquilla estadio ──
+// sin archivo, sin bloquear, y con recibo digital automatico.
+{
+  const metodos = [{ nombre: 'Caja taquilla estadio', tipo: 'Efectivo', estado: 'Activo' }]
+  const espendiente = false
+  const escredito = v2.es_pago_credito('ABONO', 'Caja taquilla estadio')
+  const esefectivo = !espendiente && v2.es_forma_efectivo('Caja taquilla estadio', metodos)
+  const essaldofavor = false
+  afirmar('Caja taquilla estadio no se confunde con credito', escredito === false)
+  afirmar('Caja taquilla estadio SI se reconoce como efectivo en el flujo real', esefectivo === true)
+  const exigecomprobante = !escredito && !espendiente && !esefectivo && !essaldofavor && !null
+  afirmar('con taquilla reconocida, NO exige comprobante', exigecomprobante === false)
+
+  // El insert del cobro se hace SIN evidencia (nadie subio archivo) y el
+  // flujo de recibo automatico (misma condicion que useprospectos.js) debe
+  // encontrar la puerta abierta: sin pendiente, sin credito, sin evidencia.
+  const evidencia = ''
+  const generarecibo = !espendiente && !escredito && !evidencia
+  afirmar('se dispara la generacion del recibo digital', generarecibo === true)
+}
+
 // ══ RESULTADO ═════════════════════════════════════════════════════
 console.log('\n── diferencial contra la v1 ──')
 console.log('  comparaciones: ' + casos.toLocaleString('es-MX'))

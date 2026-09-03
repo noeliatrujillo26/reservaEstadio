@@ -186,6 +186,13 @@ export default function palcos() {
                           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '8px' }}>
                             <span style={{ fontSize: '13px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {r.cliente || '—'}
+                              {/* Afordancia explicita de que la tarjeta es clicable — el cursor
+                                  solo no bastaba para que se notara que abre la edicion. */}
+                              {puede && (
+                                <span style={{ color: 'var(--text-3)', fontWeight: 400, marginLeft: '5px' }} title="Clic para editar la reserva">
+                                  ✎
+                                </span>
+                              )}
                             </span>
                             <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--naranja)', whiteSpace: 'nowrap' }}>
                               {lugares} lugar{lugares === 1 ? '' : 'es'}

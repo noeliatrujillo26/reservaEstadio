@@ -24,6 +24,42 @@ export function es_pago_credito(concepto, forma) {
   return norm(concepto) === 'CREDITO' || norm(forma) === 'CREDITO'
 }
 
+// ¿Esta forma de pago es EFECTIVO en la mano, sin comprobante externo que
+// pedir? No solo el literal 'EFECTIVO': cualquier metodo del catalogo cuyo
+// TIPO sea 'Efectivo' cuenta igual — 'Caja taquilla estadio' es dinero
+// recibido en el mostrador del estadio, la via mas comun para cerrar un
+// abono en persona, y exigirle un comprobante que no existe bloqueaba el
+// registro del pago.
+//
+// 'EFECTIVO' y 'CAJA TAQUILLA ESTADIO' se reconocen SIEMPRE, exista o no esa
+// fila en el catalogo vigente o traiga un tipo distinto: son la base por
+// defecto de metodos_pago (js/01-nucleo.js de la v1) y el efectivo del
+// mostrador no puede depender de que nadie haya tocado esa tabla.
+const formas_efectivo_garantizadas = ['EFECTIVO', 'CAJA TAQUILLA ESTADIO']
+
+export function es_forma_efectivo(forma, metodos) {
+  const f = String(forma || '').trim().toUpperCase()
+  if (!f) return false
+  if (formas_efectivo_garantizadas.indexOf(f) >= 0) return true
+  const m = (metodos || []).find((x) => String(x.nombre || '').trim().toUpperCase() === f)
+  return !!(m && String(m.tipo || '').trim().toLowerCase() === 'efectivo')
+}
+
+// Nombres de las formas de pago para un selector: el catalogo ACTIVO de
+// metodos_pago y, si aun no cargo, el respaldo generico. 'Caja taquilla
+// estadio' se garantiza SIEMPRE presente en el resultado, este o no en el
+// catalogo — es la via mas comun para cerrar un abono en persona y su
+// ausencia bloquearia ese flujo.
+export function nombres_formas_pago(metodos) {
+  const base = (metodos || [])
+    .filter((m) => String(m.estado || 'Activo') !== 'Inactivo')
+    .map((m) => m.nombre)
+  const formas = base.length ? base : ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA']
+  const taquilla = 'Caja taquilla estadio'
+  const yaesta = formas.some((n) => String(n || '').trim().toUpperCase() === taquilla.toUpperCase())
+  return yaesta ? formas : formas.concat([taquilla])
+}
+
 // Se aceptan las CUATRO grafias del campo a proposito: la fila cruda de
 // supabase trae `forma_pago`, el mapeador de la v1 producia `formaPago` y el
 // nuestro produce `formapago`. Mirar solo una dejaba pasar los creditos como
