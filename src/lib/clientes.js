@@ -10,7 +10,7 @@
 // personas distintas y su historial nacia ya mezclado.
 // ═══════════════════════════════════════════════════════════════════
 
-import { cobro_cancelado, es_cobro_credito } from './cobros'
+import { cobro_cancelado, cobro_sin_dinero_nuevo, es_cobro_credito } from './cobros'
 import { es_cortesia } from './reservasadmin'
 import { redondear_dinero } from './dinero'
 
@@ -81,21 +81,112 @@ export function buscar_cliente(lista, ref) {
 // Pipeline vinculada (abonos registrados antes de generar la reserva). Ese
 // modulo aun no se migra, asi que aqui solo entra el folio propio — la misma
 // limitacion anotada en reservasadmin.js.
-export function armar_clientes({ clientes, reservas, cobros }) {
-  const lista = (clientes || []).map((c) => ({
-    id: c.id,
-    nombre: c.nombre || '—',
-    email: c.email || '—',
-    tel: c.tel || '—',
-    empresa: c.empresa || '',
-    creditoautorizado: !!c.credito_autorizado,
-    // dinero entregado por adelantado, aun sin aplicar a ninguna reserva.
-    saldofavor: Number(c.saldo_favor) || 0,
-    reservas: [],
-    totalpagado: 0,
-    saldototal: 0,
-    creditototal: 0,
-  }))
+// alias de un folio de prospecto en sus DOS formas: 'PROS-002' y '002'. Un
+// abono puede haberse etiquetado en cualquiera de las dos segun la epoca del
+// registro.
+function alias_folio(f) {
+  const s = String(f || '').trim()
+  if (!s) return []
+  return s.toUpperCase().startsWith('PROS-') ? [s, s.slice(5)] : [s, 'PROS-' + s]
+}
+
+// Telefono de quien pago: el propio del cobro si algun dia la tabla lo trae,
+// y si no el de la reserva a la que apunta su folio.
+function tel_de_cobro(p, reservas) {
+  const propio = tel_norm(p && (p.tel || p.telefono))
+  if (propio) return propio
+  const r = p && p.folio ? (reservas || []).find((x) => String(x.id) === String(p.folio)) : null
+  return r ? tel_norm(r.tel) : ''
+}
+
+// Folios de las tarjetas del Pipeline vinculadas a UNA reserva: las de sus
+// `reserva_ids` que la incluyan, en sus dos formas. espejo del mapa
+// `_foliosPipelinePorReserva` que arma initClientesPage() antes de recorrer
+// las reservas -- sin esto, un abono registrado con el folio de la tarjeta
+// ('081') antes de generar la reserva no sumaba, y "Pagado" mostraba solo el
+// ultimo abono capturado despues en vez del total real.
+function folios_pipeline_por_reserva(pipeline) {
+  const mapa = {}
+  ;(pipeline || []).forEach((p) => {
+    if (!p || !p.folio || !Array.isArray(p.reservaids)) return
+    p.reservaids.forEach((rid) => {
+      const k = String(rid)
+      if (!mapa[k]) mapa[k] = []
+      alias_folio(p.folio).forEach((f) => mapa[k].push(f))
+    })
+  })
+  return mapa
+}
+
+// Los folios que identifican a un CLIENTE (no a una reserva suelta): los de
+// todas sus reservas, mas los de las tarjetas del Pipeline ligadas a ellas --
+// en sus dos formas. espejo de _foliosDeCliente().
+export function folios_de_cliente(c, pipeline) {
+  const folios = new Set((c.reservas || []).map((x) => String(x.folio)))
+  ;(pipeline || []).forEach((p) => {
+    if (!p || !p.folio || !Array.isArray(p.reservaids)) return
+    if (!p.reservaids.some((rid) => folios.has(String(rid)))) return
+    alias_folio(p.folio).forEach((f) => folios.add(f))
+  })
+  return folios
+}
+
+// El cobro es DE este cliente? espejo de _cobroEsDelCliente(): vinculo
+// explicito por cliente_id, folio de una de SUS reservas o tarjetas, o
+// identidad (telefono+nombre -- o solo nombre cuando no hay telefono que
+// comparar en ninguno de los dos lados). NUNCA el correo, que es lo que
+// fundia en una sola ficha a titulares distintos del mismo corporativo.
+export function cobro_es_del_cliente(p, c, foliosdecliente, reservas) {
+  if (!p || !c) return false
+  const cid = p.clienteid
+  if (cid != null && cid !== '' && c.id != null && c.id !== '') return String(cid) === String(c.id)
+  if (p.folio && foliosdecliente && foliosdecliente.has(String(p.folio))) return true
+  const telpago = tel_de_cobro(p, reservas)
+  const telcli = tel_norm(c.tel)
+  if (telpago && telcli) {
+    if (telpago !== telcli) return false
+    const np = nombre_norm(p.cliente)
+    const nc = nombre_norm(c.nombre)
+    return !np || !nc || np === nc
+  }
+  return nombre_norm(p.cliente) === nombre_norm(c.nombre) && !!nombre_norm(c.nombre)
+}
+
+// TODOS los cobros validos de un cliente, activos y con la reserva que
+// pagan (si tienen una) tambien activa. Es EL MISMO filtro que usa el pase
+// final de armar_clientes() para el total, y el que pinta la tabla "Pagos
+// realizados" del expediente -- una sola definicion para que nunca puedan
+// decir cosas distintas.
+export function pagos_de_cliente(c, cobros, reservas, pipeline) {
+  const foliosc = folios_de_cliente(c, pipeline)
+  return (cobros || []).filter((p) => {
+    if (cobro_cancelado(p)) return false
+    if (!cobro_es_del_cliente(p, c, foliosc, reservas)) return false
+    const rdelpago = p.folio ? (reservas || []).find((x) => String(x.id) === String(p.folio)) : null
+    return !(rdelpago && String(rdelpago.estado || '').toLowerCase() === 'cancelada')
+  })
+}
+
+// -- expediente --------------------------------------------------
+// espejo de initClientesPage(): PRIMERA pasada, por reserva (arma
+// `c.reservas` y una suma provisional); SEGUNDA pasada, por cliente -- el
+// "PASE FINAL DE CONSISTENCIA" que reconcilia el total contra TODOS sus
+// cobros, no solo los de sus reservas propias.
+export function armar_clientes({ clientes, reservas, cobros, pipeline }) {
+  // PRIMERO las reservas, con la lista de clientes VACIA -- espejo del orden
+  // exacto de initClientesPage(): alli `_clientesData` arranca sembrada solo
+  // por pedidos locales (que la v2 no migra a proposito, ver cabecera), y la
+  // tabla `clientes` de Supabase se fusiona DESPUES, ya con el historial
+  // construido. El orden importa de verdad: dos clientes de la tabla con el
+  // MISMO NOMBRE (uno con telefono, otro sin el) solo se distinguen si sus
+  // reservas se atribuyen ANTES de que ambos esten en la lista a la vez --
+  // fusionarlos desde el inicio deja el segundo homonimo sin sus reservas,
+  // porque la primera coincidencia por identidad se las queda a las dos.
+  const lista = []
+
+  // Mapa reserva -> folios de su tarjeta del Pipeline, UNA sola vez para
+  // todas las reservas (evita recalcularlo dentro del forEach).
+  const foliospipeline = folios_pipeline_por_reserva(pipeline)
 
   reservas.forEach((r) => {
     // basta con saber de quien es: nombre o telefono. Exigir correo dejaba
@@ -105,7 +196,10 @@ export function armar_clientes({ clientes, reservas, cobros }) {
     // proyecto y no deben sumar en ninguna metrica.
     if (String(r.estado || '').toLowerCase() === 'cancelada') return
 
-    const folios = [String(r.id)]
+    // los folios de ESTA reserva: el propio MAS los de la tarjeta del
+    // Pipeline que la generase -- un abono capturado antes de existir la
+    // reserva, con el folio del prospecto, tambien es suyo.
+    const folios = [String(r.id)].concat(foliospipeline[String(r.id)] || [])
     let credito = 0
     // PAGADO REAL = solo DINERO; el credito se acumula aparte porque es
     // cuenta por cobrar.
@@ -147,6 +241,54 @@ export function armar_clientes({ clientes, reservas, cobros }) {
     c.totalpagado += item.montopagado
     c.saldototal += item.saldo
     c.creditototal += item.credito
+  })
+
+  // SEGUNDO, se fusiona la tabla `clientes` de Supabase: si ya hay un
+  // derivado con su identidad, se le pega el id y los datos propios de la
+  // ficha (credito autorizado, saldo a favor); si no, se agrega una entrada
+  // nueva sin reservas -- espejo del merge de initClientesPage().
+  ;(clientes || []).forEach((c) => {
+    const existente = buscar_cliente(lista, { nombre: c.nombre, email: c.email, tel: c.tel })
+    if (existente) {
+      existente.id = c.id
+      if (c.nombre) existente.nombre = c.nombre
+      if (c.tel) existente.tel = c.tel
+      existente.empresa = c.empresa || existente.empresa || ''
+      existente.creditoautorizado = !!c.credito_autorizado
+      existente.saldofavor = Number(c.saldo_favor) || 0
+    } else {
+      lista.push({
+        id: c.id,
+        nombre: c.nombre || '—',
+        email: c.email || '—',
+        tel: c.tel || '—',
+        empresa: c.empresa || '',
+        creditoautorizado: !!c.credito_autorizado,
+        saldofavor: Number(c.saldo_favor) || 0,
+        reservas: [], totalpagado: 0, saldototal: 0, creditototal: 0,
+      })
+    }
+  })
+
+  // -- PASE FINAL DE CONSISTENCIA (tarjetas vs historial) ----------
+  // TOTAL PAGADO = lo MAYOR entre lo atribuido por reserva y la SUMA real de
+  // TODOS los cobros validos del cliente (cliente_id, folio o
+  // nombre+telefono -- NUNCA el correo). Asi un pago registrado bajo un
+  // folio de prospecto huerfano (una tarjeta sin reserva vinculada) cuenta
+  // igual que en el historial: nunca "$0 arriba, $9,750 abajo".
+  // SALDO PENDIENTE = neto total de sus reservas activas menos ese pagado.
+  lista.forEach((c) => {
+    const netototal = c.reservas.reduce((s, r) => s + (Number(r.neto) || 0), 0)
+    const pagadoporreservas = c.reservas.reduce((s, r) => s + (Number(r.montopagado) || 0), 0)
+    // dinero real; el credito y las APLICACIONES de saldo a favor quedan
+    // fuera -- ninguno de los dos es dinero nuevo: el credito es cuenta por
+    // cobrar, y el saldo a favor ya conto como pagado cuando se abono. Solo
+    // el credito importa para el badge "A credito" de arriba.
+    const pagadoporcobros = pagos_de_cliente(c, cobros, reservas, pipeline).reduce(
+      (s, p) => s + (cobro_sin_dinero_nuevo(p) ? 0 : Number(p.monto) || 0), 0
+    )
+    c.totalpagado = Math.max(pagadoporreservas, pagadoporcobros) || 0
+    c.saldototal = Math.max(0, netototal - c.totalpagado)
   })
 
   return lista

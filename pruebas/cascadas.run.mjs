@@ -2059,6 +2059,323 @@ for (let i = 0; i < 8000; i++) {
   afirmar('estado Pendiente (con mayuscula) se detecta igual', pendiente.pendiente === true)
 }
 
+// ══ 13. CLIENTES: EXPEDIENTE UNIFICADO Y VINCULACION CON PIPELINE ═══
+// El total pagado de un cliente decide su saldo pendiente y si aparece
+// "Liquidado" o con deuda: es dinero, y va al diferencial como todo lo demas.
+
+function _emailNormV1(e) { return String(e || '').trim().toLowerCase() }
+function _mismaIdentidadV1(a, b) {
+  const ta = _telNorm(a && a.tel), tb = _telNorm(b && b.tel)
+  if (!ta || !tb || ta !== tb) return false
+  const na = _nombreNorm(a && a.nombre), nb = _nombreNorm(b && b.nombre)
+  if (!na || !nb) return true
+  return na === nb
+}
+function _buscarClienteEnListaV1(lista, ref) {
+  if (!lista || !ref) return null
+  if (ref.id != null && ref.id !== '') {
+    const porId = lista.find((x) => x.id != null && String(x.id) === String(ref.id))
+    if (porId) return porId
+  }
+  const tRef = _telNorm(ref.tel)
+  if (tRef) {
+    const porIdent = lista.find((x) => _mismaIdentidadV1(x, ref))
+    if (porIdent) return porIdent
+  }
+  const e = _emailNormV1(ref.email)
+  if (!e || e === '—') return null
+  return lista.find((x) => _emailNormV1(x.email) === e && !(tRef && _telNorm(x.tel))) || null
+}
+function _esReservaCortesiaV1(r) {
+  const bruto = Number(r.monto) || 0
+  if (bruto <= 0) return false
+  const desc = Number(r.descuentoMonto != null ? r.descuentoMonto : r.descuento_monto) || 0
+  return bruto - desc <= 0.009
+}
+function _reservaDeCobroV1(p, reservasData) {
+  if (!p || !p.folio) return null
+  return reservasData.find((r) => String(r.id) === String(p.folio)) || null
+}
+function _telDeCobroV1(p, reservasData) {
+  const propio = _telNorm(p && (p.tel || p.telefono))
+  if (propio) return propio
+  const r = _reservaDeCobroV1(p, reservasData)
+  return r ? _telNorm(r.tel) : ''
+}
+function _cobroEsDelClienteV1(p, c, foliosCliente, reservasData) {
+  if (!p || !c) return false
+  const cid = p.clienteId != null ? p.clienteId : p.cliente_id
+  if (cid != null && cid !== '' && c.id != null && c.id !== '') return String(cid) === String(c.id)
+  if (p.folio && foliosCliente && foliosCliente.has(String(p.folio))) return true
+  const telPago = _telDeCobroV1(p, reservasData), telCli = _telNorm(c.tel)
+  if (telPago && telCli) {
+    if (telPago !== telCli) return false
+    const nP = _nombreNorm(p.cliente), nC = _nombreNorm(c.nombre)
+    return !nP || !nC || nP === nC
+  }
+  return _nombreNorm(p.cliente) === _nombreNorm(c.nombre) && !!_nombreNorm(c.nombre)
+}
+function _aliasFolioV1(f) {
+  const s = String(f || '').trim()
+  if (!s) return []
+  return s.toUpperCase().startsWith('PROS-') ? [s, s.slice(5)] : [s, 'PROS-' + s]
+}
+function _foliosDeClienteV1(c, pipelineData) {
+  const folios = new Set((c.reservas || []).map((x) => String(x.folio)))
+  pipelineData.forEach((p) => {
+    if (!p || !p.folio || !Array.isArray(p.reservaIds)) return
+    if (!p.reservaIds.some((rid) => folios.has(String(rid)))) return
+    _aliasFolioV1(p.folio).forEach((f) => folios.add(f))
+  })
+  return folios
+}
+
+// initClientesPage(), sin el DOM ni el merge de clientesExtra (localStorage,
+// no migrado a proposito -- ver commit de Pipeline).
+function _initClientesPageV1(clientesTabla, reservasData, cobros, pipelineData) {
+  let _clientesData = []
+
+  const _aliasFolio = _aliasFolioV1
+  const _foliosPipelinePorReserva = {}
+  pipelineData.forEach((p) => {
+    if (!p || !p.folio || !Array.isArray(p.reservaIds)) return
+    p.reservaIds.forEach((rid) => {
+      const k = String(rid)
+      ;(_foliosPipelinePorReserva[k] = _foliosPipelinePorReserva[k] || []).push.apply(
+        _foliosPipelinePorReserva[k] = _foliosPipelinePorReserva[k] || [], _aliasFolio(p.folio))
+    })
+  })
+
+  reservasData.forEach((r) => {
+    if (!r.email && !r.tel && !r.cliente) return
+    if (String(r.estado || '').toLowerCase() === 'cancelada') return
+    const foliosDeReserva = [String(r.id)].concat(_foliosPipelinePorReserva[String(r.id)] || [])
+    let creditoReserva = 0
+    const cobradoReal = cobros.reduce((s, p) => {
+      if (_cobroCancelado(p) || foliosDeReserva.indexOf(String(p.folio || '')) < 0) return s
+      if (_esCobroCredito(p)) { creditoReserva += Number(p.monto) || 0; return s }
+      return s + (Number(p.monto) || 0)
+    }, 0)
+    const base = (r.montoPagado != null) ? (Number(r.montoPagado) || 0)
+      : r.pago === 'Completo' ? r.monto : r.pago === 'Sin pago' ? 0 : redondearDinero(r.monto * 0.3)
+    const montoPagado = Math.max(base, cobradoReal)
+    const neto = Math.max(0, (Number(r.monto) || 0) - (Number(r.descuentoMonto) || 0))
+    const reservaItem = { zona: r.zona, juego: r.juego, montoPagado, neto, credito: creditoReserva,
+      saldo: Math.max(0, neto - montoPagado), folio: r.id, fecha: '', cortesia: _esReservaCortesiaV1(r) }
+    let c = _buscarClienteEnListaV1(_clientesData, { nombre: r.cliente, email: r.email, tel: r.tel })
+    if (c && c.reservas.some((x) => String(x.folio) === String(r.id))) return
+    if (!c) {
+      c = { nombre: r.cliente, email: r.email, tel: r.tel || '—', reservas: [], totalPagado: 0, saldoTotal: 0 }
+      _clientesData.push(c)
+    }
+    c.reservas.push(reservaItem)
+    c.totalPagado += reservaItem.montoPagado
+    c.saldoTotal += reservaItem.saldo
+  })
+
+  clientesTabla.forEach((c) => {
+    const existing = _buscarClienteEnListaV1(_clientesData, c)
+    if (existing) {
+      existing.id = c.id
+      if (c.nombre) existing.nombre = c.nombre
+      if (c.tel) existing.tel = c.tel
+      existing.creditoAutorizado = !!c.credito_autorizado
+      existing.saldoFavor = Number(c.saldo_favor) || 0
+    } else {
+      _clientesData.push({ id: c.id, nombre: c.nombre, email: c.email, tel: c.tel || '—',
+        creditoAutorizado: !!c.credito_autorizado, saldoFavor: Number(c.saldo_favor) || 0,
+        reservas: [], totalPagado: 0, saldoTotal: 0 })
+    }
+  })
+
+  _clientesData.forEach((c) => {
+    const netoTotal = c.reservas.reduce((s2, r) => s2 + (Number(r.neto) || 0), 0)
+    const pagadoPorReservas = c.reservas.reduce((s2, r) => s2 + (Number(r.montoPagado) || 0), 0)
+    const foliosC = _foliosDeClienteV1(c, pipelineData)
+    const cobrosCliente = cobros.filter((pg) => {
+      if (_cobroCancelado(pg)) return false
+      if (!_cobroEsDelClienteV1(pg, c, foliosC, reservasData)) return false
+      const rDelPago = _reservaDeCobroV1(pg, reservasData)
+      return !(rDelPago && String(rDelPago.estado || '').toLowerCase() === 'cancelada')
+    })
+    const pagadoPorCobros = cobrosCliente.reduce((s2, pg) => s2 + (_cobroSinDineroNuevo(pg) ? 0 : (Number(pg.monto) || 0)), 0)
+    c.totalPagado = Math.max(pagadoPorReservas, pagadoPorCobros) || 0
+    c.saldoTotal = Math.max(0, netoTotal - c.totalPagado)
+  })
+
+  return _clientesData
+}
+
+// ── generador de un escenario completo: N clientes DB, M reservas, K cobros,
+// J tarjetas de pipeline, con cruces deliberados por folio de prospecto,
+// alias PROS-xxx, e identidad telefono+nombre ──
+const zonas_cliente = ['Terraza Derecha 1', 'Palco All-Inc 2', 'Platea Izq 3']
+
+function generarEscenarioClientes(i) {
+  const nombresset = ['ANA LOPEZ', 'José Pérez', 'Luis Ruiz', 'MARÍA SOTO']
+  const telsset = ['6621234511', '6621234512', '6621234513', '']
+
+  const nclientes = Math.floor(rnd() * 3)
+  const clientesdb_v1 = []
+  const clientesdb_v2 = []
+  for (let k = 0; k < nclientes; k++) {
+    const base = { id: k + 1, nombre: elige(nombresset), email: rnd() < 0.6 ? 'x' + k + '@y.com' : '',
+      tel: elige(telsset), credito_autorizado: rnd() < 0.3, saldo_favor: rnd() < 0.4 ? dinero(0, 2000) : 0 }
+    clientesdb_v1.push(base)
+    clientesdb_v2.push(base)
+  }
+
+  const nreservas = Math.floor(rnd() * 4)
+  const reservas_v1 = []
+  const reservas_v2 = []
+  for (let k = 0; k < nreservas; k++) {
+    const monto = dinero(0, 30000)
+    const desc = rnd() < 0.3 ? dinero(0, monto) : 0
+    const base = {
+      id: 'R' + i + '-' + k,
+      cliente: elige(nombresset), email: rnd() < 0.5 ? 'x' + (k % 3) + '@y.com' : '',
+      tel: elige(telsset), zona: elige(zonas_cliente), juego: 'vs Mayos',
+      monto, estado: rnd() < 0.15 ? 'cancelada' : 'activa',
+      pago: elige(['Completo', 'Sin pago', 'Enganche 30%']),
+    }
+    const pagado = rnd() < 0.5 ? dinero(0, monto) : null
+    reservas_v1.push({ ...base, montoPagado: pagado, descuentoMonto: desc })
+    reservas_v2.push({ ...base, montopagado: pagado, descuentomonto: desc })
+  }
+
+  // tarjetas del Pipeline: algunas ligadas a una reserva (widen), otras a un
+  // cliente por cliente_id, otras sueltas.
+  const npipe = Math.floor(rnd() * 3)
+  const pipe_v1 = []
+  const pipe_v2 = []
+  for (let k = 0; k < npipe; k++) {
+    const folio = 'PROS-' + String(i * 10 + k).padStart(3, '0')
+    const ligaareserva = reservas_v1.length && rnd() < 0.6
+    const rids = ligaareserva ? [elige(reservas_v1).id] : []
+    const clienteid = clientesdb_v1.length && rnd() < 0.4 ? elige(clientesdb_v1).id : null
+    pipe_v1.push({ id: 'p' + i + k, folio, reservaIds: rids, clienteId: clienteid, vendedora: 'FER', etapa: 'reservado' })
+    pipe_v2.push({ id: 'p' + i + k, folio, reservaids: rids, clienteid, vendedora: 'FER', etapa: 'reservado' })
+  }
+
+  // cobros: algunos con folio de reserva, otros con folio (o alias) de una
+  // tarjeta de pipeline huerfana -- el caso que exige el pase de reconciliacion.
+  const ncobros = Math.floor(rnd() * 5)
+  const cobros_v1 = []
+  const cobros_v2 = []
+  for (let k = 0; k < ncobros; k++) {
+    let folio
+    const r = rnd()
+    if (r < 0.4 && reservas_v1.length) folio = elige(reservas_v1).id
+    else if (r < 0.7 && pipe_v1.length) folio = elige(_aliasFolioV1(elige(pipe_v1).folio))
+    else folio = 'ajeno-' + k
+    const base = { id: i * 100 + k, folio, cliente: elige(nombresset), email: '',
+      tel: elige(telsset), monto: dinero(0, 20000), concepto: elige(conceptos),
+      estado: rnd() < 0.2 ? 'cancelado' : '' }
+    const forma = elige(formas)
+    cobros_v1.push({ ...base, formaPago: forma })
+    cobros_v2.push({ ...base, formapago: forma })
+  }
+
+  return { clientesdb_v1, clientesdb_v2, reservas_v1, reservas_v2, pipe_v1, pipe_v2, cobros_v1, cobros_v2 }
+}
+
+for (let i = 0; i < 3000; i++) {
+  const esc = generarEscenarioClientes(i)
+  const v1lista = _initClientesPageV1(esc.clientesdb_v1, esc.reservas_v1, esc.cobros_v1, esc.pipe_v1)
+  const v2lista = v2.armar_clientes({
+    clientes: esc.clientesdb_v2, reservas: esc.reservas_v2, cobros: esc.cobros_v2, pipeline: esc.pipe_v2,
+  })
+
+  // se comparan por clave de identidad (nombre+tel), no por orden de arreglo:
+  // armar_clientes puede insertar en distinto orden que initClientesPage
+  // sin que eso sea una diferencia real.
+  const clave = (c) => (c.id != null ? 'id:' + c.id : 'n:' + (c.nombre || '').toUpperCase().trim() + '|' + (c.tel || ''))
+  const v1map = {}
+  v1lista.forEach((c) => { v1map[clave(c)] = c })
+  const v2map = {}
+  v2lista.forEach((c) => { v2map[clave(c.id != null ? c : { nombre: c.nombre, tel: c.tel })] = c })
+
+  const claves = new Set([...Object.keys(v1map), ...Object.keys(v2map)])
+  claves.forEach((k) => {
+    const a = v1map[k], b = v2map[k]
+    if (!comparar('armar_clientes.existe', !!a, !!b, { k, escenario: esc })) { fallos++; return }
+    if (!a || !b) return
+    // dos sumas independientes (v1 en 'var'/reduce distinto orden, v2 en
+    // otro) pueden diferir en polvo de punto flotante bien por debajo del
+    // centavo: se compara redondeado en LOS DOS LADOS, como se compara
+    // cualquier monto que se le muestra al usuario.
+    if (!comparar('armar_clientes.totalpagado', redondearDinero(a.totalPagado), redondearDinero(b.totalpagado), { k, esc })) fallos++
+    if (!comparar('armar_clientes.saldototal', redondearDinero(a.saldoTotal), redondearDinero(b.saldototal), { k, esc })) fallos++
+    if (!comparar('armar_clientes.nreservas', a.reservas.length, b.reservas.length, { k, esc })) fallos++
+  })
+}
+
+// ── consumos_de_cliente y su identidad de respaldo ──
+{
+  const cliente = { id: 1, nombre: 'ANA LOPEZ', tel: '6621234511', reservas: [{ folio: 'R1' }] }
+  const reservas = [
+    { id: 'R1', saldoconsumo: 500, estado: 'activa', cliente: 'ANA LOPEZ', tel: '6621234511' },
+    { id: 'R2', saldoconsumo: 300, estado: 'activa', cliente: 'ANA LOPEZ', tel: '6621234511' },
+    { id: 'R3', saldoconsumo: 200, estado: 'activa', cliente: 'ANA LOPEZ', tel: '' },
+    { id: 'R4', saldoconsumo: 0, estado: 'activa', cliente: 'ANA LOPEZ', tel: '6621234511' },
+    { id: 'R5', saldoconsumo: 100, estado: 'cancelada', cliente: 'ANA LOPEZ', tel: '6621234511' },
+    { id: 'R6', saldoconsumo: 100, estado: 'activa', cliente: 'OTRO', tel: '6629999999' },
+  ]
+  const foliosc = v2.folios_de_cliente(cliente, [])
+  const r = v2.consumos_de_cliente(cliente, reservas, foliosc)
+  const ids = r.map((x) => x.id).sort()
+  afirmar('consumos_de_cliente: por folio propio', ids.indexOf('R1') >= 0)
+  afirmar('consumos_de_cliente: por identidad telefono+nombre', ids.indexOf('R2') >= 0)
+  afirmar('consumos_de_cliente: por nombre cuando no hay telefono en la reserva', ids.indexOf('R3') >= 0)
+  afirmar('consumos_de_cliente: sin saldo, fuera', ids.indexOf('R4') < 0)
+  afirmar('consumos_de_cliente: cancelada, fuera', ids.indexOf('R5') < 0)
+  afirmar('consumos_de_cliente: otro cliente, fuera', ids.indexOf('R6') < 0)
+}
+
+// ── cobro_es_del_cliente: el orden de prioridad exacto de la v1 ──
+{
+  const cliente = { id: 5, nombre: 'ANA LOPEZ', tel: '6621234511' }
+  afirmar('cliente_id explicito manda sobre todo lo demas',
+    v2.cobro_es_del_cliente({ clienteid: 5, folio: 'ajeno', cliente: 'OTRO NOMBRE' }, cliente, new Set(), []) === true)
+  afirmar('cliente_id de otro cliente descarta aunque el folio coincida',
+    v2.cobro_es_del_cliente({ clienteid: 9, folio: 'F1' }, cliente, new Set(['F1']), []) === false)
+  afirmar('folio en el set del cliente basta sin telefono ni nombre',
+    v2.cobro_es_del_cliente({ folio: 'F1', cliente: 'nadie que ver' }, cliente, new Set(['F1']), []) === true)
+  afirmar('mismo telefono y nombres distintos: NO es del cliente',
+    v2.cobro_es_del_cliente({ folio: '', tel: '6621234511', cliente: 'OTRA PERSONA' }, cliente, new Set(), []) === false)
+  afirmar('mismo telefono y mismo nombre: SI',
+    v2.cobro_es_del_cliente({ folio: '', tel: '6621234511', cliente: 'Ana Lopez' }, cliente, new Set(), []) === true)
+  afirmar('sin telefono en ninguno de los dos lados, cae al nombre exacto',
+    v2.cobro_es_del_cliente({ folio: '', tel: '', cliente: 'Ana Lopez' }, { id: 6, nombre: 'ANA LOPEZ', tel: '' }, new Set(), []) === true)
+  afirmar('el correo NUNCA decide', v2.cobro_es_del_cliente(
+    { folio: '', tel: '', cliente: 'OTRO', email: 'a@x.com' },
+    { id: 7, nombre: 'ANA LOPEZ', tel: '', email: 'a@x.com' }, new Set(), []) === false)
+  // telefono de la RESERVA, cuando el cobro no trae el suyo propio.
+  const reservas = [{ id: 'R9', tel: '6621234511' }]
+  afirmar('sin telefono propio, usa el de la reserva de su folio',
+    v2.cobro_es_del_cliente({ folio: 'R9', tel: '', cliente: 'Ana Lopez' }, cliente, new Set(), reservas) === true)
+}
+
+// ── escritura de consumos: eliminar deja el saldo en $0 ──
+{
+  const sb = base_falsa({ reservas: { id: 'R1', saldo_consumo: 500 }, movimientos: {} })
+  const r = await v2.actualizar_verificado(sb, admin, 'reservas', { saldo_consumo: 0 }, 'R1', ['saldo_consumo'])
+  afirmar('eliminar consumo: escribe 0', r.ok === true)
+  afirmar('eliminar consumo: el payload es EXACTAMENTE saldo_consumo:0',
+    Object.keys(sb.escrituras[0].payload).length === 1 && sb.escrituras[0].payload.saldo_consumo === 0)
+}
+{
+  // permisos: quien puede editar seccionesreservadas puede vaciar un consumo
+  // (el mismo dueño de la tabla `reservas`); quien solo tiene 'consumos' no
+  // basta por si solo -- la guardia de `reservas` no reconoce ese modulo.
+  const vendedora = { rol: 'Vendedora', permisos: { seccionesreservadas: 'editar' } }
+  const soloconsumos = { rol: 'Vendedora', permisos: { consumos: 'editar' } }
+  afirmar('seccionesreservadas:editar puede vaciar el consumo',
+    v2.motivo_bloqueo(vendedora, 'reservas') === null)
+  afirmar('consumos:editar por si solo NO alcanza (espejo del hueco de la v1)',
+    v2.motivo_bloqueo(soloconsumos, 'reservas') === 'sin_permiso')
+}
+
 // ══ RESULTADO ═════════════════════════════════════════════════════
 console.log('\n── diferencial contra la v1 ──')
 console.log('  comparaciones: ' + casos.toLocaleString('es-MX'))

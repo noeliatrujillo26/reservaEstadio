@@ -3,13 +3,15 @@
 // espejo 1:1 de v1: #page-consumos de index.html (lineas 2658-2700) y
 // renderConsumoPorReserva() / _poblarFiltrosConsumo() (js/01-nucleo.js).
 //
-// SOLO LECTURA: se omiten exportar CSV, el envio masivo por WhatsApp, el
-// envio por reserva y eliminar el registro de consumo (que hace un update de
-// saldo_consumo a 0 en `reservas`).
+// ESCRITURA (Fase 2): eliminar el registro de consumo (deja saldo_consumo en
+// $0; la reserva NO se borra). Sigue sin migrar exportar CSV y el envio por
+// WhatsApp (individual y masivo): son efectos externos, no escrituras.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useMemo, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
+import useconsumoescritura from '../../hooks/useconsumoescritura'
+import { useconfirmar } from './confirmar'
 import { filtrar_consumos, juegos_con_consumo, total_consumo } from '../../lib/consumos'
 import { redondear_dinero, mxn2 } from '../../lib/dinero'
 
@@ -17,9 +19,28 @@ const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2
 
 export default function consumos() {
   const { reservas, juegos, cargando, errores } = useadmindatos()
+  const { puede, eliminar, borrando } = useconsumoescritura()
+  const { confirmar, dialogo } = useconfirmar()
 
   const [busqueda, setbusqueda] = useState('')
   const [juegoid, setjuegoid] = useState('')
+
+  async function pedir_eliminar(r) {
+    const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2)
+    const ok = await confirmar(
+      <>
+        ¿Estás seguro de que deseas eliminar este registro de consumo? Esto
+        afectará a la reserva asociada.
+        <br />
+        <strong>{r.cliente}</strong> · {r.zona} · {money(r.saldoconsumo)}
+        <br />
+        El consumo incluido de la reserva #{r.id} quedará en $0 (la reserva NO
+        se elimina).
+      </>,
+      'Sí, eliminar'
+    )
+    if (ok) eliminar(r)
+  }
 
   const filas = useMemo(
     () => filtrar_consumos(reservas, { busqueda, juegoid }),
@@ -92,6 +113,7 @@ export default function consumos() {
                   <th>Zona</th>
                   <th>Juego</th>
                   <th style={{ textAlign: 'right' }}>Consumo incluido (paquete default)</th>
+                  {puede && <th style={{ width: '60px' }} />}
                 </tr>
               </thead>
               <tbody id="consumos-cliente-tbody">
@@ -103,6 +125,19 @@ export default function consumos() {
                     <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--naranja)' }}>
                       {money(r.saldoconsumo)}
                     </td>
+                    {puede && (
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          className="btn btn-outline btn-xs"
+                          style={{ color: 'var(--rojo)', borderColor: 'var(--rojo-bg)' }}
+                          title="Eliminar registro de consumo"
+                          disabled={borrando === r.id}
+                          onClick={() => pedir_eliminar(r)}
+                        >
+                          {borrando === r.id ? '…' : '🗑'}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -126,6 +161,7 @@ export default function consumos() {
           )}
         </div>
       </div>
+      {dialogo}
     </div>
   )
 }

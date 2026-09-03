@@ -5,21 +5,32 @@
 // onBuscarClientes() y paginaClientes().
 //
 // SOLO LECTURA: se omiten "Nuevo cliente", importar/exportar CSV y el menu de
-// acciones por fila. Quedan la tabla, el buscador, el orden, la paginacion y
-// el detalle con el historial de reservas del titular.
+// acciones por fila (editar/ocultar/eliminar/autorizar credito). Quedan la
+// tabla, el buscador, el orden, la paginacion y el expediente completo:
+// reservas, PAGOS (historial unificado, cliente_id/folio/identidad — NUNCA
+// el correo), consumo incluido y las tarjetas del Pipeline vinculadas.
+//
+// EL TOTAL PAGADO SE RECONCILIA: armar_clientes hace un pase final que toma
+// lo MAYOR entre lo atribuido por reserva y la suma real de TODOS los cobros
+// del cliente — incluye abonos registrados con el folio de su tarjeta del
+// Pipeline antes de que existiera la reserva. Es la misma cuenta que pinta
+// esta vista, para que nunca puedan decir cosas distintas.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useMemo, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
+import ClienteDetalle from './clientedetalle'
 import {
-  armar_clientes, filtrar_clientes, ordenar_clientes, por_pagina,
+  armar_clientes, filtrar_clientes, ordenar_clientes, pagos_de_cliente,
+  folios_de_cliente, por_pagina,
 } from '../../lib/clientes'
+import { consumos_de_cliente } from '../../lib/consumos'
 import { redondear_dinero, mxn2 } from '../../lib/dinero'
 
 const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2)
 
 export default function clientes() {
-  const { clientes: tabla, reservas, cobros, cargando, errores } = useadmindatos()
+  const { clientes: tabla, reservas, cobros, pipeline, cargando, errores } = useadmindatos()
 
   const [busqueda, setbusqueda] = useState('')
   const [orden, setorden] = useState({ col: 'nombre', dir: 'asc' })
@@ -27,9 +38,37 @@ export default function clientes() {
   const [detalle, setdetalle] = useState(null)
 
   const todos = useMemo(
-    () => armar_clientes({ clientes: tabla, reservas, cobros }),
-    [tabla, reservas, cobros]
+    () => armar_clientes({ clientes: tabla, reservas, cobros, pipeline }),
+    [tabla, reservas, cobros, pipeline]
   )
+
+  // el expediente abierto se deriva del id/clave, no del objeto guardado: si
+  // recargar() trae datos frescos, el modal los refleja sin quedarse con la
+  // foto de cuando se abrio.
+  const abierto = useMemo(() => {
+    if (!detalle) return null
+    return todos.find((c) => (c.id != null ? c.id === detalle.id : c.nombre === detalle.nombre && c.tel === detalle.tel)) || detalle
+  }, [detalle, todos])
+
+  const pagos = useMemo(
+    () => (abierto ? pagos_de_cliente(abierto, cobros, reservas, pipeline) : []),
+    [abierto, cobros, reservas, pipeline]
+  )
+  const consumos = useMemo(
+    () => (abierto ? consumos_de_cliente(abierto, reservas, folios_de_cliente(abierto, pipeline)) : []),
+    [abierto, reservas, pipeline]
+  )
+  // Tarjetas del Pipeline vinculadas: por cliente_id explicito, o porque
+  // alguna de sus reservaids coincide con una reserva del expediente — la
+  // MISMA regla de identidad que usa armar_clientes para los folios.
+  const tarjetas = useMemo(() => {
+    if (!abierto) return []
+    const misfolios = new Set(abierto.reservas.map((r) => String(r.folio)))
+    return (pipeline || []).filter((p) => {
+      if (abierto.id != null && p.clienteid != null) return String(p.clienteid) === String(abierto.id)
+      return (p.reservaids || []).some((rid) => misfolios.has(String(rid)))
+    })
+  }, [abierto, pipeline])
 
   const filtrados = useMemo(() => filtrar_clientes(todos, busqueda), [todos, busqueda])
   const ordenados = useMemo(
@@ -186,100 +225,14 @@ export default function clientes() {
         </div>
       </div>
 
-      {/* ── expediente del cliente ── */}
-      {detalle && (
-        <div
-          className="modal-overlay open" id="modal-cliente-detalle"
-          style={{ alignItems: 'flex-start', padding: '24px', overflowY: 'auto' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setdetalle(null) }}
-        >
-          <div className="modal" style={{ width: '580px', margin: 'auto' }}>
-            <div className="card-header" style={{ padding: '18px 22px' }}>
-              <div>
-                <div className="card-title" id="cl-modal-nombre">{detalle.nombre}</div>
-                <div className="card-sub">
-                  {detalle.email} · {detalle.tel}
-                </div>
-              </div>
-              <button className="btn btn-ghost btn-xs" onClick={() => setdetalle(null)}>✕</button>
-            </div>
-
-            <div style={{ padding: '18px 22px' }}>
-              <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: '18px' }}>
-                <div className="stat-card" style={{ padding: '12px 14px' }}>
-                  <div className="stat-card-label">Reservas</div>
-                  <div className="stat-card-value" style={{ fontSize: '20px' }}>{detalle.reservas.length}</div>
-                </div>
-                <div className="stat-card" style={{ padding: '12px 14px' }}>
-                  <div className="stat-card-label">Total pagado</div>
-                  <div className="stat-card-value" style={{ fontSize: '20px', color: 'var(--verde)' }}>
-                    {money(detalle.totalpagado)}
-                  </div>
-                </div>
-                <div className="stat-card" style={{ padding: '12px 14px' }}>
-                  <div className="stat-card-label">Saldo</div>
-                  <div className="stat-card-value" style={{ fontSize: '20px', color: 'var(--rojo)' }}>
-                    {money(detalle.saldototal)}
-                  </div>
-                </div>
-              </div>
-
-              {(detalle.saldofavor > 0 || detalle.creditototal > 0 || detalle.creditoautorizado) && (
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
-                  {detalle.saldofavor > 0 && (
-                    <span className="badge badge-blue">Saldo a favor: {money(detalle.saldofavor)}</span>
-                  )}
-                  {detalle.creditototal > 0 && (
-                    <span className="badge badge-orange">A crédito: {money(detalle.creditototal)}</span>
-                  )}
-                  {detalle.creditoautorizado && <span className="badge badge-gray">Crédito autorizado</span>}
-                </div>
-              )}
-
-              <div className="card-title" style={{ fontSize: '13px', marginBottom: '8px' }}>
-                Historial de reservas
-              </div>
-              {detalle.reservas.length === 0 ? (
-                <p style={{ fontSize: '13px', color: 'var(--text-3)', padding: '12px 0' }}>
-                  Este cliente aún no tiene reservas activas.
-                </p>
-              ) : (
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Folio</th>
-                        <th>Zona</th>
-                        <th>Juego</th>
-                        <th>Pagado</th>
-                        <th>Saldo</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detalle.reservas.map((r) => (
-                        <tr key={r.folio}>
-                          <td className="td-muted" style={{ fontWeight: 600 }}>{r.folio}</td>
-                          <td>{r.zona}</td>
-                          <td className="td-muted">{r.juego}</td>
-                          <td style={{ color: 'var(--verde)' }}>{money(r.montopagado)}</td>
-                          <td>
-                            {r.cortesia ? (
-                              <span className="badge badge-purple">Cortesía</span>
-                            ) : r.saldo > 0 ? (
-                              <span style={{ color: 'var(--rojo)' }}>{money(r.saldo)}</span>
-                            ) : (
-                              <span className="badge badge-green">Pagado</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+      {abierto && (
+        <ClienteDetalle
+          cliente={abierto}
+          pagos={pagos}
+          consumos={consumos}
+          tarjetas={tarjetas}
+          oncerrar={() => setdetalle(null)}
+        />
       )}
     </div>
   )

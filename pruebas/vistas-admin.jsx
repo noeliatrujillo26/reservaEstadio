@@ -20,6 +20,7 @@ import Dashboard from '../src/components/admin/dashboard'
 import Cobros from '../src/components/admin/cobros'
 import Reservas from '../src/components/admin/reservas'
 import Clientes from '../src/components/admin/clientes'
+import ClienteDetalle from '../src/components/admin/clientedetalle'
 import Usuarios from '../src/components/admin/usuarios'
 import Movimientos from '../src/components/admin/movimientos'
 import Consumos from '../src/components/admin/consumos'
@@ -94,6 +95,21 @@ const ProspectoSoloLectura = () => <DetalleProspecto card={valor.pipeline[0]} pu
 const ProspectoBoletos = () => <DetalleProspecto card={{...valor.pipeline[0], etapa:'boletos_entregados'}} puede oncerrar={()=>{}} oneditar={async()=>({ok:true})} ongenerar={async()=>({ok:true})} oneliminar={async()=>{}} onpagar={async()=>({ok:true})} guardando={false} borrando={null} pagando={false} />
 const ConfirmSeguroSinMotivo = () => <ConfirmarSeguro estado={{titulo:'🔒 Bloquear',descripcion:'Sale de venta.',textoconfirmar:'Bloquear',pedirmotivo:false}} oncerrar={()=>{}} />
 
+const ClienteDetalleAbierto = () => {
+  const expediente = { id: 1, nombre: 'Ana', email: 'a@x.com', tel: '6621234567', empresa: '',
+    creditoautorizado: true, saldofavor: 300, creditototal: 0,
+    reservas: [{ folio: 1, zona: 'Terraza Derecha 1', juego: 'vs Mayos', montopagado: 5000, saldo: 4750, cortesia: false }],
+    totalpagado: 5000, saldototal: 4750 }
+  const pagos = [{ id: 1, fecha: '2026-08-05', concepto: 'ABONO', monto: 5000, formapago: 'EFECTIVO', folio: '1' }]
+  const consumos = [{ id: 1, zona: 'Terraza Derecha 1', juego: 'vs Mayos', saldoconsumo: 500 }]
+  const tarjetas = [valor.pipeline[0]]
+  return <ClienteDetalle cliente={expediente} pagos={pagos} consumos={consumos} tarjetas={tarjetas} oncerrar={()=>{}} />
+}
+const ClienteDetalleVacio = () => {
+  const expediente = { id: 2, nombre: 'Sin Historial', email: '—', tel: '—', empresa: '',
+    creditoautorizado: false, saldofavor: 0, creditototal: 0, reservas: [], totalpagado: 0, saldototal: 0 }
+  return <ClienteDetalle cliente={expediente} pagos={[]} consumos={[]} tarjetas={[]} oncerrar={()=>{}} />
+}
 export const vistas={dashboard:Dashboard,cobros:Cobros,seccionesreservadas:Reservas,clientes:Clientes,
  usuarios:Usuarios,movimientos:Movimientos,consumos:Consumos,temporadas:Temporadas,descuentos:Descuentos,metodos:Metodos,
  reportes:Reportes,mensajes:Mensajes,landing:Landing,precios:Precios,cotizaciones:Cotizaciones,
@@ -103,6 +119,7 @@ export const vistas={dashboard:Dashboard,cobros:Cobros,seccionesreservadas:Reser
  reservanueva:ReservaNueva,reservaeditar:ReservaEditar,
  confirmsimple:ConfirmSimple,confirmseguro:ConfirmSeguro,confirmseguro2:ConfirmSeguroSinMotivo,
  prospectonuevo:ProspectoNuevo,prospectodetalle:ProspectoDetalle,
+ cliente_expediente:ClienteDetalleAbierto,cliente_expediente_vacio:ClienteDetalleVacio,
  prospectosinreserva:ProspectoSinReserva,prospectosololectura:ProspectoSoloLectura,
  prospectoboletos:ProspectoBoletos}
 

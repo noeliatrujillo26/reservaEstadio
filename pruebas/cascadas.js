@@ -28,7 +28,7 @@ export {
 
 export { es_cobro_credito } from '../src/lib/dashboard'
 export { redondear_dinero } from '../src/lib/dinero'
-export { escritura_admin, motivo_bloqueo } from '../src/lib/escritura'
+export { escritura_admin, motivo_bloqueo, actualizar_verificado } from '../src/lib/escritura'
 export { ruta_comprobante, comprobante_excede_limite } from '../src/lib/storage'
 
 export { concepto_color, formato_fecha, hora_cobro, instante_cobro } from '../src/lib/cobros'
@@ -58,3 +58,9 @@ export {
   datos_recibo_pago, html_recibo_pago, juego_label_recibo, nombre_archivo_recibo,
 } from '../src/lib/reciboauto'
 export { esc } from '../src/lib/recibo'
+
+export {
+  armar_clientes, cobro_es_del_cliente, folios_de_cliente, pagos_de_cliente,
+  buscar_cliente, nombre_norm, tel_norm,
+} from '../src/lib/clientes'
+export { consumos_de_cliente, consumo_activo } from '../src/lib/consumos'
