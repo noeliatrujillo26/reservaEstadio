@@ -1804,6 +1804,261 @@ for (let i = 0; i < 4000; i++) {
   afirmar('sin folios no escribe', r.cancelados === 0 && sb.escrituras.length === 0)
 }
 
+// ══ 11. RECIBO DIGITAL AUTOMATICO ══════════════════════════════════
+// El recibo AMPARA DINERO RECIBIDO: sus totales tienen que coincidir
+// centavo a centavo con lo que la v1 calcula.
+
+function _matchAreaByZonaNombreV1(zonaNombre, areasData) {
+  if (!zonaNombre) return null
+  const clean = (s) => (s || '').toLowerCase().replace(/[^a-z0-9áéíóúñ\s]/gi, ' ').split(/\s+/).filter(Boolean)
+  const targetWords = clean(zonaNombre)
+  let best = null, bestScore = 0
+  areasData.forEach((a) => {
+    const aWords = clean(a.nombre)
+    let score = 0
+    targetWords.forEach((tw) => { if (aWords.some((aw) => aw === tw || aw.startsWith(tw) || tw.startsWith(aw))) score++ })
+    if (score > bestScore) { bestScore = score; best = a }
+  })
+  return bestScore >= 2 ? best : null
+}
+
+function _sumaPagosDineroV1(pagos) {
+  return pagos.reduce((s, p) => s + (_esCobroCredito(p) ? 0 : (Number(p.monto) || 0)), 0)
+}
+
+function _juegoCotizLabelV1(juegoId, juegos) {
+  const j = juegos.find((x) => String(x.id) === String(juegoId))
+  if (!j) return ''
+  const f = new Date(j.fecha + 'T12:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+  return f + ' · vs ' + j.rival + ' · Juego ' + j.num
+}
+
+// _pdDatosRecibo(), con `pagos`/`idx`/areasData/preciosData/juegos pasados a
+// mano en vez de leidos de globales.
+function _pdDatosReciboV1(card, pagos, idx, areasData, preciosData, juegos) {
+  const pago = pagos[idx]
+  if (!pago || !card) return null
+  const totalReserva = card.monto || 0
+  const totalPagado = _sumaPagosDineroV1(pagos.slice(0, idx + 1))
+  const restante = totalReserva - totalPagado
+  const areaRec = _matchAreaByZonaNombreV1(card.zona || '', areasData)
+  const finde = (() => {
+    const j = juegos.find((x) => String(x.id) === String(card.juego))
+    return !!(j && j.fecha && new Date(j.fecha + 'T12:00').getDay() >= 4)
+  })()
+  const baseRec = areaRec ? (parseInt(_getMinSecV1(areaRec, preciosData, finde), 10) || 0) : 0
+  const asistentes = baseRec > 0 ? baseRec + (parseInt(card.adultos, 10) || 0) + (parseInt(card.ninos, 10) || 0) : null
+  return {
+    folio: card.folio || card.id, cliente: card.nombre, tel: card.tel, email: card.email,
+    zona: card.zona || '', juego: _juegoCotizLabelV1(card.juego, juegos) || card.juego || '',
+    concepto: pago.concepto, monto: pago.monto, forma: pago.forma, fecha: pago.fecha,
+    registradoPor: pago.registradoPor, totalReserva, totalPagado, restante, asistentes,
+    estadoPago: totalReserva > 0 ? (restante <= 0.01 ? 'Liquidado ✓' : 'Pago parcial') : null,
+    historial: pagos.slice(0, idx + 1).map((p) => ({ fecha: p.fecha, concepto: p.concepto, forma: p.forma, monto: p.monto })),
+  }
+}
+
+for (let i = 0; i < 4000; i++) {
+  const nsec = Math.floor(rnd() * 4)
+  const cat_v1 = []
+  const cat_v2 = []
+  for (let k = 0; k < nsec; k++) {
+    const base = { zona: elige(nombres_sec), min: Math.floor(rnd() * 30) + 1, min2: rnd() < 0.5 ? Math.floor(rnd() * 30) + 1 : null }
+    const pin = rnd() < 0.7 ? 'sec-' + k : null
+    cat_v1.push({ pinId: pin, zona: base.zona, min: base.min, min2: base.min2 })
+    cat_v2.push({ pinid: pin, zona: base.zona, min: base.min, min2: base.min2 })
+  }
+  const areas_v1 = [{ id: 'sec-1', nombre: elige(nombres_sec) }, { id: 'sec-2', nombre: elige(nombres_sec) }]
+  const areas_v2 = areas_v1
+
+  const juegos_caso = [
+    { id: 'j1', fecha: '2026-10-16', rival: 'Mayos', num: 3 },
+    { id: 'j2', fecha: '2026-10-13', rival: 'Tomateros', num: 1 },
+  ]
+
+  const npagos = Math.floor(rnd() * 4) + 1
+  const pagos_v1 = []
+  const pagos_v2 = []
+  for (let k = 0; k < npagos; k++) {
+    const c = { concepto: elige(conceptos), forma: elige(formas), monto: dinero(0, 20000), fecha: '2 sep, 26', registradoPor: 'FER' }
+    pagos_v1.push(c)
+    pagos_v2.push({ concepto: c.concepto, formapago: c.forma, monto: c.monto, fecha: c.fecha, recibio: c.registradoPor })
+  }
+  const idx = npagos - 1
+  const card_v1 = {
+    id: 'p' + i, folio: 'PROS-' + i, nombre: 'Cliente ' + i, tel: '6621234567', email: 'c@x.com',
+    zona: elige(areas_v1.map((a) => a.nombre).concat([''])), juego: elige(['j1', 'j2', '']),
+    monto: dinero(0, 60000), adultos: Math.floor(rnd() * 20), ninos: Math.floor(rnd() * 10),
+  }
+
+  const v1 = _pdDatosReciboV1(card_v1, pagos_v1, idx, areas_v1, cat_v1, juegos_caso)
+  const v2r = v2.datos_recibo_pago(card_v1, pagos_v2, idx, { areas: areas_v2, catalogo: cat_v2, juegos: juegos_caso })
+
+  if (!comparar('datos_recibo_pago.totalpagado', v1.totalPagado, v2r.totalpagado, { card_v1 })) fallos++
+  if (!comparar('datos_recibo_pago.restante', v1.restante, v2r.restante, { card_v1 })) fallos++
+  if (!comparar('datos_recibo_pago.asistentes', v1.asistentes, v2r.asistentes, { card_v1 })) fallos++
+  if (!comparar('datos_recibo_pago.estadopago', v1.estadoPago, v2r.estadopago, { card_v1 })) fallos++
+  if (!comparar('datos_recibo_pago.juego', v1.juego, v2r.juego, { card_v1 })) fallos++
+}
+
+// ── el HTML del recibo escapa lo que captura un usuario ──
+{
+  const r = v2.datos_recibo_pago(
+    { id: 1, folio: 'PROS-1', nombre: '<script>alert(1)</script>', tel: '', email: '', zona: 'Terraza & Palco', juego: '', monto: 1000, adultos: 0, ninos: 0 },
+    [{ concepto: 'ABONO', formapago: 'EFECTIVO', monto: 500, fecha: '2026-09-02', recibio: 'FER "Jefa"' }],
+    0, { areas: [], catalogo: [], juegos: [] }
+  )
+  const html = v2.html_recibo_pago(r)
+  afirmar('recibo automatico: escapa el nombre del cliente', !html.includes('<script>alert(1)</script>'))
+  afirmar('recibo automatico: escapa el ampersand de la zona', html.includes('Terraza &amp; Palco'))
+  afirmar('recibo automatico: escapa las comillas de quien recibio', html.includes('&quot;Jefa&quot;'))
+  afirmar('recibo automatico: usa SIEMPRE la identidad oficial, nunca una de localStorage',
+    html.includes('Naranjeros de Hermosillo') && !/nrj_cotiz_plantilla/.test(html))
+}
+{
+  // El nombre del archivo es predecible y sin espacios: viaja como URL.
+  const n = v2.nombre_archivo_recibo('PROS-030', 2)
+  afirmar('nombre de archivo del recibo', n === 'recibo-PROS-030-2.html')
+}
+
+// ══ 12. PALCOS: OCUPACION Y ESTADO DE LAS COMPRAS ══════════════════
+// LA OCUPACION NO SE GUARDA EN NINGUN LADO — se suma de las reservas activas
+// cada vez que se pinta. Si esta cuenta se desalinea con la v1, un palco
+// puede aparecer con lugares libres que ya se vendieron (sobreventa) o
+// agotado sin estarlo (venta perdida). Va al diferencial como el dinero.
+
+function _capacidadPalcoV1(z) {
+  if (!z) return 0
+  return Number(z.capacidadMaxima) || Number(z.cap) || 0
+}
+function _lugaresDeReservaV1(r) {
+  if (!r) return 0
+  const n = Number(r.lugares)
+  if (n > 0) return n
+  let personas = (Number(r.adultos) || 0) + (Number(r.ninos) || 0)
+  if (personas > 0) return personas
+  personas = Number(r.personas) || 0
+  return personas > 0 ? personas : 1
+}
+function _ocupacionPalcoV1(z, juegoId, reservasData) {
+  const cap = _capacidadPalcoV1(z)
+  const reservas = reservasData.filter((r) =>
+    String(r.zonaId || '') === String(z.id) &&
+    String(r.juegoid || '') === String(juegoId) &&
+    String(r.estado || '').toLowerCase() !== 'cancelada'
+  )
+  const ocupados = reservas.reduce((t, r) => t + _lugaresDeReservaV1(r), 0)
+  return {
+    capacidad: cap, ocupados, libres: Math.max(0, cap - ocupados),
+    agotado: cap > 0 && ocupados >= cap,
+    pct: cap > 0 ? Math.min(100, Math.round(ocupados * 100 / cap)) : 0,
+    reservas,
+  }
+}
+function _palcosDelMapaV1(areasData) {
+  return areasData.filter((a) => !!a.esCompartida)
+}
+// _palcoTarjeta(): las cuentas de neto/pagado/saldo/liquidada/pendiente.
+function _palcoEstadoV1(r) {
+  const neto = Math.max(0, (Number(r.monto) || 0) - (Number(r.descuentoMonto) || 0))
+  const pagado = Number(r.montoPagado) || 0
+  const saldo = Math.max(0, neto - pagado)
+  const liquidada = neto > 0 && pagado >= neto
+  const pendiente = String(r.estado || '').toLowerCase() === 'pendiente'
+  return { neto, pagado, saldo, liquidada, pendiente }
+}
+
+for (let i = 0; i < 8000; i++) {
+  const palcobase = {
+    id: 'sec-' + (i % 5),
+    capacidadmaxima: rnd() < 0.7 ? Math.floor(rnd() * 80) : null,
+    cap: Math.floor(rnd() * 60) + 10,
+  }
+  // dos objetos, mismos numeros, cada uno con el vocabulario de su version —
+  // igual que reservas y cobros: pasar el mismo objeto camelCase a las dos
+  // funciones no prueba nada, solo demuestra que una de las dos NO lo lee.
+  const palco = { ...palcobase, esCompartida: true, capacidadMaxima: palcobase.capacidadmaxima }
+  const palco_v2 = { ...palcobase, escompartida: true }
+  const nres = Math.floor(rnd() * 6)
+  const res_v1 = []
+  const res_v2 = []
+  for (let k = 0; k < nres; k++) {
+    const mismazona = rnd() < 0.75
+    const mismojuego = rnd() < 0.85
+    const base = {
+      id: 'R' + i + '-' + k,
+      estado: rnd() < 0.15 ? 'cancelada' : (rnd() < 0.1 ? 'pendiente' : 'activa'),
+      lugares: rnd() < 0.2 ? Math.floor(rnd() * 6) : null,
+      adultos: Math.floor(rnd() * 8), ninos: Math.floor(rnd() * 4),
+      personas: Math.floor(rnd() * 10),
+      monto: dinero(0, 20000), descuentoMonto: dinero(0, 5000),
+      montoPagado: dinero(0, 20000),
+    }
+    res_v1.push({
+      ...base, zonaId: mismazona ? palco.id : 'otra', juegoid: mismojuego ? 'j1' : 'j2',
+    })
+    res_v2.push({
+      ...base, zonaid: mismazona ? palco.id : 'otra', juegoid: mismojuego ? 'j1' : 'j2',
+      descuentomonto: base.descuentoMonto, montopagado: base.montoPagado,
+    })
+  }
+
+  const v1 = _ocupacionPalcoV1(palco, 'j1', res_v1)
+  const v2r = v2.ocupacion_palco(palco_v2, 'j1', res_v2)
+  if (!comparar('ocupacion_palco.capacidad', v1.capacidad, v2r.capacidad, { palco })) fallos++
+  if (!comparar('ocupacion_palco.ocupados', v1.ocupados, v2r.ocupados, { palco })) fallos++
+  if (!comparar('ocupacion_palco.libres', v1.libres, v2r.libres, { palco })) fallos++
+  if (!comparar('ocupacion_palco.agotado', v1.agotado, v2r.agotado, { palco })) fallos++
+  if (!comparar('ocupacion_palco.pct', v1.pct, v2r.pct, { palco })) fallos++
+  if (!comparar('ocupacion_palco.reservas', v1.reservas.map((r) => r.id).sort(),
+    v2r.reservas.map((r) => r.id).sort(), { palco })) fallos++
+
+  // el estado de pago de cada compra dentro del palco
+  res_v1.forEach((r1, k) => {
+    if (!comparar('estado_pago_palco', _palcoEstadoV1(r1), v2.estado_pago_palco(res_v2[k]), { r1 })) fallos++
+    if (!comparar('lugares_de_reserva', _lugaresDeReservaV1(r1), v2.lugares_de_reserva(res_v2[k]), { r1 })) fallos++
+  })
+}
+
+// ── que secciones cuentan como palco compartido ──
+{
+  const areas_v1 = [
+    { id: 'a1', esCompartida: true }, { id: 'a2', esCompartida: false }, { id: 'a3' },
+  ]
+  const areas_v2 = [
+    { id: 'a1', escompartida: true }, { id: 'a2', escompartida: false }, { id: 'a3' },
+  ]
+  const v1 = _palcosDelMapaV1(areas_v1).map((a) => a.id)
+  const v2r = v2.palcos_del_mapa(areas_v2).map((a) => a.id)
+  afirmar('palcos_del_mapa selecciona solo los compartidos', JSON.stringify(v1) === JSON.stringify(v2r) && v1.join(',') === 'a1')
+}
+
+// ── sin dato explicito de lugares, NUNCA se cuenta 0 ──
+// Contar 0 haria invisible una compra y dejaria vender lugares ya tomados.
+{
+  afirmar('sin ningun dato, se cuenta 1 lugar (nunca 0)', v2.lugares_de_reserva({}) === 1)
+  afirmar('lugares explicito manda sobre personas', v2.lugares_de_reserva({ lugares: 3, personas: 10 }) === 3)
+  afirmar('sin lugares, adultos+ninos manda sobre personas',
+    v2.lugares_de_reserva({ adultos: 2, ninos: 1, personas: 10 }) === 3)
+}
+
+// ── capacidad: capacidadmaxima manda sobre cap ──
+{
+  afirmar('capacidadmaxima manda sobre cap', v2.capacidad_palco({ capacidadmaxima: 40, cap: 60 }) === 40)
+  afirmar('sin capacidadmaxima cae a cap', v2.capacidad_palco({ cap: 60 }) === 60)
+  afirmar('sin ninguna, capacidad 0', v2.capacidad_palco({}) === 0)
+}
+
+// ── la cuenta de la tarjeta: liquidada / pendiente / resta ──
+{
+  const liquidada = v2.estado_pago_palco({ monto: 10000, descuentomonto: 0, montopagado: 10000, estado: 'activa' })
+  afirmar('pagado == neto es liquidada', liquidada.liquidada === true && liquidada.saldo === 0)
+  const parcial = v2.estado_pago_palco({ monto: 10000, descuentomonto: 2000, montopagado: 5000, estado: 'activa' })
+  afirmar('el descuento resta del neto antes de comparar', parcial.neto === 8000 && parcial.saldo === 3000 && parcial.liquidada === false)
+  const pendiente = v2.estado_pago_palco({ monto: 10000, descuentomonto: 0, montopagado: 0, estado: 'Pendiente' })
+  afirmar('estado Pendiente (con mayuscula) se detecta igual', pendiente.pendiente === true)
+}
+
 // ══ RESULTADO ═════════════════════════════════════════════════════
 console.log('\n── diferencial contra la v1 ──')
 console.log('  comparaciones: ' + casos.toLocaleString('es-MX'))

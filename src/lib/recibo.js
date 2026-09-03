@@ -15,7 +15,7 @@ import { app_config } from './config'
 import { folio_reserva, formato_fecha } from './cobros'
 import { mxn2 } from './dinero'
 
-function esc(s) {
+export function esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

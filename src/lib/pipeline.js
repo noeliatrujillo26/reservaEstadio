@@ -183,6 +183,18 @@ export function ocupacion_palco(area, juegoid, reservas) {
   }
 }
 
+// Estado de pago de UNA reserva dentro de un palco: neto, pagado, saldo, si
+// esta LIQUIDADA y si es un apartado PENDIENTE sin cobro confirmado todavia.
+// espejo de las cuentas inline de _palcoTarjeta() (js/modules/palcos.js).
+export function estado_pago_palco(r) {
+  const neto = Math.max(0, (Number(r.monto) || 0) - (Number(r.descuentomonto) || 0))
+  const pagado = Number(r.montopagado) || 0
+  const saldo = Math.max(0, neto - pagado)
+  const liquidada = neto > 0 && pagado >= neto
+  const pendiente = String(r.estado || '').toLowerCase() === 'pendiente'
+  return { neto, pagado, saldo, liquidada, pendiente }
+}
+
 export function palcos_del_mapa(areas) {
   return (areas || []).filter((a) => a && a.escompartida)
 }

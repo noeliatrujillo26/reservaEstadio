@@ -33,8 +33,9 @@ import {
   cancelar_cobros_de_folios, cliente_id_de_cobro, mover_saldo_favor, saldo_favor_de,
   sincronizar_etapa, sincronizar_pago_reserva,
 } from '../lib/cascadas'
+import { datos_recibo_pago, html_recibo_pago, nombre_archivo_recibo } from '../lib/reciboauto'
+import { pagos_de_tarjeta, pipeline_etapas, reservas_activas } from '../lib/pipeline'
 import { subir_comprobante } from '../lib/storage'
-import { pipeline_etapas, reservas_activas } from '../lib/pipeline'
 import {
   bruto_tarjeta, calc_total_prospecto, nuevo_folio_prospecto, validar_edicion_prospecto,
   validar_mover_etapa, validar_prospecto,
@@ -798,6 +799,45 @@ export function useprospectos() {
           month: 'long', timeZone: 'America/Hermosillo',
         })
 
+        // ── RECIBO DIGITAL AUTOMATICO ──────────────────────────────
+        // espejo de agregarPagoPD(): un pago REAL sin comprobante manual
+        // (tipicamente EFECTIVO en mano) publica el recibo oficial en Storage
+        // y su liga viaja como `evidencia` en el propio INSERT del cobro —
+        // vinculado al registro desde el primer momento y sobrevive recargas.
+        // PENDIENTE y CREDITO no llevan recibo: aun no hay dinero recibido
+        // que amparar. NO-FATAL: si Storage falla, el pago se registra igual.
+        let reciboauto = null
+        if (!espendiente && !escredito && !evidencia) {
+          try {
+            const catalogo = (secciones || []).map(map_precio)
+            const historialprevio = pagos_de_tarjeta(card, cobros || [])
+            const pagonuevo = {
+              concepto: concepto.toUpperCase(), monto: redondear_dinero(monto),
+              formapago: forma, estado: '', fecha, recibio: usuario ? usuario.nombre : '',
+            }
+            const pagosconnuevo = historialprevio.concat([pagonuevo])
+            const datosrec = datos_recibo_pago(card, pagosconnuevo, pagosconnuevo.length - 1, {
+              areas, catalogo, juegos,
+            })
+            if (datosrec) {
+              const html = html_recibo_pago(datosrec)
+              const archivo = new File(
+                [html], nombre_archivo_recibo(datosrec.folio, pagosconnuevo.length),
+                { type: 'text/html' }
+              )
+              const subida = await subir_comprobante(sb, archivo, 'recibos')
+              if (subida.ruta && !subida.error) {
+                reciboauto = window.location.origin + '/api/recibo?f=' + encodeURIComponent(subida.ruta)
+                evidencia = reciboauto
+              } else {
+                console.error('Recibo automático falló (el pago se registra igual):', subida.error)
+              }
+            }
+          } catch (e) {
+            console.error('Recibo automático falló (el pago se registra igual):', e)
+          }
+        }
+
         const res = await insertar_verificado(sb, usuario, 'cobros', {
           fecha,
           mes: messtr.charAt(0).toUpperCase() + messtr.slice(1),
@@ -871,6 +911,7 @@ export function useprospectos() {
           '✅ ¡Pago registrado! · ' + money(redondear_dinero(monto)) +
           (essaldofavor && saldorestante != null
             ? ' · Aplicado desde Saldo a Favor · Restante: ' + money(saldorestante) : '') +
+          (reciboauto ? ' · 🧾 Recibo digital generado' : '') +
           (sync && sync.liquidada ? ' · 💚 Reserva ' + reservavinc.id + ' LIQUIDADA' : '')
         )
         registrar_movimiento(sb, {
@@ -925,7 +966,7 @@ export function useprospectos() {
       }
     },
     [
-      usuario, pagando, reservas, cobros, clientes, areas, politica,
+      usuario, pagando, reservas, cobros, clientes, areas, secciones, juegos, politica,
       mostrartoast, recargar,
     ]
   )

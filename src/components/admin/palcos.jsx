@@ -8,12 +8,25 @@
 // dentro de un palco que otros comparten, y la pregunta que manda es cuanto
 // queda por vender en cada palco.
 //
-// MODO CONSULTA: se omiten el reporte descargable y cualquier edicion.
+// ESCRITURA (Fase 2): clic en una tarjeta abre la MISMA edicion de reserva que
+// usa la vista de Reservas (usereservasescritura + reservaform.jsx) — la v1
+// tampoco tiene un formulario propio aqui, _palcoAbrirReserva reutiliza
+// abrirReservaManual(). No hay boton de eliminar en la tarjeta: en la v1 el
+// borrado vive solo en la tabla de Reservas.
+//
+// EL CONTROL DE LUGARES DISPONIBLES NO ES UNA TABLA QUE SINCRONIZAR: no se
+// guarda en ningun lado, se CALCULA sumando las reservas activas del palco
+// (ocupacion_palco, en lib/pipeline.js) cada vez que se pinta. Guardar una
+// reserva dispara recargar(), que relee la base; la ocupacion se recalcula
+// sola con los datos frescos — no hay nada que "sincronizar" aparte.
+// Sigue sin migrar el reporte descargable: dispara un archivo, no escribe.
 // ═══════════════════════════════════════════════════════════════════
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
-import { lugares_de_reserva, ocupacion_palco, palcos_del_mapa } from '../../lib/pipeline'
+import usereservasescritura from '../../hooks/usereservasescritura'
+import ReservaForm from './reservaform'
+import { estado_pago_palco, lugares_de_reserva, ocupacion_palco, palcos_del_mapa } from '../../lib/pipeline'
 import { redondear_dinero, mxn2 } from '../../lib/dinero'
 import { hoy_hermosillo } from '../../lib/fechas'
 
@@ -21,15 +34,21 @@ const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2
 
 export default function palcos() {
   const { areas, reservas, juegos, cargando } = useadmindatos()
-  const [juegoid, setjuegoid] = useState('')
+  const { puede, guardar, guardando } = usereservasescritura()
+  const [form, setform] = useState(null) // { editando } | null
 
-  // se preselecciona el proximo juego, como en el resto del panel.
-  useEffect(() => {
-    if (juegoid || !juegos.length) return
+  // El proximo juego se PRESELECCIONA, igual que en Reservas. Va DERIVADO y no
+  // en un useEffect: con el efecto el primer render se pintaba vacio —y el
+  // banco de pruebas, que no ejecuta efectos, nunca llegaba a probar el
+  // tablero ni sus KPIs, solo el mensaje "elige un juego".
+  const [juegoelegido, setjuegoelegido] = useState('')
+  const juegoauto = useMemo(() => {
+    if (!juegos.length) return ''
     const hoy = hoy_hermosillo()
     const prox = juegos.find((j) => (j.fecha || '') >= hoy) || juegos[0]
-    if (prox) setjuegoid(String(prox.id))
-  }, [juegos, juegoid])
+    return prox ? String(prox.id) : ''
+  }, [juegos])
+  const juegoid = juegoelegido || juegoauto
 
   const juego = juegos.find((j) => String(j.id) === String(juegoid)) || null
   const palcos = useMemo(() => palcos_del_mapa(areas), [areas])
@@ -74,7 +93,7 @@ export default function palcos() {
           </div>
           <select
             id="palcos-filtro-juego" className="input select" style={{ width: '280px' }}
-            value={juegoid} onChange={(e) => setjuegoid(e.target.value)}
+            value={juegoid} onChange={(e) => setjuegoelegido(e.target.value)}
           >
             <option value="">— Selecciona un juego —</option>
             {juegos.map((j) => (
@@ -145,15 +164,50 @@ export default function palcos() {
                   </div>
 
                   <div style={{ display: 'grid', gap: '8px' }}>
-                    {o.reservas.map((r) => (
-                      <div key={r.id} style={{ background: 'var(--surface-2)', borderRadius: '8px', padding: '9px 10px' }}>
-                        <div style={{ fontSize: '12.5px', fontWeight: 700 }}>{r.cliente}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>
-                          {lugares_de_reserva(r)} lugar(es) ·{' '}
-                          {money(Math.max(0, (Number(r.monto) || 0) - (Number(r.descuentomonto) || 0)))}
+                    {o.reservas.map((r) => {
+                      const lugares = lugares_de_reserva(r)
+                      const { neto, saldo, liquidada, pendiente } = estado_pago_palco(r)
+                      const raya = liquidada ? 'var(--verde)' : pendiente ? 'var(--naranja)' : 'var(--azul, #2563eb)'
+                      return (
+                        <div
+                          key={r.id}
+                          role={puede ? 'button' : undefined}
+                          tabIndex={puede ? 0 : undefined}
+                          onClick={() => puede && setform({ editando: r })}
+                          onKeyDown={(e) => {
+                            if (puede && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setform({ editando: r }) }
+                          }}
+                          title={puede ? 'Clic para editar la reserva' : undefined}
+                          style={{
+                            background: 'var(--surface-2)', borderRadius: '8px', padding: '9px 10px',
+                            borderLeft: '3px solid ' + raya, cursor: puede ? 'pointer' : 'default',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '8px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {r.cliente || '—'}
+                            </span>
+                            <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--naranja)', whiteSpace: 'nowrap' }}>
+                              {lugares} lugar{lugares === 1 ? '' : 'es'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-3)', marginTop: '2px' }}>{r.id}</div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginTop: '6px' }}>
+                            <span style={{ color: 'var(--text-3)' }}>{money(neto)}</span>
+                            {liquidada ? (
+                              <span style={{ color: 'var(--verde)', fontWeight: 700 }}>Liquidada</span>
+                            ) : (
+                              <span style={{ color: 'var(--rojo)', fontWeight: 700 }}>Resta {money(saldo)}</span>
+                            )}
+                          </div>
+                          {pendiente && (
+                            <div style={{ fontSize: '10px', color: 'var(--naranja)', fontWeight: 700, marginTop: '4px' }}>
+                              ⏳ Apartado sin pago confirmado
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                     {o.reservas.length === 0 && (
                       <div style={{ fontSize: '12px', color: 'var(--text-3)', padding: '14px 2px' }}>
                         Sin ventas en este palco todavía.
@@ -166,6 +220,16 @@ export default function palcos() {
           </div>
         )}
       </div>
+
+      <ReservaForm
+        abierto={!!form}
+        editando={form ? form.editando : null}
+        juegoinicial={juegoid}
+        zonainicial=""
+        oncerrar={() => setform(null)}
+        onguardar={guardar}
+        guardando={guardando}
+      />
     </div>
   )
 }

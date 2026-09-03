@@ -48,7 +48,11 @@ const secciones=[{id:'sec-1',num:1,nombre:'Terraza Derecha 1',cap:64,es_comparti
 const areas=[{id:'sec-1',nombre:'Terraza Derecha 1',cap:64,escompartida:false,estado:'libre'},
  {id:'sec-2',nombre:'Palco All-Inc 2',cap:60,escompartida:true,capacidadmaxima:40,estado:'libre'}]
 const juegos=[{id:'j1',mes:'oct',fecha:'2026-10-14',hora:'19:30',rival:'Mayos',num:1,serie:'S1',estado:'Confirmado'}]
-const reservas=[{id:1,cliente:'Ana',zona:'Terraza Derecha 1',juego:'vs Mayos',juegoid:'j1',zonaid:'sec-1',monto:9750,montopagado:5000,descuentomonto:0,estadopago:'parcial',pago:'',estado:'activa',email:'a@x.com',tel:'6621234567',personas:20,adultos:null,ninos:2,saldoconsumo:500}]
+const reservas=[{id:1,cliente:'Ana',zona:'Terraza Derecha 1',juego:'vs Mayos',juegoid:'j1',zonaid:'sec-1',monto:9750,montopagado:5000,descuentomonto:0,estadopago:'parcial',pago:'',estado:'activa',email:'a@x.com',tel:'6621234567',personas:20,adultos:null,ninos:2,saldoconsumo:500},
+ // ocupa un palco COMPARTIDO (sec-2): sin esta fila el tablero de Palcos
+ // siempre pintaba "Sin ventas todavia" en el banco de pruebas y la tarjeta
+ // clicable —con role/tabIndex segun el modo de la bandera— nunca se probaba.
+ {id:2,cliente:'Luis',zona:'Palco All-Inc 2',juego:'vs Mayos',juegoid:'j1',zonaid:'sec-2',monto:12000,montopagado:12000,descuentomonto:0,estadopago:'pagado',pago:'Completo',estado:'activa',email:'l@x.com',tel:'6629876543',personas:8,adultos:8,ninos:0,saldoconsumo:0}]
 const cobros=[{id:1,fecha:'2026-08-05',mes:'Agosto',cliente:'Ana',concepto:'ABONO',monto:5000,formapago:'EFECTIVO',folio:'1',estado:'',createdat:'2026-08-05T17:24:00Z',zona:'Terraza Derecha 1',area:'ASADOR',recibio:'FER',factura:'REQUERIDA',email:'a@x.com',notas:'captura manual',evidencia:'https://x.supabase.co/storage/v1/object/sign/comprobantes_pagos/cobros/1_v.pdf?token=t',facturapdf:'',facturaxml:''},
  {id:2,fecha:'2026-08-06',mes:'Agosto',cliente:'Luis',concepto:'CRÉDITO',monto:3000,formapago:'CREDITO',folio:'1',estado:'cancelado',createdat:null,zona:'Palco All-Inc 2',area:'ASADOR',recibio:'MELI',factura:'',email:'',notas:'',evidencia:'',facturapdf:'https://x/cfdi.pdf',facturaxml:''}]
 

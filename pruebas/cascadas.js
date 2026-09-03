@@ -10,7 +10,8 @@ export {
   pagos_de_tarjeta, abonado_etapa, reservas_activas, enganche_requerido,
   indice_etapa, es_cotiz_especial, no_recalcular_area, total_reserva_card,
   saldo_pendiente_card, etapa_por_abono, pct_abonado, debe_reclasificar,
-  num_monto, pipeline_etapas,
+  num_monto, pipeline_etapas, capacidad_palco, lugares_de_reserva,
+  ocupacion_palco, palcos_del_mapa, estado_pago_palco, suma_pagos_dinero,
 } from '../src/lib/pipeline'
 
 export {
@@ -52,3 +53,8 @@ export {
   calc_total_prospecto, bruto_tarjeta, validar_prospecto, validar_edicion_prospecto,
   puede_generar_reserva, validar_mover_etapa,
 } from '../src/lib/prospectos'
+
+export {
+  datos_recibo_pago, html_recibo_pago, juego_label_recibo, nombre_archivo_recibo,
+} from '../src/lib/reciboauto'
+export { esc } from '../src/lib/recibo'
