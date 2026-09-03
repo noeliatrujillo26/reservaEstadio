@@ -12,7 +12,7 @@
 // registro se conserva tal cual.
 // ═══════════════════════════════════════════════════════════════════
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
 import { usetoast } from '../../context/toastcontext'
 import usefactura from '../../hooks/usefactura'
@@ -63,6 +63,12 @@ function detalle_cobro({ cobro, oncerrar, oncancelar, cancelando }) {
       : null),
     [cobro, reserva, clientes]
   )
+
+  useEffect(() => {
+    const alteclado = (e) => { if (e.key === 'Escape') oncerrar() }
+    if (cobro) document.addEventListener('keydown', alteclado)
+    return () => document.removeEventListener('keydown', alteclado)
+  }, [cobro, oncerrar])
 
   if (!cobro) return null
 

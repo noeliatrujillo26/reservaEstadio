@@ -140,17 +140,22 @@ export default function palcos() {
                 <div
                   key={area.id}
                   className="pipeline-col"
-                  style={{ minWidth: '290px', maxWidth: '290px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '14px' }}
+                  style={{
+                    minWidth: '290px', maxWidth: '290px', background: 'var(--surface)', border: '1px solid var(--border)',
+                    borderRadius: '12px', padding: '14px', overflow: 'hidden',
+                  }}
                 >
                   <div style={{ marginBottom: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                      <div style={{ fontSize: '13.5px', fontWeight: 700 }}>{area.nombre}</div>
+                      <div style={{ fontSize: '13.5px', fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {area.nombre}
+                      </div>
                       {o.agotado ? (
-                        <span className="badge badge-red" style={{ fontSize: '10px', marginLeft: 'auto' }}>
+                        <span className="badge badge-red" style={{ fontSize: '10px', marginLeft: 'auto', flexShrink: 0 }}>
                           AGOTADO
                         </span>
                       ) : (
-                        <span className="badge badge-green" style={{ fontSize: '10px', marginLeft: 'auto' }}>
+                        <span className="badge badge-green" style={{ fontSize: '10px', marginLeft: 'auto', flexShrink: 0 }}>
                           {o.libres} libres
                         </span>
                       )}
@@ -180,11 +185,15 @@ export default function palcos() {
                           title={puede ? 'Clic para editar la reserva' : undefined}
                           style={{
                             background: 'var(--surface-2)', borderRadius: '8px', padding: '9px 10px',
-                            borderLeft: '3px solid ' + raya, cursor: puede ? 'pointer' : 'default',
+                            borderLeft: '3px solid ' + raya, cursor: puede ? 'pointer' : 'default', overflow: 'hidden',
                           }}
                         >
                           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '8px' }}>
-                            <span style={{ fontSize: '13px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {/* minWidth:0 es lo que de verdad hace efecto el ellipsis: un hijo
+                                flex mide su min-width por su contenido (auto), no por el ancho
+                                disponible, y sin esto un nombre largo empujaba la tarjeta mas
+                                alla de los 290px de la columna y se encimaba con la de al lado. */}
+                            <span style={{ fontSize: '13px', fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {r.cliente || '—'}
                               {/* Afordancia explicita de que la tarjeta es clicable — el cursor
                                   solo no bastaba para que se notara que abre la edicion. */}
@@ -194,7 +203,7 @@ export default function palcos() {
                                 </span>
                               )}
                             </span>
-                            <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--naranja)', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--naranja)', whiteSpace: 'nowrap', flexShrink: 0 }}>
                               {lugares} lugar{lugares === 1 ? '' : 'es'}
                             </span>
                           </div>

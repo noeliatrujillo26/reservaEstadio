@@ -13,7 +13,7 @@
 // su reserva: volver a pulsarlo creaba una segunda por descuido.
 // ═══════════════════════════════════════════════════════════════════
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
 import {
   abonado_etapa, pagos_de_tarjeta, pipeline_etapas, reservas_activas, suma_pagos_dinero,
@@ -65,6 +65,15 @@ function detalle_prospecto({
   }))
 
   const catalogo = useMemo(() => (secciones || []).map(map_precio), [secciones])
+
+  // El padre solo monta este modal mientras esta abierto (ver comentario de
+  // arriba), asi que el listener vive mientras el componente vive: no hace
+  // falta una guarda de "abierto".
+  useEffect(() => {
+    const alteclado = (e) => { if (e.key === 'Escape') oncerrar() }
+    document.addEventListener('keydown', alteclado)
+    return () => document.removeEventListener('keydown', alteclado)
+  }, [oncerrar])
 
   const pagos = useMemo(() => pagos_de_tarjeta(card, cobros || []), [card, cobros])
   const activas = useMemo(() => reservas_activas(card, reservas), [card, reservas])

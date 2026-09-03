@@ -10,7 +10,7 @@
 // la v1 vive dentro del modal de edicion.
 // ═══════════════════════════════════════════════════════════════════
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
 import {
   cotiz_badge, cotiz_tabs, coincide_tab, filtrar_cotizaciones, kpis_cotizaciones,
@@ -37,6 +37,12 @@ export default function cotizaciones() {
   const [busqueda, setbusqueda] = useState('')
   const [orden, setorden] = useState({ col: null, dir: 'asc' })
   const [detalle, setdetalle] = useState(null)
+
+  useEffect(() => {
+    const alteclado = (e) => { if (e.key === 'Escape') setdetalle(null) }
+    if (detalle) document.addEventListener('keydown', alteclado)
+    return () => document.removeEventListener('keydown', alteclado)
+  }, [detalle])
 
   // los 5 KPIs miran TODAS las cotizaciones, no la pestaña activa.
   const kpis = useMemo(() => kpis_cotizaciones(todas), [todas])

@@ -66,6 +66,12 @@ function reserva_form({ abierto, editando, juegoinicial, zonainicial, oncerrar, 
     }
   }, [abierto, editando, juegoinicial, zonainicial])
 
+  useEffect(() => {
+    const alteclado = (e) => { if (e.key === 'Escape') oncerrar() }
+    if (abierto) document.addEventListener('keydown', alteclado)
+    return () => document.removeEventListener('keydown', alteclado)
+  }, [abierto, oncerrar])
+
   const juego = useMemo(
     () => (juegos || []).find((x) => String(x.id) === String(juegoid)) || null,
     [juegos, juegoid]

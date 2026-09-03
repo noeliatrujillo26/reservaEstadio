@@ -9,7 +9,7 @@
 // edicion y aqui se muestra en modo consulta.
 // ═══════════════════════════════════════════════════════════════════
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
 import useadmin from '../../hooks/useadmin'
 import {
@@ -24,6 +24,12 @@ export default function usuarios() {
   const [rol, setrol] = useState('')
   const [estado, setestado] = useState('')
   const [detalle, setdetalle] = useState(null)
+
+  useEffect(() => {
+    const alteclado = (e) => { if (e.key === 'Escape') setdetalle(null) }
+    if (detalle) document.addEventListener('keydown', alteclado)
+    return () => document.removeEventListener('keydown', alteclado)
+  }, [detalle])
 
   const lista = useMemo(
     () => filtrar_usuarios(todos, { busqueda, rol, estado }),

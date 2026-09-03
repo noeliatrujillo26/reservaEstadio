@@ -83,6 +83,12 @@ function nuevo_cobro({ abierto, oncerrar, onregistrar, guardando }) {
     if (abierto) setforma(formas[0] || '')
   }, [abierto, formas])
 
+  useEffect(() => {
+    const alteclado = (e) => { if (e.key === 'Escape') oncerrar() }
+    if (abierto) document.addEventListener('keydown', alteclado)
+    return () => document.removeEventListener('keydown', alteclado)
+  }, [abierto, oncerrar])
+
   // Saldo a favor del cliente elegido: se lee de la BASE, no del espejo local,
   // porque otra caja pudo haberlo movido hace un minuto y aplicar de mas seria
   // dinero mal contado.

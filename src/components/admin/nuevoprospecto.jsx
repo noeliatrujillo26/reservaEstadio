@@ -45,6 +45,12 @@ function nuevo_prospecto({ abierto, oncerrar, oncrear, guardando }) {
     setcampos([])
   }, [abierto])
 
+  useEffect(() => {
+    const alteclado = (e) => { if (e.key === 'Escape') oncerrar() }
+    if (abierto) document.addEventListener('keydown', alteclado)
+    return () => document.removeEventListener('keydown', alteclado)
+  }, [abierto, oncerrar])
+
   const set = (k, v) => setd((x) => ({ ...x, [k]: v }))
 
   const catalogo = useMemo(() => (secciones || []).map(map_precio), [secciones])

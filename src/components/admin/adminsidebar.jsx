@@ -21,7 +21,21 @@ export default function adminsidebar({ vista, onvista, oncerrardrawer }) {
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-logo" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+      {/* /admin es una sola ruta con "vista" como estado interno (app.jsx) —
+          navegar de verdad con <a href> recargaria la pagina y perderia ese
+          estado. onvista('dashboard') es exactamente lo que hace cada boton
+          del menu, asi que el logo entra al Dashboard sin salir de la SPA. */}
+      <div
+        className="sidebar-logo"
+        role="button"
+        tabIndex={0}
+        onClick={() => { onvista('dashboard'); if (oncerrardrawer) oncerrardrawer() }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onvista('dashboard'); if (oncerrardrawer) oncerrardrawer() }
+        }}
+        title="Ir al Dashboard"
+        style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '4px', cursor: 'pointer' }}
+      >
         <img src="/logo-naranjeros.png" alt="Naranjeros" style={{ height: '30px', width: 'auto', objectFit: 'contain' }} />
         <span id="sidebar-subtitulo" style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-3)', opacity: 0.9, lineHeight: 1.35, margin: '2px 0' }}>
           Sistema Integral de Reservas en Estadios

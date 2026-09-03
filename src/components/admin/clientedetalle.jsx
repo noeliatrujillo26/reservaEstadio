@@ -18,6 +18,7 @@
 // razon: no hay forma de generar ese dato todavia.
 // ═══════════════════════════════════════════════════════════════════
 
+import { useEffect } from 'react'
 import { es_cobro_credito } from '../../lib/dashboard'
 import { formato_fecha } from '../../lib/cobros'
 import { pipeline_etapas } from '../../lib/pipeline'
@@ -26,6 +27,14 @@ import { redondear_dinero, mxn2 } from '../../lib/dinero'
 const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2)
 
 function cliente_detalle({ cliente, pagos, consumos, tarjetas, oncerrar }) {
+  // El padre (clientes.jsx) monta este componente solo mientras esta
+  // abierto — el listener vive mientras el componente vive.
+  useEffect(() => {
+    const alteclado = (e) => { if (e.key === 'Escape') oncerrar() }
+    document.addEventListener('keydown', alteclado)
+    return () => document.removeEventListener('keydown', alteclado)
+  }, [oncerrar])
+
   return (
     <div
       className="modal-overlay open" id="modal-cliente-detalle"
