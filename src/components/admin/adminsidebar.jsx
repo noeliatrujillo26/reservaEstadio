@@ -21,19 +21,20 @@ export default function adminsidebar({ vista, onvista, oncerrardrawer }) {
 
   return (
     <aside className="sidebar">
-      {/* /admin es una sola ruta con "vista" como estado interno (app.jsx) —
-          navegar de verdad con <a href> recargaria la pagina y perderia ese
-          estado. onvista('dashboard') es exactamente lo que hace cada boton
-          del menu, asi que el logo entra al Dashboard sin salir de la SPA. */}
+      {/* El logo saca al usuario del panel admin y lo manda al portal PUBLICO
+          de clientes (juegos y reservas) — una pagina distinta, con su propio
+          bundle (app.jsx), no una vista interna de /admin. Por eso es una
+          navegacion real y no onvista(): aqui SI se busca abandonar la SPA
+          del panel. */}
       <div
         className="sidebar-logo"
         role="button"
         tabIndex={0}
-        onClick={() => { onvista('dashboard'); if (oncerrardrawer) oncerrardrawer() }}
+        onClick={() => { window.location.href = '/' }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onvista('dashboard'); if (oncerrardrawer) oncerrardrawer() }
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.location.href = '/' }
         }}
-        title="Ir al Dashboard"
+        title="Ir al portal de clientes"
         style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '4px', cursor: 'pointer' }}
       >
         <img src="/logo-naranjeros.png" alt="Naranjeros" style={{ height: '30px', width: 'auto', objectFit: 'contain' }} />
