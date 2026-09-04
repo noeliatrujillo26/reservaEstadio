@@ -40,7 +40,13 @@ export const tabla_modulo_edicion = {
   reservas: ['seccionesreservadas', 'pipeline', 'cobros', 'palcos'],
   clientes: ['clientes'],
   cobros: ['cobros', 'pipeline'],
-  pipeline_prospectos: ['pipeline'],
+  // 'cotizaciones' se agrega aqui ademas de 'pipeline': convertir una
+  // cotizacion en prospecto (cotizacion_a_prospecto_payload, en
+  // usecotizacionesescritura.js) inserta en esta misma tabla, y es una accion
+  // del modulo Cotizaciones — misma logica que 'cobros' o 'palcos' aqui abajo
+  // en `reservas`: una Vendedora con cotizaciones:editar pero sin ver Pipeline
+  // en su menu debe poder enviar SU cotizacion al tablero de todos modos.
+  pipeline_prospectos: ['pipeline', 'cotizaciones'],
   cotizaciones: ['cotizaciones'],
   descuentos_volumen: ['descuentos'],
   // AGREGADA AQUI, no la trae la v1. Su _TABLA_MODULO_EDICION no declara

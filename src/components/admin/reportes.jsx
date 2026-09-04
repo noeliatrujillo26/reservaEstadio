@@ -3,16 +3,41 @@
 // espejo 1:1 de v1: #page-reportes de index.html (lineas 2382-2458) y
 // renderReportes() / _repDatos() / _repRango() (js/modules/cobros.js).
 //
-// SOLO LECTURA: se omiten los exports a PDF y Excel.
+// CONSOLIDADO DIARIO / ARQUEO (Fase 2): pantalla nueva, sin equivalente en la
+// v1 (ver la cabecera de lib/reportes.js) — reutiliza el MISMO periodo, KPIs y
+// datos_reporte() de arriba, no un flujo aparte: para el corte del dia basta
+// elegir "Hoy" en el selector de periodo que ya existe. Agrega el desglose
+// CONTABLE por forma de pago (cuantos cobros y cuanto dinero, no solo el
+// monto), el detalle linea por linea, y su exportacion a CSV.
+//
+// Sigue SIN MIGRAR: los exports a PDF y Excel de la v1 (el CSV cubre la
+// necesidad de exportar datos sin esas dos dependencias).
 // ═══════════════════════════════════════════════════════════════════
 
 import { useMemo, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
-import { barras, datos_reporte, mas_frecuente, mes_label, rango_reporte } from '../../lib/reportes'
+import {
+  arqueo_por_forma, barras, csv_arqueo, datos_reporte, filas_arqueo, mas_frecuente, mes_label,
+  rango_reporte,
+} from '../../lib/reportes'
 import { redondear_dinero, mxn2 } from '../../lib/dinero'
 import { hoy_hermosillo } from '../../lib/fechas'
 
 const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2)
+
+// dispara la descarga de un archivo de texto — el UNICO lugar del panel que
+// lo hace, por eso vive aqui y no en lib/: es DOM puro, no logica de negocio.
+function descargar_texto(nombre, contenido, tipo) {
+  const blob = new Blob([contenido], { type: tipo || 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = nombre
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
 
 // grafica de barras horizontales, igual que la de la v1.
 function grafica({ datos, etiquetar }) {
@@ -63,6 +88,20 @@ export default function reportes() {
   const top = Object.entries(d.porcliente).sort((a, b) => b[1].total - a[1].total).slice(0, 10)
   const facturado = Object.values(d.porcliente).reduce((s, c) => s + c.facturado, 0)
 
+  // Arqueo / corte de caja: SOLO dinero real (cs_dinero) — un credito no es
+  // caja, es una promesa de pago. Mismo rango que el resto de la pantalla.
+  const arqueo = useMemo(() => arqueo_por_forma(d.cs_dinero), [d.cs_dinero])
+  const detallearqueo = useMemo(() => filas_arqueo(d.cs_dinero), [d.cs_dinero])
+
+  function exportar_csv() {
+    const fecha = hoy_hermosillo()
+    descargar_texto(
+      'arqueo_' + fecha + '_' + rango.periodo + '.csv',
+      csv_arqueo(d.cs_dinero),
+      'text/csv;charset=utf-8'
+    )
+  }
+
   const tarjetas = [
     { label: 'Ingresos totales', valor: money(d.total), color: 'var(--naranja)',
       delta: (d.cs.length ? d.cs.length + ' cobro(s) · ' + rango.etiqueta : 'Sin cobros registrados') +
@@ -109,6 +148,12 @@ export default function reportes() {
                   value={fin} onChange={(e) => setfin(e.target.value)} />
               </>
             )}
+            <button
+              className="btn btn-outline btn-sm" onClick={exportar_csv} disabled={!d.cs_dinero.length}
+              title={d.cs_dinero.length ? 'Descarga el detalle del periodo elegido' : 'Sin cobros que exportar en este periodo'}
+            >
+              ↓ CSV
+            </button>
           </div>
         </div>
 
@@ -203,6 +248,85 @@ export default function reportes() {
                       <td style={{ fontSize: '12px', color: 'var(--text-2)' }}>{mas_frecuente(c.conceptos)}</td>
                       <td style={{ color: 'var(--naranja)', fontWeight: 700 }}>{money(c.total)}</td>
                       <td>{c.facturado ? money(c.facturado) : '—'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="card" style={{ marginTop: '20px' }}>
+          <div className="card-header">
+            <div>
+              <div className="card-title">Corte de caja · Arqueo</div>
+              <div className="card-sub">
+                {rango.etiquetaperiodo} · solo dinero real (los créditos no cuentan en caja)
+              </div>
+            </div>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Forma de pago</th><th>Cobros</th><th>Total</th></tr></thead>
+              <tbody>
+                {arqueo.length === 0 ? (
+                  <tr><td colSpan={3} className="td-muted" style={{ textAlign: 'center', padding: '16px' }}>
+                    Sin cobros registrados aún.
+                  </td></tr>
+                ) : (
+                  arqueo.map((a) => (
+                    <tr key={a.forma}>
+                      <td className="td-name">{a.forma}</td>
+                      <td>{a.n}</td>
+                      <td style={{ color: 'var(--naranja)', fontWeight: 700 }}>{money(a.total)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {arqueo.length > 0 && (
+                <tfoot>
+                  <tr>
+                    <td style={{ fontWeight: 700 }}>Total</td>
+                    <td style={{ fontWeight: 700 }}>{detallearqueo.length}</td>
+                    <td style={{ fontWeight: 700, color: 'var(--naranja)' }}>{money(d.total)}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </div>
+
+        <div className="card" style={{ marginTop: '20px' }}>
+          <div className="card-header">
+            <div>
+              <div className="card-title">Detalle de cobros</div>
+              <div className="card-sub">{detallearqueo.length} cobro(s) · {rango.etiquetaperiodo}</div>
+            </div>
+          </div>
+          <div className="table-wrap" style={{ maxHeight: '360px', overflowY: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha</th><th>Hora</th><th>Cliente</th><th>Zona</th><th>Concepto</th>
+                  <th>Forma de pago</th><th>Recibió</th><th>Monto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detallearqueo.length === 0 ? (
+                  <tr><td colSpan={8} className="td-muted" style={{ textAlign: 'center', padding: '16px' }}>
+                    Sin cobros registrados aún.
+                  </td></tr>
+                ) : (
+                  detallearqueo.map((f, i) => (
+                    <tr key={i}>
+                      <td style={{ whiteSpace: 'nowrap' }} className="td-muted">{f.fecha}</td>
+                      <td className="td-muted">{f.hora}</td>
+                      <td className="td-name">{f.cliente}</td>
+                      <td style={{ fontSize: '12px' }}>{f.zona}</td>
+                      <td style={{ fontSize: '12px', color: 'var(--text-2)' }}>{f.concepto}</td>
+                      <td style={{ fontSize: '12px' }}>{f.forma}</td>
+                      <td className="td-muted">{f.recibio}</td>
+                      <td style={{ fontWeight: 700 }}>{money(f.monto)}</td>
                     </tr>
                   ))
                 )}

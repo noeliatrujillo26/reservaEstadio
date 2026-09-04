@@ -2442,6 +2442,164 @@ for (let i = 0; i < 3000; i++) {
   afirmar('se dispara la generacion del recibo digital', generarecibo === true)
 }
 
+// ══ 15. COTIZACIONES: ESCRITURA, CONVERSION A PROSPECTO Y ARQUEO ══
+// Cotizaciones no tiene una prueba diferencial propia aqui: calcular_cotizacion
+// reutiliza calc_total_prospecto()/descuento_volumen_aplicable() —esas SI se
+// prueban contra la v1 en la seccion 8— y le agrega el desglose de IVA y el
+// tope de 100% documentado en la cabecera de lib/cotizaciones.js. El
+// Consolidado Diario tampoco existe en la v1 (su unico "reporte del dia" es
+// el mensaje de WhatsApp, ya probado en la seccion 5): arqueo_por_forma() y
+// csv_arqueo() son piezas nuevas. Van pruebas directas para ambas.
+
+// ── folio_cotizacion ──
+{
+  afirmar('folio arranca en COT-001 sin cotizaciones previas', v2.folio_cotizacion([]) === 'COT-001')
+  afirmar('folio sigue el maximo YA usado, no la cuenta de filas',
+    v2.folio_cotizacion([{ id: 'COT-002' }, { id: 'COT-007' }]) === 'COT-008')
+  afirmar('un id que no matchea el patron no rompe el calculo',
+    v2.folio_cotizacion([{ id: 'basura' }, { id: 'COT-003' }]) === 'COT-004')
+}
+
+// ── validar_cotizacion: solo el cliente es obligatorio, igual que guardarCotiz() ──
+{
+  afirmar('sin cliente, falla', v2.validar_cotizacion({ cliente: '' }).length === 1)
+  afirmar('cliente solo, pasa', v2.validar_cotizacion({ cliente: 'Juan' }).length === 0)
+  afirmar('telefono de 9 digitos falla', v2.validar_cotizacion({ cliente: 'Juan', tel: '123456789' }).length === 1)
+  afirmar('telefono de 10 digitos pasa', v2.validar_cotizacion({ cliente: 'Juan', tel: '6621234567' }).length === 0)
+  afirmar('email invalido falla', v2.validar_cotizacion({ cliente: 'Juan', email: 'no-es-correo' }).length === 1)
+  afirmar('email valido pasa', v2.validar_cotizacion({ cliente: 'Juan', email: 'a@b.com' }).length === 0)
+  afirmar('sin tel ni email no exige nada extra',
+    v2.validar_cotizacion({ cliente: 'Juan' }).length === 0)
+}
+
+// ── fecha_validez_cotizacion (_validaCotizFecha) ──
+{
+  afirmar('15 dias', v2.fecha_validez_cotizacion('2026-01-01', 15) === '2026-01-16')
+  afirmar('30 dias', v2.fecha_validez_cotizacion('2026-01-01', 30) === '2026-01-31')
+  afirmar('dias invalido cae a 15 por defecto', v2.fecha_validez_cotizacion('2026-01-01', 'x') === '2026-01-16')
+}
+
+// ── calcular_cotizacion: desglose de IVA y, sobre todo, la correccion del
+// total negativo que SI tiene la v1 (ver deviacion #1 en lib/cotizaciones.js) ──
+{
+  const base = { areamonto: 10000, consumomonto: 0, extramonto: 0, descuento: 0, personasincluidas: 50, juegoid: 'j1', zonaid: 'z1' }
+
+  const c1 = v2.calcular_cotizacion(base, { descuentosvolumen: [] })
+  afirmar('sin descuentos: subtotal = total', c1.subtotal === 10000 && c1.total === 10000)
+  afirmar('IVA incluido: base + iva = total al centavo', Math.abs((c1.base + c1.iva) - c1.total) < 0.001)
+  afirmar('base = total / 1.16', Math.abs(c1.base - 10000 / 1.16) < 0.01)
+
+  const c2 = v2.calcular_cotizacion({ ...base, descuento: 20 }, { descuentosvolumen: [] })
+  afirmar('descuento manual 20%: total = 8000', c2.total === 8000)
+
+  const reglas = [{ nombre: 'Grupo grande', minpersonas: 40, porcentaje: 10, juegos: null, zonas: null, activo: true }]
+  const c3 = v2.calcular_cotizacion(base, { descuentosvolumen: reglas })
+  afirmar('descuento por grupo automatico (10%): total = 9000', c3.total === 9000)
+  afirmar('el nombre de la regla ganadora viaja para guardarse', c3.volumennombre === 'Grupo grande')
+
+  // EL BUG DE LA V1: calcCotiz() resta el % manual y el de grupo POR
+  // SEPARADO, sin topar la suma — un 80% manual mas un 30% de grupo deja el
+  // total NEGATIVO. calc_total_prospecto() (reutilizada aqui) SI topa la
+  // suma en 100%.
+  const reglagrande = [{ nombre: 'Mega grupo', minpersonas: 1, porcentaje: 30, juegos: null, zonas: null, activo: true }]
+  const extremo = { ...base, descuento: 80 }
+  const subtotalv1 = 10000
+  const totalcomo_v1 = subtotalv1 - (subtotalv1 * 80 / 100) - (subtotalv1 * 30 / 100)
+  const c4 = v2.calcular_cotizacion(extremo, { descuentosvolumen: reglagrande })
+  afirmar('la v1 SIN tope hubiera dado un total negativo (el bug que se corrige)', totalcomo_v1 < 0)
+  afirmar('v2 CON el tope nunca da un total negativo', c4.total >= 0)
+  afirmar('v2 topa el combinado en 100% del subtotal: total = 0', c4.total === 0)
+}
+
+// ── cotiz_transicion_bloqueada (_cotizConcretaSoloViaPipeline) ──
+{
+  afirmar('Activa → Concretada bloqueada', v2.cotiz_transicion_bloqueada('Activa', 'Concretada') === true)
+  afirmar('Aprobada → Concretada bloqueada', v2.cotiz_transicion_bloqueada('Aprobada', 'Concretada') === true)
+  afirmar('Concretada → Rechazada NO bloqueada (esa transicion no esta candada)',
+    v2.cotiz_transicion_bloqueada('Concretada', 'Rechazada') === false)
+  afirmar('Activa → Rechazada NO bloqueada', v2.cotiz_transicion_bloqueada('Activa', 'Rechazada') === false)
+}
+
+// ── cotizacion_activa_en_pipeline (_cotizSigueEnPipeline, mitad de lectura) ──
+{
+  const c = { id: 'COT-001', enpipeline: true }
+  const viva = [{ cotizid: 'COT-001', etapa: 'cotizado' }]
+  const descartada = [{ cotizid: 'COT-001', etapa: 'descartado' }]
+  afirmar('bandera true + tarjeta viva → activa', v2.cotizacion_activa_en_pipeline(c, viva) === true)
+  afirmar('bandera true + tarjeta descartada → NO activa (bandera colgada)',
+    v2.cotizacion_activa_en_pipeline(c, descartada) === false)
+  afirmar('bandera true + sin tarjeta que la respalde → NO activa',
+    v2.cotizacion_activa_en_pipeline(c, []) === false)
+  afirmar('bandera false → NO activa aunque exista una tarjeta con ese cotiz_id',
+    v2.cotizacion_activa_en_pipeline({ ...c, enpipeline: false }, viva) === false)
+}
+
+// ── cotizacion_a_prospecto_payload (confirmarMoverCotizPipeline) ──
+{
+  const areas = [{ id: 'z1', nombre: 'Palco Norte' }]
+  const c = {
+    id: 'COT-005', cliente: 'MARIA LOPEZ', email: 'm@x.com', tel: '6621112233',
+    zonaid: 'z1', juegoid: 'j9', descripcion: 'Cumpleaños', total: 12000, descuento: 15,
+    adultoextracant: 3, ninoextracant: 2, consumomonto: 500, extramonto: 0,
+    adultoextraprecio: 200, ninoextraprecio: 100, notas: 'nota', vendedora: 'Ana',
+    tipocomida: 'discada',
+  }
+  const pay = v2.cotizacion_a_prospecto_payload(c, { areas, pipeline: [] })
+  afirmar('id con prefijo p-', pay.id === 'p-COT-005')
+  afirmar('folio con el formato de prospectos (pipeline vacio)', pay.folio === 'PROS-001')
+  afirmar('zona por el nombre real del catalogo', pay.zona === 'Palco Norte')
+  afirmar('monto = total de la cotizacion cuando es > 0', pay.monto === 12000)
+  afirmar('etapa "cotizado"', pay.etapa === 'cotizado')
+  afirmar('cotiz_id enlaza de regreso a la cotizacion de origen', pay.cotiz_id === 'COT-005')
+  afirmar('tipo_comida viaja tal cual', pay.tipo_comida === 'discada')
+
+  // Respaldo: total en 0 (fila vieja o guardada a medias) se recompone
+  // sumando sus partidas YA GUARDADAS (adultos_extra_monto/ninos_extra_monto
+  // son columnas propias, igual que en la v1 — no se recalculan aqui a partir
+  // del precio × cantidad) en vez de dejar el prospecto con monto 0.
+  const c2 = { ...c, total: 0, areamonto: 8000, adultosextramonto: 600, ninosextramonto: 200 }
+  const pay2 = v2.cotizacion_a_prospecto_payload(c2, { areas, pipeline: [] })
+  // 8000 (area) + 500 (consumo) + 0 (extra) + 600 (adultos) + 200 (niños) = 9300
+  afirmar('total en 0 se recompone de las partidas', pay2.monto === 9300)
+}
+
+// ── arqueo_por_forma: cuantos cobros y cuanto dinero por forma de pago ──
+{
+  const cs = [
+    { formapago: 'Caja taquilla estadio', monto: 1000 },
+    { formapago: 'Caja taquilla estadio', monto: 500 },
+    { formapago: 'TRANSFERENCIA BBVA', monto: 2000 },
+    { formapago: 'TARJETA VISA', monto: 300 },
+  ]
+  const arq = v2.arqueo_por_forma(cs)
+  const taquilla = arq.find((x) => x.forma === 'Caja taquilla estadio')
+  const transferencia = arq.find((x) => x.forma === 'Transferencia')
+  afirmar('Caja taquilla estadio se agrupa con su nombre exacto (no es una forma generica)',
+    !!taquilla && taquilla.n === 2 && taquilla.total === 1500)
+  afirmar('formas genericas se normalizan (TRANSFERENCIA BBVA → Transferencia)',
+    !!transferencia && transferencia.n === 1 && transferencia.total === 2000)
+  afirmar('ordenado por total descendente', arq[0].total >= arq[1].total)
+}
+
+// ── filas_arqueo / csv_arqueo: el detalle exportable ──
+{
+  const cs = [{
+    fecha: '2026-09-04', formapago: 'Caja taquilla estadio', monto: 1500.5,
+    cliente: 'Juan, Pérez', zona: 'Palco 3', concepto: 'ABONO', recibio: 'Ana',
+  }]
+  const filas = v2.filas_arqueo(cs)
+  afirmar('una fila por cobro', filas.length === 1)
+  afirmar('el monto viaja como numero, no como texto formateado (para sumarlo en la hoja)',
+    filas[0].monto === 1500.5)
+
+  const csv = v2.csv_arqueo(cs)
+  afirmar('trae el encabezado de columnas', csv.includes('Fecha,Hora,Cliente'))
+  afirmar('un cliente con coma en el nombre queda entre comillas (CSV valido)',
+    csv.includes('"Juan, Pérez"'))
+  afirmar('arranca con el BOM UTF-8 (para que Excel no rompa los acentos)',
+    csv.charCodeAt(0) === 0xFEFF)
+}
+
 // ══ RESULTADO ═════════════════════════════════════════════════════
 console.log('\n── diferencial contra la v1 ──')
 console.log('  comparaciones: ' + casos.toLocaleString('es-MX'))

@@ -39,6 +39,7 @@ import DetalleCobro from '../src/components/admin/detallecobro'
 import NuevoCobro from '../src/components/admin/nuevocobro'
 import Evidencia from '../src/components/admin/evidencia'
 import ReservaForm from '../src/components/admin/reservaform'
+import CotizForm from '../src/components/admin/cotizform'
 import NuevoProspecto from '../src/components/admin/nuevoprospecto'
 import DetalleProspecto from '../src/components/admin/detalleprospecto'
 import { Confirmar } from '../src/components/admin/confirmar'
@@ -66,7 +67,7 @@ const valor={secciones,areas,juegos,reservas,cobros,areasestados:{j1:{'sec-1':'r
  metodos:[{id:1,tipo:'Efectivo',nombre:'Caja',detalle:'x',activo:true}],
  configlanding:{banner_activo:true,banner_texto:'Hola',banner_color:'#2d6a4f',faq:[{pregunta:'p',respuesta:'r'}],promo_strip_cards:[{icono:'personas',titulo:'5%',descripcion:'d',activa:true}],whatsapp_quote_message:'m',referral_whatsapp_message:'r'},
  slides:[{id:1,image_url:'https://x/c.png',title:'S',order_index:1,is_active:true}],
- cotizaciones:[{id:'COT-0001',fecha:'2026-08-01',cliente:'Ana',empresa:'',vendedora:'FER',total:12000,valida:'2026-09-01',estado:'Activa',areamonto:9000,consumomonto:3000,subtotal:12000,iva:0,descuento:0,adultoextracant:0,ninoextracant:0,extramonto:0,metodospago:[],tipocomida:'carne_asada',volumenpct:0,personasincluidas:20}],
+ cotizaciones:[{id:'COT-0001',fecha:'2026-08-01',cliente:'Ana',email:'a@x.com',tel:'6621234567',empresa:'',descripcion:'Cumpleaños',vendedora:'FER',total:12000,valida:'2026-09-01',estado:'Activa',juegoid:'j1',zonaid:'sec-1',zona:'Terraza Derecha 1',consumodesc:'Botanas',areamonto:9000,consumomonto:3000,subtotal:12000,iva:0,descuento:0,adultoextracant:0,ninoextracant:0,extramonto:0,metodospago:[],tipocomida:'carne_asada',volumenpct:0,personasincluidas:20,notas:'Confirmar antes del juego',enpipeline:false}],
  pipeline:[{id:'p-1735689600000',folio:'002',nombre:'Luis',zona:'Terraza Derecha 1',juego:'j1',monto:9750,etapa:'reservado',vendedora:'FER',adultos:20,ninos:2,reservaids:['1'],tipocomida:'carne_asada',etapacambiadaen:'2026-08-01T10:00:00Z'},
   {id:'p-2',folio:'003',nombre:'Eva',zona:'Palco All-Inc 2',juego:'j1',monto:5000,etapa:'completado',vendedora:'MELI',reservaids:['9'],tipocomida:'discada'}],
  politica:{enganche_minimo:50,dias_limite_liquidar:5},
@@ -83,6 +84,10 @@ const EvidenciaPdf = () => <Evidencia abierto archivo={cobros[0].evidencia} conc
 const EvidenciaSinLiga = () => <Evidencia abierto archivo="comprobante.jpg" concepto="ABONO" monto={null} fecha="" oncerrar={()=>{}} />
 const ReservaNueva = () => <ReservaForm abierto editando={null} juegoinicial="j1" zonainicial="" oncerrar={()=>{}} onguardar={async()=>({ok:true})} guardando={false} />
 const ReservaEditar = () => <ReservaForm abierto editando={reservas[0]} juegoinicial="j1" zonainicial="sec-1" oncerrar={()=>{}} onguardar={async()=>({ok:true})} guardando={false} />
+const CotizNueva = () => <CotizForm abierto editando={null} oncerrar={()=>{}} onguardar={async()=>({ok:true})} guardando={false} />
+// la zona propia (sec-1) esta 'reservada' en areasestados a proposito: prueba
+// que editar conserva la zona ya ocupada en el <select>, igual que reservaform.jsx.
+const CotizEditar = () => <CotizForm abierto editando={valor.cotizaciones[0]} oncerrar={()=>{}} onguardar={async()=>({ok:true})} guardando={false} />
 const ConfirmSimple = () => <Confirmar estado={{mensaje:'¿Cancelar este cobro?',textoconfirmar:'Sí, cancelar'}} oncerrar={()=>{}} />
 const ConfirmSeguro = () => <ConfirmarSeguro estado={{titulo:'🗑 Eliminar',descripcion:'Se borra la reserva.',etiquetamotivo:'¿Por qué? *',textoconfirmar:'Confirmar y Eliminar',pedirmotivo:true}} oncerrar={()=>{}} />
 const ProspectoNuevo = () => <NuevoProspecto abierto oncerrar={()=>{}} oncrear={async()=>({ok:true})} guardando={false} />
@@ -117,6 +122,7 @@ export const vistas={dashboard:Dashboard,cobros:Cobros,seccionesreservadas:Reser
  detallecobro:DetalleAbierto,detallecancelado:DetalleCancelado,nuevocobro:NuevoAbierto,
  evidenciapdf:EvidenciaPdf,evidenciasinliga:EvidenciaSinLiga,
  reservanueva:ReservaNueva,reservaeditar:ReservaEditar,
+ cotiznueva:CotizNueva,cotizeditar:CotizEditar,
  confirmsimple:ConfirmSimple,confirmseguro:ConfirmSeguro,confirmseguro2:ConfirmSeguroSinMotivo,
  prospectonuevo:ProspectoNuevo,prospectodetalle:ProspectoDetalle,
  cliente_expediente:ClienteDetalleAbierto,cliente_expediente_vacio:ClienteDetalleVacio,

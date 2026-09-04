@@ -30,6 +30,10 @@ export {
   es_cobro_credito, es_pago_credito, es_forma_efectivo, nombres_formas_pago,
 } from '../src/lib/dashboard'
 export { redondear_dinero } from '../src/lib/dinero'
+export {
+  csv_arqueo, arqueo_por_forma, barras, datos_reporte, filas_arqueo, forma_pago_legible,
+  mas_frecuente, mes_label, rango_reporte,
+} from '../src/lib/reportes'
 export { escritura_admin, motivo_bloqueo, actualizar_verificado } from '../src/lib/escritura'
 export { ruta_comprobante, comprobante_excede_limite } from '../src/lib/storage'
 
@@ -66,3 +70,8 @@ export {
   buscar_cliente, nombre_norm, tel_norm,
 } from '../src/lib/clientes'
 export { consumos_de_cliente, consumo_activo } from '../src/lib/consumos'
+
+export {
+  calcular_cotizacion, cotiz_transicion_bloqueada, cotizacion_a_prospecto_payload,
+  cotizacion_activa_en_pipeline, fecha_validez_cotizacion, folio_cotizacion, validar_cotizacion,
+} from '../src/lib/cotizaciones'

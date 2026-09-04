@@ -4,17 +4,20 @@
 // renderCotizKPIs(), renderCotizTabs() y renderCotizLista()
 // (js/modules/cotizaciones.js).
 //
-// SOLO LECTURA: se omiten crear/editar, el cambio de estado desde la tabla,
-// enviar por WhatsApp o correo, mover al Pipeline, descargar PDF, eliminar y
-// la plantilla de la cotizacion. La fila abre el resumen financiero, que en
-// la v1 vive dentro del modal de edicion.
+// ESCRITURA (Fase 2): crear/editar (cotizform.jsx), cambiar estado y enviar al
+// Pipeline Comercial — ver usecotizacionesescritura.js y la cabecera de
+// lib/cotizaciones.js para las deviaciones deliberadas frente a la v1. Sigue
+// SIN MIGRAR: enviar por WhatsApp o correo, descargar PDF, eliminar y la
+// plantilla de la cotizacion.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useEffect, useMemo, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
+import usecotizacionesescritura from '../../hooks/usecotizacionesescritura'
+import CotizForm from './cotizform'
 import {
-  cotiz_badge, cotiz_tabs, coincide_tab, filtrar_cotizaciones, kpis_cotizaciones,
-  ordenar_cotizaciones,
+  cotiz_badge, cotiz_estados, cotiz_tabs, coincide_tab, cotizacion_activa_en_pipeline,
+  filtrar_cotizaciones, kpis_cotizaciones, ordenar_cotizaciones,
 } from '../../lib/cotizaciones'
 import { redondear_dinero, mxn2 } from '../../lib/dinero'
 
@@ -31,18 +34,29 @@ const columnas = [
 ]
 
 export default function cotizaciones() {
-  const { cotizaciones: todas, cargando, errores } = useadmindatos()
+  const { cotizaciones: todas, pipeline, cargando, errores } = useadmindatos()
+  const { puede, guardar, guardando, cambiar_estado, convertir_a_prospecto, moviendo } = usecotizacionesescritura()
 
   const [tab, settab] = useState('activas')
   const [busqueda, setbusqueda] = useState('')
   const [orden, setorden] = useState({ col: null, dir: 'asc' })
   const [detalle, setdetalle] = useState(null)
+  const [form, setform] = useState(null) // { editando } | null
 
   useEffect(() => {
     const alteclado = (e) => { if (e.key === 'Escape') setdetalle(null) }
     if (detalle) document.addEventListener('keydown', alteclado)
     return () => document.removeEventListener('keydown', alteclado)
   }, [detalle])
+
+  // El detalle abierto sigue a la fila real: al guardar un cambio (estado,
+  // edicion, envio al Pipeline) recargar() trae una fila nueva y el modal se
+  // quedaria mostrando la version vieja si no se resincroniza aqui.
+  useEffect(() => {
+    if (!detalle) return
+    const actual = todas.find((c) => c.id === detalle.id)
+    if (actual && actual !== detalle) setdetalle(actual)
+  }, [todas, detalle])
 
   // los 5 KPIs miran TODAS las cotizaciones, no la pestaña activa.
   const kpis = useMemo(() => kpis_cotizaciones(todas), [todas])
@@ -80,11 +94,18 @@ export default function cotizaciones() {
             <h2>Cotizaciones</h2>
             <p>Propuestas de zonas de asadores y su seguimiento</p>
           </div>
-          <input
-            className="input" id="cotiz-search" placeholder="Buscar cliente, descripción..."
-            style={{ width: '240px', fontSize: '13px' }}
-            value={busqueda} onChange={(e) => setbusqueda(e.target.value)}
-          />
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <input
+              className="input" id="cotiz-search" placeholder="Buscar cliente, descripción..."
+              style={{ width: '240px', fontSize: '13px' }}
+              value={busqueda} onChange={(e) => setbusqueda(e.target.value)}
+            />
+            {puede && (
+              <button className="btn btn-primary btn-sm" onClick={() => setform({ editando: null })}>
+                + Nueva cotización
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="stats-grid" id="cotiz-kpis" style={{ marginBottom: '20px' }}>
@@ -202,14 +223,41 @@ export default function cotizaciones() {
                   {[detalle.fecha, detalle.vendedora, detalle.zona].filter(Boolean).join(' · ')}
                 </div>
               </div>
-              <button className="btn btn-ghost btn-xs" onClick={() => setdetalle(null)}>✕</button>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {puede && (
+                  <button className="btn btn-ghost btn-xs" onClick={() => setform({ editando: detalle })}>
+                    ✎ Editar
+                  </button>
+                )}
+                <button className="btn btn-ghost btn-xs" onClick={() => setdetalle(null)}>✕</button>
+              </div>
             </div>
 
             <div style={{ padding: '18px 22px' }}>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
-                <span className={'badge ' + (cotiz_badge[detalle.estado] || 'badge-gray')}>
-                  {detalle.estado || '—'}
-                </span>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '16px' }}>
+                {puede ? (
+                  <select
+                    className={'badge ' + (cotiz_badge[detalle.estado] || 'badge-gray')}
+                    style={{ border: 'none', cursor: 'pointer', fontWeight: 600, padding: '3px 6px', borderRadius: '100px' }}
+                    value={detalle.estado}
+                    onChange={(e) => cambiar_estado(detalle, e.target.value)}
+                  >
+                    {cotiz_estados.map((e) => (
+                      <option
+                        key={e}
+                        value={e}
+                        disabled={e === 'Concretada' && detalle.estado !== 'Concretada'}
+                        title={e === 'Concretada' && detalle.estado !== 'Concretada' ? 'Solo vía Pipeline Comercial' : undefined}
+                      >
+                        {e}{e === 'Concretada' && detalle.estado !== 'Concretada' ? ' (vía Pipeline)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className={'badge ' + (cotiz_badge[detalle.estado] || 'badge-gray')}>
+                    {detalle.estado || '—'}
+                  </span>
+                )}
                 <span className="badge badge-gray">
                   {detalle.tipocomida === 'discada' ? '🌮 Discada' : '🥩 Carne asada'}
                 </span>
@@ -289,10 +337,35 @@ export default function cotizaciones() {
                   {detalle.notas}
                 </p>
               )}
+
+              {puede && (
+                <div style={{ marginTop: '18px', paddingTop: '14px', borderTop: '1px solid var(--border)' }}>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    disabled={cotizacion_activa_en_pipeline(detalle, pipeline) || moviendo === detalle.id}
+                    title={cotizacion_activa_en_pipeline(detalle, pipeline) ? 'Ya está en el Pipeline / Concretadas' : undefined}
+                    onClick={() => convertir_a_prospecto(detalle)}
+                  >
+                    {moviendo === detalle.id
+                      ? 'Enviando…'
+                      : cotizacion_activa_en_pipeline(detalle, pipeline)
+                        ? '✓ Ya está en el Pipeline'
+                        : '🔁 Enviar a Pipeline Comercial'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
+
+      <CotizForm
+        abierto={!!form}
+        editando={form ? form.editando : null}
+        oncerrar={() => setform(null)}
+        onguardar={guardar}
+        guardando={guardando}
+      />
     </div>
   )
 }
