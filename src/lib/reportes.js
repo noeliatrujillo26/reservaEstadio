@@ -12,15 +12,18 @@
 // contra lo que hay en caja, terminal o banco— ya vive a medias en esta
 // misma pantalla: `datos_reporte()` agrupa por forma de pago (porforma) y por
 // quien recibio el cobro (porvend), y el selector de periodo ya trae "Hoy".
-// arqueo_por_forma() y filas_csv_arqueo() son la pieza que faltaba: el
-// desglose CONTABLE (cuantos cobros y cuanto dinero por forma de pago, no solo
-// el monto) y el detalle exportable, ambos sobre el MISMO rango ya filtrado.
+// arqueo_por_forma() y filas_arqueo() son la pieza que faltaba: el desglose
+// CONTABLE (cuantos cobros y cuanto dinero por forma de pago, no solo el
+// monto) y el detalle exportable, ambos sobre el MISMO rango ya filtrado. El
+// formato del CSV en si (BOM, separador, comillas) vive en lib/exportarcsv.js
+// — la utilidad UNICA de exportacion de todo el panel, no una copia local.
 // ═══════════════════════════════════════════════════════════════════
 
 import {
   cobro_cancelado, es_cobro_credito, es_credito_vigente, formato_fecha, hora_cobro,
   instante_cobro, requiere_factura,
 } from './cobros'
+import { csv_de_filas } from './exportarcsv'
 import { hoy_hermosillo } from './fechas'
 import { redondear_dinero } from './dinero'
 
@@ -264,22 +267,20 @@ export function filas_arqueo(cs_dinero) {
     }))
 }
 
-const columnas_arqueo = ['fecha', 'hora', 'cliente', 'zona', 'concepto', 'forma', 'recibio', 'monto']
-const encabezados_arqueo = [
-  'Fecha', 'Hora', 'Cliente', 'Zona', 'Concepto', 'Forma de pago', 'Recibió', 'Monto',
+const columnas_arqueo = [
+  { clave: 'fecha', titulo: 'Fecha' },
+  { clave: 'hora', titulo: 'Hora' },
+  { clave: 'cliente', titulo: 'Cliente' },
+  { clave: 'zona', titulo: 'Zona' },
+  { clave: 'concepto', titulo: 'Concepto' },
+  { clave: 'forma', titulo: 'Forma de pago' },
+  { clave: 'recibio', titulo: 'Recibió' },
+  { clave: 'monto', titulo: 'Monto' },
 ]
 
-function csv_celda(v) {
-  const s = String(v == null ? '' : v)
-  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
-}
-
-// CSV separado por comas, con BOM UTF-8 (Excel en Windows lo necesita para no
-// mostrar los acentos rotos). Puro: arma el texto: el componente dispara la
-// descarga — misma division que el resto del panel (calculo aqui, DOM alla).
-const bom_utf8 = '﻿'
-
+// El formato del archivo (BOM, separador, comillas) es el MISMO en todo el
+// panel — ver lib/exportarcsv.js. Aqui solo se decide QUE columnas lleva el
+// arqueo.
 export function csv_arqueo(cs_dinero) {
-  const filas = filas_arqueo(cs_dinero).map((f) => columnas_arqueo.map((k) => f[k]))
-  return bom_utf8 + [encabezados_arqueo, ...filas].map((f) => f.map(csv_celda).join(',')).join('\r\n')
+  return csv_de_filas(columnas_arqueo, filas_arqueo(cs_dinero))
 }

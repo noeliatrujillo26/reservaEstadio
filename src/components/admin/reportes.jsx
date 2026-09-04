@@ -8,7 +8,9 @@
 // datos_reporte() de arriba, no un flujo aparte: para el corte del dia basta
 // elegir "Hoy" en el selector de periodo que ya existe. Agrega el desglose
 // CONTABLE por forma de pago (cuantos cobros y cuanto dinero, no solo el
-// monto), el detalle linea por linea, y su exportacion a CSV.
+// monto), el detalle linea por linea, y su exportacion a CSV — con la MISMA
+// utilidad (lib/exportarcsv.js) que usa o usara cualquier otro modulo del
+// panel que necesite "Exportar a Excel".
 //
 // Sigue SIN MIGRAR: los exports a PDF y Excel de la v1 (el CSV cubre la
 // necesidad de exportar datos sin esas dos dependencias).
@@ -20,24 +22,11 @@ import {
   arqueo_por_forma, barras, csv_arqueo, datos_reporte, filas_arqueo, mas_frecuente, mes_label,
   rango_reporte,
 } from '../../lib/reportes'
+import { descargar_csv } from '../../lib/exportarcsv'
 import { redondear_dinero, mxn2 } from '../../lib/dinero'
 import { hoy_hermosillo } from '../../lib/fechas'
 
 const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2)
-
-// dispara la descarga de un archivo de texto — el UNICO lugar del panel que
-// lo hace, por eso vive aqui y no en lib/: es DOM puro, no logica de negocio.
-function descargar_texto(nombre, contenido, tipo) {
-  const blob = new Blob([contenido], { type: tipo || 'text/plain' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = nombre
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
-}
 
 // grafica de barras horizontales, igual que la de la v1.
 function grafica({ datos, etiquetar }) {
@@ -94,12 +83,7 @@ export default function reportes() {
   const detallearqueo = useMemo(() => filas_arqueo(d.cs_dinero), [d.cs_dinero])
 
   function exportar_csv() {
-    const fecha = hoy_hermosillo()
-    descargar_texto(
-      'arqueo_' + fecha + '_' + rango.periodo + '.csv',
-      csv_arqueo(d.cs_dinero),
-      'text/csv;charset=utf-8'
-    )
+    descargar_csv('arqueo_' + hoy_hermosillo() + '_' + rango.periodo + '.csv', csv_arqueo(d.cs_dinero))
   }
 
   const tarjetas = [

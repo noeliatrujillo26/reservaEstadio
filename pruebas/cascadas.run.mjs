@@ -2582,6 +2582,9 @@ for (let i = 0; i < 3000; i++) {
 }
 
 // ── filas_arqueo / csv_arqueo: el detalle exportable ──
+// El formato del archivo en si (BOM, separador ;, comillas siempre) se prueba
+// a fondo en la seccion 16 contra lib/exportarcsv.js; aqui solo se confirma
+// que csv_arqueo() lo esta usando de verdad y no una copia local vieja.
 {
   const cs = [{
     fecha: '2026-09-04', formapago: 'Caja taquilla estadio', monto: 1500.5,
@@ -2593,11 +2596,55 @@ for (let i = 0; i < 3000; i++) {
     filas[0].monto === 1500.5)
 
   const csv = v2.csv_arqueo(cs)
-  afirmar('trae el encabezado de columnas', csv.includes('Fecha,Hora,Cliente'))
-  afirmar('un cliente con coma en el nombre queda entre comillas (CSV valido)',
+  afirmar('trae el encabezado con el separador ; de exportarcsv.js',
+    csv.includes('"Fecha";"Hora";"Cliente"'))
+  afirmar('CADA celda va entre comillas, tenga o no coma adentro (Juan, Pérez)',
     csv.includes('"Juan, Pérez"'))
+  afirmar('el monto tambien viaja entre comillas, como cualquier otra celda',
+    csv.includes('"1500.5"'))
   afirmar('arranca con el BOM UTF-8 (para que Excel no rompa los acentos)',
     csv.charCodeAt(0) === 0xFEFF)
+}
+
+// ══ 16. EXPORTACION CSV: LA UTILIDAD GLOBAL DEL PANEL ══════════════
+// lib/exportarcsv.js no tiene equivalente en la v1 (cada modulo con export
+// armaba el suyo aparte): es la pieza nueva que estandariza BOM, separador y
+// comillas para que cualquier modulo del panel exporte igual.
+
+{
+  afirmar('una celda simple queda entre comillas de todos modos',
+    v2.celda_csv('Ana') === '"Ana"')
+  afirmar('una celda con comillas internas las duplica (regla CSV)',
+    v2.celda_csv('dijo "hola"') === '"dijo ""hola"""')
+  afirmar('null/undefined se vuelve celda vacia entre comillas, no "null"',
+    v2.celda_csv(null) === '""' && v2.celda_csv(undefined) === '""')
+  afirmar('un numero tambien se envuelve en comillas', v2.celda_csv(1500.5) === '"1500.5"')
+}
+
+{
+  const fila = v2.fila_csv(['Ana', 'Palco, Norte', 42])
+  afirmar('el separador de columnas es ; (no ,) — el español usa , como decimal',
+    fila === '"Ana";"Palco, Norte";"42"')
+}
+
+{
+  const csv = v2.csv_texto(['Nombre', 'Total'], [['Ana', 1000], ['Luis, Jr.', 2000]])
+  afirmar('arranca con el BOM UTF-8', csv.charCodeAt(0) === 0xFEFF)
+  const lineas = csv.slice(1).split('\r\n')
+  afirmar('una linea por encabezado + una por fila', lineas.length === 3)
+  afirmar('encabezado con comillas y ;', lineas[0] === '"Nombre";"Total"')
+  afirmar('separador \\r\\n entre lineas (formato CSV para Windows/Excel)',
+    csv.includes('\r\n'))
+  afirmar('una coma DENTRO de un valor no se confunde con el separador de columnas',
+    lineas[2] === '"Luis, Jr.";"2000"')
+}
+
+{
+  const columnas = [{ clave: 'nombre', titulo: 'Nombre' }, { clave: 'total', titulo: 'Total' }]
+  const filas = [{ nombre: 'Ana', total: 1000, extra: 'no deberia salir' }]
+  const csv = v2.csv_de_filas(columnas, filas)
+  afirmar('solo salen las columnas declaradas, en su orden — no toda llave del objeto',
+    csv.slice(1) === '"Nombre";"Total"\r\n"Ana";"1000"')
 }
 
 // ══ RESULTADO ═════════════════════════════════════════════════════

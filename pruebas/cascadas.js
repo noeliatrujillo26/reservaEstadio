@@ -34,6 +34,7 @@ export {
   csv_arqueo, arqueo_por_forma, barras, datos_reporte, filas_arqueo, forma_pago_legible,
   mas_frecuente, mes_label, rango_reporte,
 } from '../src/lib/reportes'
+export { celda_csv, csv_de_filas, csv_texto, fila_csv } from '../src/lib/exportarcsv'
 export { escritura_admin, motivo_bloqueo, actualizar_verificado } from '../src/lib/escritura'
 export { ruta_comprobante, comprobante_excede_limite } from '../src/lib/storage'
 
