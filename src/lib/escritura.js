@@ -49,6 +49,8 @@ export const tabla_modulo_edicion = {
   pipeline_prospectos: ['pipeline', 'cotizaciones'],
   cotizaciones: ['cotizaciones'],
   descuentos_volumen: ['descuentos'],
+  usuarios: ['usuarios'],
+  app_config: ['ajustes'],
   // AGREGADA AQUI, no la trae la v1. Su _TABLA_MODULO_EDICION no declara
   // `zona_juego_estado`, asi que la guardia por tabla la deja pasar sin mirar
   // el rol: bloquear una seccion —sacarla de venta— quedaba al alcance de

@@ -2647,6 +2647,101 @@ for (let i = 0; i < 3000; i++) {
     csv.slice(1) === '"Nombre";"Total"\r\n"Ana";"1000"')
 }
 
+// ══ 17. USUARIOS: ALTA, EDICION Y PERMISOS ═════════════════════════
+// Sin diferencial: guardarUsuario() de la v1 no tiene una version pura y
+// aislable (esta entreverada con /api/usuarios y el DOM). Pruebas directas
+// sobre validar_usuario()/password_debil()/permisos_desde_estado(), que si
+// se extrajeron puras.
+
+// ── password_debil (misma regla que api/usuarios.js del lado del servidor) ──
+{
+  afirmar('menos de 8 caracteres es debil', v2.password_debil('Ab1') === true)
+  afirmar('solo letras (sin numero) es debil', v2.password_debil('Abcdefgh') === true)
+  afirmar('solo numeros (sin letra) es debil', v2.password_debil('12345678') === true)
+  afirmar('8+ con letra y numero pasa', v2.password_debil('Abcdef12') === false)
+  afirmar('vacio es debil', v2.password_debil('') === true)
+}
+
+// ── validar_usuario ──
+{
+  afirmar('sin nombre falla', v2.validar_usuario({ nombre: '', email: 'a@b.com', password: 'Abcdef12' }, true).length >= 1)
+  afirmar('sin correo falla', v2.validar_usuario({ nombre: 'Ana', email: '', password: 'Abcdef12' }, true).length >= 1)
+  afirmar('correo invalido falla', v2.validar_usuario({ nombre: 'Ana', email: 'no-es-correo', password: 'Abcdef12' }, true).length >= 1)
+  afirmar('alta SIN contraseña falla', v2.validar_usuario({ nombre: 'Ana', email: 'a@b.com', password: '' }, true).length >= 1)
+  afirmar('alta con contraseña debil falla', v2.validar_usuario({ nombre: 'Ana', email: 'a@b.com', password: '123' }, true).length >= 1)
+  afirmar('alta completa y valida pasa', v2.validar_usuario({ nombre: 'Ana', email: 'a@b.com', password: 'Abcdef12' }, true).length === 0)
+
+  afirmar('edicion SIN contraseña pasa (vacia = no cambiarla)',
+    v2.validar_usuario({ nombre: 'Ana', email: 'a@b.com', password: '' }, false).length === 0)
+  afirmar('edicion CON contraseña debil falla',
+    v2.validar_usuario({ nombre: 'Ana', email: 'a@b.com', password: '123' }, false).length >= 1)
+  afirmar('edicion CON contraseña fuerte pasa',
+    v2.validar_usuario({ nombre: 'Ana', email: 'a@b.com', password: 'Abcdef12' }, false).length === 0)
+}
+
+// ── permisos_desde_estado ──
+{
+  const marcados = { clientes: true, cobros: true, reportes: false }
+  const niveles = { clientes: 'editar', cobros: 'ver' }
+  const permisos = v2.permisos_desde_estado(marcados, niveles)
+  afirmar('un modulo NO marcado no entra al mapa (queda fuera del menu)',
+    !('reportes' in permisos))
+  afirmar('un modulo marcado con nivel editar lo conserva', permisos.clientes === 'editar')
+  afirmar('un modulo marcado sin nivel explicito cae a "ver" por defecto',
+    permisos.cobros === 'ver')
+  afirmar('sin nada marcado, el mapa queda vacio',
+    Object.keys(v2.permisos_desde_estado({}, {})).length === 0)
+}
+
+// ── roles_disponibles: los 4 roles exactos del <select> de la v1 ──
+{
+  afirmar('4 roles, mismo orden que index.html',
+    JSON.stringify(v2.roles_disponibles) === JSON.stringify(['Administrador', 'Vendedora', 'Cajero', 'Solo lectura']))
+}
+
+// ══ 18. AJUSTES: PARAMETROS GLOBALES (app_config) ══════════════════
+// Modulo NUEVO, sin equivalente en la v1 (ver la cabecera de lib/config.js):
+// pruebas directas, no diferenciales.
+
+// ── map_config: snake_case de la fila -> camelCase del formulario ──
+{
+  const fila = {
+    fiscal: { razon_social: 'CLUB DEPORTIVO TRIPLE "A" S.A. DE C.V.', rfc: 'CDT990319SR7' },
+    cuenta_bancaria_default_id: 3,
+    plantilla_recibos: { nombre: 'Naranjeros', color: '#E05C1A' },
+    actualizado_en: '2026-09-04T18:00:00Z',
+    actualizado_por: 'Ana',
+  }
+  const c = v2.map_config(fila)
+  afirmar('fiscal.razonsocial mapea desde razon_social', c.fiscal.razonsocial === fila.fiscal.razon_social)
+  afirmar('un campo fiscal ausente llega como cadena vacia, no undefined',
+    c.fiscal.domicilio === '')
+  afirmar('el id de la cuenta bancaria viaja como STRING (para el <select>)',
+    c.cuentabancariadefaultid === '3')
+  afirmar('plantillarecibos.logourl ausente llega vacio', c.plantillarecibos.logourl === '')
+  afirmar('actualizadopor se conserva', c.actualizadopor === 'Ana')
+
+  const vacia = v2.map_config(null)
+  afirmar('una fila null no truena: todo llega en blanco',
+    vacia.fiscal.rfc === '' && vacia.cuentabancariadefaultid === '' && vacia.plantillarecibos.nombre === '')
+
+  const sinCuenta = v2.map_config({ fiscal: {}, plantilla_recibos: {}, cuenta_bancaria_default_id: null })
+  afirmar('sin cuenta bancaria asignada, el id llega vacio (no "null" como texto)',
+    sinCuenta.cuentabancariadefaultid === '')
+}
+
+// ── validar_config: nada es obligatorio, solo el RFC se valida SI viene ──
+{
+  afirmar('todo vacio pasa (nada es obligatorio)',
+    v2.validar_config({ fiscal: { rfc: '' } }).length === 0)
+  afirmar('un RFC con formato valido pasa',
+    v2.validar_config({ fiscal: { rfc: 'CDT990319SR7' } }).length === 0)
+  afirmar('un RFC con formato invalido falla',
+    v2.validar_config({ fiscal: { rfc: 'no-es-un-rfc' } }).length >= 1)
+  afirmar('sin bloque fiscal en absoluto no truena',
+    v2.validar_config({}).length === 0)
+}
+
 // ══ RESULTADO ═════════════════════════════════════════════════════
 console.log('\n── diferencial contra la v1 ──')
 console.log('  comparaciones: ' + casos.toLocaleString('es-MX'))

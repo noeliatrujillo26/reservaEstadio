@@ -20,6 +20,7 @@ import { map_movimiento } from '../lib/movimientos'
 import { map_descuento, map_descuento_volumen, map_metodo } from '../lib/catalogos'
 import { map_cotizacion } from '../lib/cotizaciones'
 import { map_prospecto } from '../lib/pipeline'
+import { map_config } from '../lib/ajustes'
 
 export const admindatoscontext = createContext(null)
 
@@ -182,6 +183,10 @@ export function admindatosprovider({ children }) {
   const [secciones, setsecciones] = useState([])
   const [cotizaciones, setcotizaciones] = useState([])
   const [pipeline, setpipeline] = useState([])
+  // parametros globales (app_config) — modulo nuevo, sin equivalente en la
+  // v1, ver migracion-app-config.sql. null mientras carga o si la tabla aun
+  // no existe (migracion pendiente): map_config() ya defiende ese caso.
+  const [config, setconfig] = useState(null)
   // politica_pagos: el enganche minimo VIGENTE. No es adorno — de el sale el
   // corte con el que una tarjeta del Pipeline asciende sola de columna al
   // registrarse un abono (_pdEngancheRequerido). Nunca un 50 escrito a mano:
@@ -197,7 +202,8 @@ export function admindatosprovider({ children }) {
     // cada consulta por separado: si una falla, las demas siguen y el panel
     // pinta lo que si tenga — mismo criterio de la v1, que aisla los renders.
     const [rcobros, rreservas, rjuegos, rareas, rsecciones, restados, rmovs, rclientes, rusuarios,
-      rdescuentos, rdescvolumen, rmetodos, rconfig, rslides, rcotiz, rpipe, rpol] = await Promise.allSettled([
+      rdescuentos, rdescvolumen, rmetodos, rconfig, rslides, rcotiz, rpipe, rpol,
+      rappconfig] = await Promise.allSettled([
       select_todas('cobros', 'id'),
       select_todas('reservas', 'id'),
       sb.from('juegos').select('*').order('fecha'),
@@ -215,6 +221,7 @@ export function admindatosprovider({ children }) {
       select_todas('cotizaciones', 'fecha'),
       select_todas('pipeline_prospectos', 'id'),
       sb.from('politica_pagos').select('*').eq('id', 1).maybeSingle(),
+      sb.from('app_config').select('*').eq('id', 1).maybeSingle(),
     ])
 
     const ok = (r, etiqueta) => {
@@ -297,6 +304,13 @@ export function admindatosprovider({ children }) {
       })
     } else fallos.push('politica_pagos')
 
+    // tolerante: si app_config aun no existe (migracion pendiente) el modulo
+    // Ajustes queda vacio, no rompe el resto del panel — mismo criterio que
+    // descuentos_volumen arriba.
+    if (rappconfig.status === 'fulfilled' && !rappconfig.value.error && rappconfig.value.data) {
+      setconfig(map_config(rappconfig.value.data))
+    } else fallos.push('app_config')
+
     seterrores(fallos)
     setcargando(false)
   }, [])
@@ -306,7 +320,7 @@ export function admindatosprovider({ children }) {
   const valor = {
     cobros, reservas, juegos, areas, areasestados, movimientos, clientes, usuarios,
     descuentos, descuentosvolumen, metodos, configlanding, slides, secciones, cotizaciones, pipeline,
-    politica,
+    politica, config,
     cargando, errores, recargar: cargar,
   }
 

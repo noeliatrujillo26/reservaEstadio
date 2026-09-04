@@ -35,11 +35,14 @@ import Cotizaciones from '../src/components/admin/cotizaciones'
 import Pipeline from '../src/components/admin/pipeline'
 import Palcos from '../src/components/admin/palcos'
 import Completados from '../src/components/admin/completados'
+import Ajustes from '../src/components/admin/ajustes'
 import DetalleCobro from '../src/components/admin/detallecobro'
 import NuevoCobro from '../src/components/admin/nuevocobro'
 import Evidencia from '../src/components/admin/evidencia'
 import ReservaForm from '../src/components/admin/reservaform'
 import CotizForm from '../src/components/admin/cotizform'
+import UsuarioForm from '../src/components/admin/usuarioform'
+import { perms_default } from '../src/lib/permisos'
 import NuevoProspecto from '../src/components/admin/nuevoprospecto'
 import DetalleProspecto from '../src/components/admin/detalleprospecto'
 import { Confirmar } from '../src/components/admin/confirmar'
@@ -61,16 +64,19 @@ const cobros=[{id:1,fecha:'2026-08-05',mes:'Agosto',cliente:'Ana',concepto:'ABON
 const valor={secciones,areas,juegos,reservas,cobros,areasestados:{j1:{'sec-1':'reservada'}},
  movimientos:[{id:1,fecha:'2026-08-05',ts:'5 ago · 10:24',tipo:'Pago',desc:'Abono',ref:'1',usuario:'FER',monto:5000}],
  clientes:[{id:1,nombre:'Ana',email:'a@x.com',tel:'6621234567',facturacion:{rfc:'XAXX010101000',regimen:'626',razonSocial:'ANA SA',usoCfdi:'G03',cp:'83000',constanciaUrl:'https://x/csf.pdf',constanciaArchivo:'csf.pdf'}}],
- usuarios:[{id:1,nombre:'Admin Uno',email:'a@n.mx',rol:'Administrador',estado:'Activo',permisos:{}}],
+ usuarios:[{id:1,nombre:'Admin Uno',email:'a@n.mx',rol:'Administrador',estado:'Activo',permisos:{},authid:'11111111-1111-1111-1111-111111111111'},
+  {id:2,nombre:'Fer Vendedora',email:'fer@n.mx',rol:'Vendedora',estado:'Activo',permisos:{clientes:'editar',cotizaciones:'editar',reportes:'ver'},authid:null}],
  descuentos:[{id:1,codigo:'NRJ10',tipo:'porcentaje',valor:10,descripcion:'x',usos:2,usosmax:10,vigencia:'2099-01-01',estado:'Activo',juegosaplicables:[]}],
  descuentosvolumen:[{id:1,nombre:'Grupo',minpersonas:20,porcentaje:5,juegos:null,zonas:null,activo:true}],
- metodos:[{id:1,tipo:'Efectivo',nombre:'Caja',detalle:'x',activo:true}],
+ metodos:[{id:1,tipo:'Efectivo',nombre:'Caja',detalle:'x',activo:true},
+  {id:2,tipo:'Transferencia',nombre:'Cuenta BBVA Naranjeros',detalle:'CLABE 012345678901234567',activo:true}],
  configlanding:{banner_activo:true,banner_texto:'Hola',banner_color:'#2d6a4f',faq:[{pregunta:'p',respuesta:'r'}],promo_strip_cards:[{icono:'personas',titulo:'5%',descripcion:'d',activa:true}],whatsapp_quote_message:'m',referral_whatsapp_message:'r'},
  slides:[{id:1,image_url:'https://x/c.png',title:'S',order_index:1,is_active:true}],
  cotizaciones:[{id:'COT-0001',fecha:'2026-08-01',cliente:'Ana',email:'a@x.com',tel:'6621234567',empresa:'',descripcion:'Cumpleaños',vendedora:'FER',total:12000,valida:'2026-09-01',estado:'Activa',juegoid:'j1',zonaid:'sec-1',zona:'Terraza Derecha 1',consumodesc:'Botanas',areamonto:9000,consumomonto:3000,subtotal:12000,iva:0,descuento:0,adultoextracant:0,ninoextracant:0,extramonto:0,metodospago:[],tipocomida:'carne_asada',volumenpct:0,personasincluidas:20,notas:'Confirmar antes del juego',enpipeline:false}],
  pipeline:[{id:'p-1735689600000',folio:'002',nombre:'Luis',zona:'Terraza Derecha 1',juego:'j1',monto:9750,etapa:'reservado',vendedora:'FER',adultos:20,ninos:2,reservaids:['1'],tipocomida:'carne_asada',etapacambiadaen:'2026-08-01T10:00:00Z'},
   {id:'p-2',folio:'003',nombre:'Eva',zona:'Palco All-Inc 2',juego:'j1',monto:5000,etapa:'completado',vendedora:'MELI',reservaids:['9'],tipocomida:'discada'}],
  politica:{enganche_minimo:50,dias_limite_liquidar:5},
+ config:{fiscal:{razonsocial:'CLUB DEPORTIVO TRIPLE "A" S.A. DE C.V.',nombrecomercial:'Naranjeros',rfc:'CDT990319SR7',domicilio:'Blvd. Hector Espino 2A',telefonos:'662 119 5169'},cuentabancariadefaultid:'1',plantillarecibos:{nombre:'Naranjeros',color:'#E05C1A',logourl:''},actualizadoen:'2026-09-04T18:00:00Z',actualizadopor:'Ana'},
  cargando:false,errores:[]}
 const sesion={usuario:{id:1,nombre:'Admin Uno',email:'a@n.mx',rol:'Administrador',permisos:{},iniciales:'AU'},estado:'dentro',error:'',seterror(){},iniciar_sesion(){},cerrar_sesion(){},escritura_admin:false}
 
@@ -88,6 +94,8 @@ const CotizNueva = () => <CotizForm abierto editando={null} oncerrar={()=>{}} on
 // la zona propia (sec-1) esta 'reservada' en areasestados a proposito: prueba
 // que editar conserva la zona ya ocupada en el <select>, igual que reservaform.jsx.
 const CotizEditar = () => <CotizForm abierto editando={valor.cotizaciones[0]} oncerrar={()=>{}} onguardar={async()=>({ok:true})} guardando={false} />
+const UsuarioNuevo = () => <UsuarioForm abierto editando={null} permisosdefault={perms_default.Vendedora} oncerrar={()=>{}} onguardar={async()=>({ok:true})} guardando={false} />
+const UsuarioEditar = () => <UsuarioForm abierto editando={valor.usuarios[1]} permisosdefault={perms_default.Vendedora} oncerrar={()=>{}} onguardar={async()=>({ok:true})} guardando={false} />
 const ConfirmSimple = () => <Confirmar estado={{mensaje:'¿Cancelar este cobro?',textoconfirmar:'Sí, cancelar'}} oncerrar={()=>{}} />
 const ConfirmSeguro = () => <ConfirmarSeguro estado={{titulo:'🗑 Eliminar',descripcion:'Se borra la reserva.',etiquetamotivo:'¿Por qué? *',textoconfirmar:'Confirmar y Eliminar',pedirmotivo:true}} oncerrar={()=>{}} />
 const ProspectoNuevo = () => <NuevoProspecto abierto oncerrar={()=>{}} oncrear={async()=>({ok:true})} guardando={false} />
@@ -118,11 +126,12 @@ const ClienteDetalleVacio = () => {
 export const vistas={dashboard:Dashboard,cobros:Cobros,seccionesreservadas:Reservas,clientes:Clientes,
  usuarios:Usuarios,movimientos:Movimientos,consumos:Consumos,temporadas:Temporadas,descuentos:Descuentos,metodos:Metodos,
  reportes:Reportes,mensajes:Mensajes,landing:Landing,precios:Precios,cotizaciones:Cotizaciones,
- pipeline:Pipeline,palcos:Palcos,completados:Completados,
+ pipeline:Pipeline,palcos:Palcos,completados:Completados,ajustes:Ajustes,
  detallecobro:DetalleAbierto,detallecancelado:DetalleCancelado,nuevocobro:NuevoAbierto,
  evidenciapdf:EvidenciaPdf,evidenciasinliga:EvidenciaSinLiga,
  reservanueva:ReservaNueva,reservaeditar:ReservaEditar,
  cotiznueva:CotizNueva,cotizeditar:CotizEditar,
+ usuarionuevo:UsuarioNuevo,usuarioeditar:UsuarioEditar,
  confirmsimple:ConfirmSimple,confirmseguro:ConfirmSeguro,confirmseguro2:ConfirmSeguroSinMotivo,
  prospectonuevo:ProspectoNuevo,prospectodetalle:ProspectoDetalle,
  cliente_expediente:ClienteDetalleAbierto,cliente_expediente_vacio:ClienteDetalleVacio,

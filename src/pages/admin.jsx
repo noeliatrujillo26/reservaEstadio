@@ -41,6 +41,7 @@ import Cotizaciones from '../components/admin/cotizaciones'
 import Pipeline from '../components/admin/pipeline'
 import Palcos from '../components/admin/palcos'
 import Completados from '../components/admin/completados'
+import Ajustes from '../components/admin/ajustes'
 import secciones_nav from '../components/admin/adminnav'
 import '../styles/admin.css'
 import '../styles/admin-responsive.css'
@@ -66,6 +67,7 @@ const MIGRADOS = {
   pipeline: <Pipeline />,
   palcos: <Palcos />,
   completados: <Completados />,
+  ajustes: <Ajustes />,
 }
 
 // titulo legible de la seccion, para la barra superior movil.

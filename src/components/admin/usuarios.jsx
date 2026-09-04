@@ -3,27 +3,36 @@
 // espejo 1:1 de v1: #page-usuarios de index.html (lineas 2153-2181) y
 // renderUsuarios() de js/22-usuarios-clientes.js.
 //
-// SOLO LECTURA: se omiten "Nuevo usuario", editar, activar/desactivar y
-// eliminar — todos escriben en la tabla `usuarios` de produccion. En su lugar,
-// la fila abre el detalle de permisos, que en la v1 vive dentro del cajon de
-// edicion y aqui se muestra en modo consulta.
+// ESCRITURA (Fase 2): crear, editar perfil/rol/permisos/contraseña,
+// activar/desactivar y eliminar — ver useusuariosescritura.js y
+// usuarioform.jsx. Eliminar pasa por useconfirmarseguro() (contraseña real
+// de quien tiene la sesion, no el confirm() plano de la v1) — mismo criterio
+// que el borrado de reservas y prospectos en el resto del panel.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useEffect, useMemo, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
 import useadmin from '../../hooks/useadmin'
+import useusuariosescritura from '../../hooks/useusuariosescritura'
+import { useconfirmarseguro } from './confirmarseguro'
+import UsuarioForm from './usuarioform'
 import {
   badge_estado_usuario, filtrar_usuarios, permisos_efectivos, perms_groups, role_badge,
+  roles_disponibles,
 } from '../../lib/usuarios'
+import { perms_default } from '../../lib/permisos'
 
 export default function usuarios() {
   const { usuarios: todos, cargando, errores } = useadmindatos()
   const { usuario: yo } = useadmin()
+  const { puede, guardar, guardando, alternar_estado, eliminar, borrando } = useusuariosescritura()
+  const { confirmarseguro, dialogo } = useconfirmarseguro()
 
   const [busqueda, setbusqueda] = useState('')
   const [rol, setrol] = useState('')
   const [estado, setestado] = useState('')
   const [detalle, setdetalle] = useState(null)
+  const [form, setform] = useState(null) // { editando } | null
 
   useEffect(() => {
     const alteclado = (e) => { if (e.key === 'Escape') setdetalle(null) }
@@ -36,11 +45,21 @@ export default function usuarios() {
     [todos, busqueda, rol, estado]
   )
 
-  // roles presentes de verdad + los tres fijos del select de la v1.
-  const roles = useMemo(() => {
-    const fijos = ['Administrador', 'Vendedora', 'Cajero']
-    return [...new Set(fijos.concat(todos.map((u) => u.rol).filter(Boolean)))]
-  }, [todos])
+  // roles presentes de verdad + los 4 fijos del select de la v1.
+  const roles = useMemo(
+    () => [...new Set(roles_disponibles.concat(todos.map((u) => u.rol).filter(Boolean)))],
+    [todos]
+  )
+
+  async function pedir_eliminar(u) {
+    const confirmacion = await confirmarseguro({
+      titulo: '🗑 Eliminar usuario',
+      descripcion: 'Se elimina el perfil de ' + u.nombre + ' (' + u.email + '). Dejará de poder iniciar sesión.',
+      textoconfirmar: 'Sí, eliminar',
+      pedirmotivo: false,
+    })
+    if (confirmacion) eliminar(u, confirmacion)
+  }
 
   return (
     <div className="page active" id="page-usuarios">
@@ -50,6 +69,11 @@ export default function usuarios() {
             <h2>Usuarios</h2>
             <p>Gestión de cuentas y permisos del sistema</p>
           </div>
+          {puede && (
+            <button className="btn btn-primary btn-sm" onClick={() => setform({ editando: null })}>
+              + Nuevo usuario
+            </button>
+          )}
         </div>
 
         <div className="card" style={{ marginBottom: '20px' }}>
@@ -95,7 +119,8 @@ export default function usuarios() {
                   <th style={{ width: '28%' }}>Correo</th>
                   <th style={{ width: '14%' }}>Rol</th>
                   <th style={{ width: '12%' }}>Estado</th>
-                  <th style={{ width: '22%' }}>Permisos</th>
+                  <th style={{ width: '18%' }}>Permisos</th>
+                  {puede && <th style={{ width: '16%' }}></th>}
                 </tr>
               </thead>
               <tbody id="usuarios-tbody">
@@ -103,11 +128,12 @@ export default function usuarios() {
                   const perms = permisos_efectivos(u)
                   const n = Object.keys(perms).length
                   const es_admin = String(u.rol || '').toLowerCase() === 'administrador'
+                  const es_yo = yo && String(yo.id) === String(u.id)
                   return (
                     <tr key={u.id}>
                       <td className="td-name">
                         {u.nombre}
-                        {yo && String(yo.id) === String(u.id) && (
+                        {es_yo && (
                           <span className="badge badge-gray" style={{ fontSize: '9px', marginLeft: '6px' }}>tú</span>
                         )}
                       </td>
@@ -119,6 +145,28 @@ export default function usuarios() {
                           {es_admin ? 'Acceso total' : n + ' módulo' + (n === 1 ? '' : 's')} ›
                         </button>
                       </td>
+                      {puede && (
+                        <td>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button className="btn btn-ghost btn-xs" onClick={() => setform({ editando: u })} title="Editar">
+                              ✏️
+                            </button>
+                            <button
+                              className="btn btn-ghost btn-xs" onClick={() => alternar_estado(u)}
+                              title={u.estado === 'Activo' ? 'Desactivar' : 'Activar'}
+                            >
+                              {u.estado === 'Activo' ? '🚫' : '✅'}
+                            </button>
+                            <button
+                              className="btn btn-ghost btn-xs" style={{ color: 'var(--rojo)' }}
+                              onClick={() => pedir_eliminar(u)} disabled={es_yo || borrando === u.id}
+                              title={es_yo ? 'No puedes eliminar tu propia cuenta' : 'Eliminar'}
+                            >
+                              🗑
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
@@ -203,6 +251,16 @@ export default function usuarios() {
           </div>
         </div>
       )}
+
+      <UsuarioForm
+        abierto={!!form}
+        editando={form ? form.editando : null}
+        permisosdefault={perms_default.Vendedora}
+        oncerrar={() => setform(null)}
+        onguardar={guardar}
+        guardando={guardando}
+      />
+      {dialogo}
     </div>
   )
 }

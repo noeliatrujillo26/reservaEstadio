@@ -32,3 +32,9 @@ pruebas/out
 pruebas/out-lectura
 pruebas/out-escritura
 pruebas/out-cascadas
+
+# scripts/limpieza-prospectos.mjs: la salida compilada se regenera solo, y
+# los candidatos-limpieza-*.json traen datos reales de clientes (nombre,
+# correo, telefono) -- jamas al repo.
+scripts/out-limpieza
+scripts/candidatos-limpieza-*.json

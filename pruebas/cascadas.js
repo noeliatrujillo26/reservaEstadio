@@ -76,3 +76,9 @@ export {
   calcular_cotizacion, cotiz_transicion_bloqueada, cotizacion_a_prospecto_payload,
   cotizacion_activa_en_pipeline, fecha_validez_cotizacion, folio_cotizacion, validar_cotizacion,
 } from '../src/lib/cotizaciones'
+
+export {
+  msg_password_debil, password_debil, permisos_desde_estado, roles_disponibles, validar_usuario,
+} from '../src/lib/usuarios'
+
+export { map_config, validar_config } from '../src/lib/ajustes'

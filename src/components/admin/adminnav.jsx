@@ -151,6 +151,14 @@ export const secciones_nav = [
         badge: null,
         icono: (<svg className="nav-icon" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M10 4l4 4-4 4M6 12l-4-4 4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>),
       },
+      // 'ajustes' es entrada NUEVA, sin equivalente en la v1 (no tiene pagina
+      // de Ajustes) — ver lib/config.js.
+      {
+        id: "ajustes",
+        texto: "Ajustes",
+        badge: null,
+        icono: (<svg className="nav-icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.4" /><path d="M8 2.5v1.6M8 11.9v1.6M13.5 8h-1.6M4.1 8H2.5M11.7 4.3l-1.1 1.1M5.4 10.6l-1.1 1.1M11.7 11.7l-1.1-1.1M5.4 5.4L4.3 4.3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>),
+      },
     ],
   },
 ]

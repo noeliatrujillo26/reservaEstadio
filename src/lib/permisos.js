@@ -10,10 +10,15 @@
 // ═══════════════════════════════════════════════════════════════════
 
 // todas las secciones que puede tener un perfil, tomadas del menu lateral.
+// 'ajustes' no lo trae la v1 (no tiene pagina de Ajustes) — se agrega para
+// app_config, el modulo NUEVO de parametros globales. Administrador-only por
+// defecto, igual que 'usuarios': no se agrega a los perfiles de Vendedora,
+// Cajero ni 'Solo lectura' de abajo.
 export const perms_all = [
   'dashboard', 'clientes', 'cotizaciones', 'palcos', 'pipeline', 'completados',
   'seccionesreservadas', 'consumos', 'crear', 'temporadas', 'precios', 'landing',
   'cobros', 'descuentos', 'metodos', 'reportes', 'mensajes', 'usuarios', 'movimientos',
+  'ajustes',
 ]
 
 export const perms_default = {
