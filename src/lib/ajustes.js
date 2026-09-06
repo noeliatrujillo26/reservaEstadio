@@ -1,15 +1,21 @@
 // ═══════════════════════════════════════════════════════════════════
-// ajustes.js — parámetros globales del sistema (tabla app_config).
+// ajustes.js — parámetros globales del sistema (tabla configuracion_panel).
 //
-// SIN EQUIVALENTE 1:1 EN LA V1: sus "ajustes" viven repartidos en tres
-// sitios distintos, ninguno editable desde el panel — datos fiscales y de
-// contacto hardcodeados en js/00-config.js (el app_config ESTATICO del
-// cliente, ver lib/config.js — un archivo DISTINTO a este, no confundir: ese
-// es la configuracion del SITIO, este es la tabla NUEVA del panel), la
-// plantilla de recibos/cotizaciones en el localStorage de CADA navegador
-// (nrj_cotiz_plantilla, no se comparte entre sesiones), y no existe pagina
-// de Ajustes en absoluto. Ver migracion-app-config.sql para la tabla nueva y
-// sus politicas RLS.
+// espejo PARCIAL de v1: configuracion_panel (clave → valor jsonb) es la
+// MISMA tabla que agrego la v1 el 01 sep 2026 para 'mensajes',
+// 'cotiz_plantilla' y 'desc_max_sin_autorizacion' — ver
+// migracion-configuracion-panel.sql. Las llaves 'fiscal' y
+// 'cuenta_bancaria_default_id' de aqui abajo son NUEVAS, sin equivalente en
+// la v1 (sus datos fiscales viven hardcodeados en js/00-config.js — el
+// app_config ESTATICO del cliente, ver lib/config.js, un archivo DISTINTO a
+// este). 'cotiz_plantilla' SI reutiliza la llave de la v1, aunque v2 guarda
+// su propia forma del bloque (nombre/color/logourl) en vez de la de la v1
+// (logo/color/nombre/condiciones) — ver la migracion para el detalle.
+//
+// Este modulo reemplaza a la tabla app_config (fila unica, columnas fijas)
+// que usaba la primera version de Ajustes en v2: sus datos ya se copiaron a
+// configuracion_panel por la migracion; app_config sigue en la base sin
+// usarse, como respaldo.
 //
 // ALCANCE: este modulo es para el PANEL ADMIN unicamente. El sitio publico
 // (recibos/checkout) sigue leyendo su copia estatica de lib/config.js /
@@ -18,12 +24,27 @@
 // checkout en produccion.
 // ═══════════════════════════════════════════════════════════════════
 
-// MAPEADOR: la fila de `app_config` es una sola (id=1, ver la migracion),
-// con dos bloques JSONB. Ambos llegan con default '{}' de la base, nunca
-// null, pero se defiende de todos modos.
-export function map_config(c) {
-  const fiscal = (c && c.fiscal) || {}
-  const plantilla = (c && c.plantilla_recibos) || {}
+// MAPEADOR: `filas` es el arreglo crudo de configuracion_panel (una fila por
+// llave, puede faltar cualquiera de las tres si nunca se ha guardado).
+export function map_config(filas) {
+  const porclave = {}
+  ;(filas || []).forEach((f) => { if (f && f.clave) porclave[f.clave] = f })
+
+  const fiscalfila = porclave.fiscal
+  const fiscal = (fiscalfila && fiscalfila.valor) || {}
+  const plantillafila = porclave.cotiz_plantilla
+  const plantilla = (plantillafila && plantillafila.valor) || {}
+  const cuentafila = porclave.cuenta_bancaria_default_id
+
+  // "ultima actualizacion" = la mas reciente de las tres llaves que este
+  // modulo usa — cada una se guarda por separado, ya no hay una fila unica.
+  const actualizadoen = [fiscalfila, plantillafila, cuentafila]
+    .filter(Boolean)
+    .map((f) => f.actualizado_en)
+    .filter(Boolean)
+    .sort()
+    .pop() || null
+
   return {
     fiscal: {
       razonsocial: fiscal.razon_social || '',
@@ -32,16 +53,15 @@ export function map_config(c) {
       domicilio: fiscal.domicilio || '',
       telefonos: fiscal.telefonos || '',
     },
-    cuentabancariadefaultid: c && c.cuenta_bancaria_default_id != null
-      ? String(c.cuenta_bancaria_default_id)
+    cuentabancariadefaultid: cuentafila && cuentafila.valor != null
+      ? String(cuentafila.valor)
       : '',
     plantillarecibos: {
       nombre: plantilla.nombre || '',
       color: plantilla.color || '',
       logourl: plantilla.logo_url || '',
     },
-    actualizadoen: (c && c.actualizado_en) || null,
-    actualizadopor: (c && c.actualizado_por) || '',
+    actualizadoen,
   }
 }
 

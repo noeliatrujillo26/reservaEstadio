@@ -24,10 +24,10 @@ export default function ajustes() {
 
   // SIN useEffect a proposito: `config` llega asincrono del contexto (la
   // carga inicial del panel), y un efecto para sincronizarlo a `d` deja el
-  // PRIMER render siempre vacio — el mismo punto ciego que ya documentan
-  // palcos.jsx/detalleprospecto.jsx en este panel, y que el banco de
-  // pruebas (que no ejecuta efectos) atrapa como una vista que nunca
-  // termina de pintar su contenido real.
+  // PRIMER render siempre vacio — el mismo punto ciego que ya documenta
+  // detalleprospecto.jsx en este panel, y que el banco de pruebas (que no
+  // ejecuta efectos) atrapa como una vista que nunca termina de pintar su
+  // contenido real.
   //
   // `editado` es SOLO lo que el usuario ya toco en esta sesion; mientras
   // este en null, la pantalla refleja `config` directo — se actualiza sola
@@ -73,8 +73,8 @@ export default function ajustes() {
           <div className="empty-state" style={{ marginBottom: '20px' }}>
             <div className="empty-state-icon">⚙️</div>
             <p>
-              {errores.includes('app_config')
-                ? 'No se pudo leer la tabla app_config. Si el módulo es nuevo, corre migracion-app-config.sql en Supabase.'
+              {errores.includes('configuracion_panel')
+                ? 'No se pudo leer la tabla configuracion_panel. Si el módulo es nuevo, corre migracion-configuracion-panel.sql en Supabase.'
                 : 'Sin parámetros configurados todavía.'}
             </p>
           </div>
@@ -192,7 +192,6 @@ export default function ajustes() {
             {d.actualizadoen && (
               <span style={{ fontSize: '11.5px', color: 'var(--text-3)', alignSelf: 'center', marginRight: 'auto' }}>
                 Última actualización: {new Date(d.actualizadoen).toLocaleString('es-MX')}
-                {d.actualizadopor ? ' · ' + d.actualizadopor : ''}
               </span>
             )}
             <button

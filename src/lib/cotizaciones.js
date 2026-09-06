@@ -196,6 +196,11 @@ export function fecha_validez_cotizacion(fechabase, dias) {
 // junto al porcentaje (descuento_volumen_nombre, columna de `cotizaciones`),
 // y calc_total_prospecto solo devuelve el %. Mismos argumentos, misma
 // funcion pura — no hay forma de que diverjan.
+//
+// `ctx.areas` es necesario para que calc_total_prospecto resuelva si la zona
+// es un PALCO COMPARTIDO (05 sep 2026): ahi el umbral y la base del
+// descuento de grupo cuentan solo adultos, y el tipo de comida no aplica
+// (ver cotizform.jsx). Sin `ctx.areas` se asume zona normal.
 export function calcular_cotizacion(d, ctx) {
   const calc = calc_total_prospecto({ ...d, minpersonas: d.personasincluidas }, ctx)
   const base = redondear_dinero(calc.total / 1.16)

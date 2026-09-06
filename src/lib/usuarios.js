@@ -52,7 +52,6 @@ export const perms_groups = [
     { key: 'clientes', label: 'Clientes' },
     { key: 'cotizaciones', label: 'Cotizaciones' },
     { key: 'pipeline', label: 'Pipeline Comercial' },
-    { key: 'palcos', label: 'Pipeline de Palcos' },
     { key: 'seccionesreservadas', label: 'Reservas' },
     { key: 'consumos', label: 'Saldo de Consumo' },
   ] },
@@ -73,8 +72,8 @@ export const perms_groups = [
   { label: 'Sistema', items: [
     { key: 'usuarios', label: 'Usuarios' },
     { key: 'movimientos', label: 'Movimientos' },
-    // 'ajustes' es modulo nuevo (app_config): sin equivalente en la v1, ver
-    // lib/config.js.
+    // 'ajustes' controla configuracion_panel: datos fiscales y cuenta
+    // bancaria son nuevos, sin equivalente en la v1 — ver lib/ajustes.js.
     { key: 'ajustes', label: 'Ajustes' },
   ] },
 ]

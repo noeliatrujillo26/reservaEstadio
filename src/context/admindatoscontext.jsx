@@ -183,9 +183,10 @@ export function admindatosprovider({ children }) {
   const [secciones, setsecciones] = useState([])
   const [cotizaciones, setcotizaciones] = useState([])
   const [pipeline, setpipeline] = useState([])
-  // parametros globales (app_config) — modulo nuevo, sin equivalente en la
-  // v1, ver migracion-app-config.sql. null mientras carga o si la tabla aun
-  // no existe (migracion pendiente): map_config() ya defiende ese caso.
+  // parametros globales (configuracion_panel: fiscal, cuenta bancaria por
+  // defecto, plantilla de recibos) — ver migracion-configuracion-panel.sql.
+  // null mientras carga o si la tabla aun no existe (migracion pendiente):
+  // map_config() ya defiende ese caso.
   const [config, setconfig] = useState(null)
   // politica_pagos: el enganche minimo VIGENTE. No es adorno — de el sale el
   // corte con el que una tarjeta del Pipeline asciende sola de columna al
@@ -203,7 +204,7 @@ export function admindatosprovider({ children }) {
     // pinta lo que si tenga — mismo criterio de la v1, que aisla los renders.
     const [rcobros, rreservas, rjuegos, rareas, rsecciones, restados, rmovs, rclientes, rusuarios,
       rdescuentos, rdescvolumen, rmetodos, rconfig, rslides, rcotiz, rpipe, rpol,
-      rappconfig] = await Promise.allSettled([
+      rcfgpanel] = await Promise.allSettled([
       select_todas('cobros', 'id'),
       select_todas('reservas', 'id'),
       sb.from('juegos').select('*').order('fecha'),
@@ -221,7 +222,9 @@ export function admindatosprovider({ children }) {
       select_todas('cotizaciones', 'fecha'),
       select_todas('pipeline_prospectos', 'id'),
       sb.from('politica_pagos').select('*').eq('id', 1).maybeSingle(),
-      sb.from('app_config').select('*').eq('id', 1).maybeSingle(),
+      sb.from('configuracion_panel')
+        .select('clave, valor, actualizado_en')
+        .in('clave', ['fiscal', 'cuenta_bancaria_default_id', 'cotiz_plantilla']),
     ])
 
     const ok = (r, etiqueta) => {
@@ -304,12 +307,14 @@ export function admindatosprovider({ children }) {
       })
     } else fallos.push('politica_pagos')
 
-    // tolerante: si app_config aun no existe (migracion pendiente) el modulo
-    // Ajustes queda vacio, no rompe el resto del panel — mismo criterio que
-    // descuentos_volumen arriba.
-    if (rappconfig.status === 'fulfilled' && !rappconfig.value.error && rappconfig.value.data) {
-      setconfig(map_config(rappconfig.value.data))
-    } else fallos.push('app_config')
+    // tolerante: si configuracion_panel aun no existe (migracion pendiente)
+    // el modulo Ajustes queda vacio, no rompe el resto del panel — mismo
+    // criterio que descuentos_volumen arriba. Sin filas todavia (tabla
+    // recien creada, nadie ha guardado nada) tambien es un caso valido: NO
+    // es un fallo, map_config([]) ya defiende ese caso.
+    if (rcfgpanel.status === 'fulfilled' && !rcfgpanel.value.error) {
+      setconfig(map_config(rcfgpanel.value.data))
+    } else fallos.push('configuracion_panel')
 
     seterrores(fallos)
     setcargando(false)

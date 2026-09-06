@@ -26,31 +26,34 @@ export const escritura_admin = import.meta.env.VITE_ESCRITURA_ADMIN === 'true'
 // Vendedora con pipeline:'editar' escribe ahi aunque no tenga la seccion
 // Cobros en su menu.
 // Modulos cuyos flujos APARTAN O LIBERAN una seccion: generar la reserva desde
-// una tarjeta, editarla o borrarla, vender un palco, o bloquear zonas desde el
-// editor del mapa. Todos ellos tienen que poder escribir `zona_juego_estado`,
-// porque crear la reserva y marcar su seccion son DOS MITADES DEL MISMO ACTO.
+// una tarjeta (palco compartido o zona exclusiva), editarla o borrarla, o
+// bloquear zonas desde el editor del mapa. Todos ellos tienen que poder
+// escribir `zona_juego_estado`, porque crear la reserva y marcar su seccion
+// son DOS MITADES DEL MISMO ACTO. (Palcos ya no es un modulo aparte: su
+// Pipeline se fusiono al de 'pipeline' como un filtro de tipo de zona — ver
+// lib/pipeline.js.)
 //
 // `cobros` NO esta aqui a proposito, aunque si escribe en `reservas`: lo unico
 // que toca desde ahi es el SALDO de una reserva que ya existe. Registrar o
 // cancelar un cobro nunca aparta ni libera una seccion, asi que darle ese
 // permiso seria abrir de mas.
-const modulos_estado_seccion = ['seccionesreservadas', 'pipeline', 'palcos', 'crear']
+const modulos_estado_seccion = ['seccionesreservadas', 'pipeline', 'crear']
 
 export const tabla_modulo_edicion = {
-  reservas: ['seccionesreservadas', 'pipeline', 'cobros', 'palcos'],
+  reservas: ['seccionesreservadas', 'pipeline', 'cobros'],
   clientes: ['clientes'],
   cobros: ['cobros', 'pipeline'],
   // 'cotizaciones' se agrega aqui ademas de 'pipeline': convertir una
   // cotizacion en prospecto (cotizacion_a_prospecto_payload, en
   // usecotizacionesescritura.js) inserta en esta misma tabla, y es una accion
-  // del modulo Cotizaciones — misma logica que 'cobros' o 'palcos' aqui abajo
-  // en `reservas`: una Vendedora con cotizaciones:editar pero sin ver Pipeline
+  // del modulo Cotizaciones — misma logica que 'cobros' aqui abajo en
+  // `reservas`: una Vendedora con cotizaciones:editar pero sin ver Pipeline
   // en su menu debe poder enviar SU cotizacion al tablero de todos modos.
   pipeline_prospectos: ['pipeline', 'cotizaciones'],
   cotizaciones: ['cotizaciones'],
   descuentos_volumen: ['descuentos'],
   usuarios: ['usuarios'],
-  app_config: ['ajustes'],
+  configuracion_panel: ['ajustes'],
   // AGREGADA AQUI, no la trae la v1. Su _TABLA_MODULO_EDICION no declara
   // `zona_juego_estado`, asi que la guardia por tabla la deja pasar sin mirar
   // el rol: bloquear una seccion —sacarla de venta— quedaba al alcance de
@@ -136,6 +139,18 @@ export async function insertar_verificado(sb, usuario, tabla, payload, clavesleg
     res = await sb.from(tabla).insert(subset_legacy(payload, claveslegacy)).select()
   }
   return interpretar(res, 'insert', tabla)
+}
+
+// UPSERT verificado: para tablas clave/valor como configuracion_panel, donde
+// una sola pantalla guarda VARIAS filas (una por llave) de un golpe, y
+// algunas de esas llaves pueden no existir todavia (a diferencia de
+// actualizar_verificado, que exige una fila ya creada por id).
+export async function upsertar_verificado(sb, usuario, tabla, filas, columnaconflicto) {
+  const bloqueo = motivo_bloqueo(usuario, tabla)
+  if (bloqueo) return { ok: false, motivo: bloqueo }
+
+  const res = await sb.from(tabla).upsert(filas, { onConflict: columnaconflicto }).select()
+  return interpretar(res, 'upsert', tabla)
 }
 
 // El BORRADO real (no el suave). Se usa unicamente donde el negocio lo pide:

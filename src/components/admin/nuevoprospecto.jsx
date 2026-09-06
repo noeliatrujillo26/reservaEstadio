@@ -5,15 +5,20 @@
 //
 // El total se recalcula EN VIVO con la misma funcion que se guarda
 // (calc_total_prospecto), no con una copia paralela: lo que el usuario ve en
-// pantalla es exactamente lo que se persiste. El descuento por grupo es
-// automatico y aditivo al manual, y el combinado se acota al 100%.
+// pantalla es exactamente lo que se persiste. El descuento por grupo se
+// calcula sobre su base propia (subtotal completo, o paquete + adultos
+// extra en un PALCO COMPARTIDO — ver base_descuento_grupo) y el manual
+// sobre el subtotal; juntos jamas superan el subtotal.
+//
+// PALCO COMPARTIDO: sin tipo de comida (All-Inclusive, el selector se
+// oculta) y el umbral/base del descuento de grupo cuenta solo adultos.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useEffect, useMemo, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
 import { catalogo_clientes, cliente_coincide } from '../../lib/clientes'
 import { calc_total_prospecto } from '../../lib/prospectos'
-import { pipeline_etapas } from '../../lib/pipeline'
+import { etiqueta_grupo, pipeline_etapas } from '../../lib/pipeline'
 import { map_precio } from '../../lib/preciosadmin'
 import { min_seccion, precio_seccion } from '../../lib/reservasadmin'
 import { mxn2 } from '../../lib/dinero'
@@ -62,6 +67,10 @@ function nuevo_prospecto({ abierto, oncerrar, oncrear, guardando }) {
     () => (areas || []).find((a) => a.id === d.zonaid) || null,
     [areas, d.zonaid]
   )
+  // PALCO COMPARTIDO: es All-Inclusive, no tiene tipo de comida que elegir —
+  // el selector se oculta y el valor interno vuelve a la tarifa estandar.
+  // espejo de _pipPintarTipoComida() (05 sep 2026).
+  const espalco = !!(area && area.escompartida)
 
   // El "Monto Área" y las personas incluidas salen del catalogo de Precios en
   // cuanto hay seccion y juego: nadie los teclea a mano.
@@ -71,9 +80,9 @@ function nuevo_prospecto({ abierto, oncerrar, oncrear, guardando }) {
   const calc = useMemo(
     () => calc_total_prospecto(
       { ...d, areamonto, minpersonas, juegoid: d.juegoid, zonaid: d.zonaid },
-      { descuentosvolumen }
+      { descuentosvolumen, areas }
     ),
-    [d, areamonto, minpersonas, descuentosvolumen]
+    [d, areamonto, minpersonas, descuentosvolumen, areas]
   )
 
   const catalogoclientes = useMemo(
@@ -100,6 +109,7 @@ function nuevo_prospecto({ abierto, oncerrar, oncrear, guardando }) {
       areamonto,
       minpersonas,
       codigodescuento: '',
+      tipocomida: espalco ? 'carne_asada' : d.tipocomida,
     })
     if (r && r.ok) oncerrar()
     else if (r && r.campos) setcampos(r.campos)
@@ -234,7 +244,14 @@ function nuevo_prospecto({ abierto, oncerrar, oncrear, guardando }) {
             </div>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Zona</label>
-              <select className="input select" value={d.zonaid} onChange={(e) => set('zonaid', e.target.value)}>
+              <select
+                className="input select" value={d.zonaid}
+                onChange={(e) => {
+                  const zid = e.target.value
+                  const nueva = (areas || []).find((a) => a.id === zid) || null
+                  setd((x) => ({ ...x, zonaid: zid, tipocomida: nueva && nueva.escompartida ? 'carne_asada' : x.tipocomida }))
+                }}
+              >
                 <option value="">— Selecciona —</option>
                 {(areas || []).map((a) => (
                   <option key={a.id} value={a.id}>{a.nombre}</option>
@@ -285,15 +302,18 @@ function nuevo_prospecto({ abierto, oncerrar, oncrear, guardando }) {
             {num('ninoextraprecio', 'Precio niño extra ($)')}
             {num('ninoextracant', 'Niños extra', { step: '1' })}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: espalco ? '1fr' : '1fr 1fr', gap: '12px' }}>
             {num('descuento', 'Descuento manual (%)', { max: '100' })}
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Tipo de comida</label>
-              <select className="input select" value={d.tipocomida} onChange={(e) => set('tipocomida', e.target.value)}>
-                <option value="carne_asada">Carne asada</option>
-                <option value="discada">Discada</option>
-              </select>
-            </div>
+            {/* PALCO COMPARTIDO: All-Inclusive, sin tipo de comida que elegir. */}
+            {!espalco && (
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Tipo de comida</label>
+                <select className="input select" value={d.tipocomida} onChange={(e) => set('tipocomida', e.target.value)}>
+                  <option value="carne_asada">Carne asada</option>
+                  <option value="discada">Discada</option>
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Resumen: EXACTAMENTE lo que se va a guardar. */}
@@ -304,7 +324,8 @@ function nuevo_prospecto({ abierto, oncerrar, oncrear, guardando }) {
             <div>Subtotal: <strong>{money(calc.subtotal)}</strong></div>
             {calc.volumenpct > 0 && (
               <div style={{ color: 'var(--verde)' }}>
-                Descuento por grupo: {calc.volumenpct}% (automático, {calc.personas} personas)
+                {etiqueta_grupo(calc.volumenpct, calc.espalco)}
+                {' '}(automático, {calc.espalco ? calc.totaladultos + ' adulto(s)' : calc.personas + ' personas'})
               </div>
             )}
             {calc.descuentototal > 0 && <div>Descuento total: −{money(calc.descuentototal)}</div>}

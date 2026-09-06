@@ -34,7 +34,7 @@ import {
   sincronizar_etapa, sincronizar_pago_reserva,
 } from '../lib/cascadas'
 import { datos_recibo_pago, html_recibo_pago, nombre_archivo_recibo } from '../lib/reciboauto'
-import { pagos_de_tarjeta, pipeline_etapas, reservas_activas } from '../lib/pipeline'
+import { lugares_de_reserva, ocupacion_palco, pagos_de_tarjeta, pipeline_etapas, reservas_activas } from '../lib/pipeline'
 import { subir_comprobante } from '../lib/storage'
 import {
   bruto_tarjeta, calc_total_prospecto, nuevo_folio_prospecto, validar_edicion_prospecto,
@@ -158,7 +158,7 @@ export function useprospectos() {
 
       setguardando(true)
       try {
-        const calc = calc_total_prospecto(datos, { descuentosvolumen })
+        const calc = calc_total_prospecto(datos, { descuentosvolumen, areas })
         const etapa = pipeline_etapas.find((e) => e.id === datos.etapaid) || pipeline_etapas[0]
         const folio = nuevo_folio_prospecto(pipeline)
         const clienteid = await asegurar_cliente(datos.nombre, datos.email, datos.tel)
@@ -227,7 +227,7 @@ export function useprospectos() {
         setguardando(false)
       }
     },
-    [usuario, guardando, pipeline, descuentosvolumen, asegurar_cliente, mostrartoast, recargar]
+    [usuario, guardando, pipeline, areas, descuentosvolumen, asegurar_cliente, mostrartoast, recargar]
   )
 
   // ── EDITAR PROSPECTO ─────────────────────────────────────────
@@ -255,6 +255,36 @@ export function useprospectos() {
       setguardando(true)
       try {
         const zobj = (areas || []).find((a) => a.id === datos.zonaid) || null
+
+        // TOPE DEL PALCO: si alguna reserva vinculada esta en un palco
+        // compartido, el nuevo conteo de adultos no puede exceder los
+        // lugares libres — la propia reserva se EXCLUYE del conteo (editar
+        // no compite contra si misma). Se comprueba ANTES de tocar la
+        // tarjeta: dejarla a medias si no cabe seria peor que no guardar
+        // nada. espejo del candado agregado a guardarMovimientoProspecto()
+        // (05 sep 2026) — antes se podia subir a 80 en un palco de 60 desde
+        // aqui aunque el formulario de reservas ya lo frenara.
+        const adultosnuevos = Number(datos.adultos) || 0
+        for (const rid of card.reservaids || []) {
+          const rvinc = (reservas || []).find((x) => x.id === rid)
+          if (!rvinc) continue
+          const zonavinc = (areas || []).find((a) => String(a.id) === String(rvinc.zonaid))
+          if (!zonavinc || !zonavinc.escompartida) continue
+          const basetope = min_seccion(zonavinc, (secciones || []).map(map_precio),
+            (juegos || []).find((j) => String(j.id) === String(datos.juegoid)))
+          const adultosnuevostope = (parseInt(basetope, 10) || 0) + adultosnuevos
+          const ocuptope = ocupacion_palco(zonavinc, rvinc.juegoid || datos.juegoid, reservas)
+          const propiostope = lugares_de_reserva(ocuptope.reservas.find((x) => x.id === rvinc.id) || null)
+          const librestope = Math.max(0, ocuptope.capacidad - (ocuptope.ocupados - propiostope))
+          if (adultosnuevostope > librestope) {
+            mostrartoast(
+              '⛔ ' + zonavinc.nombre + ' no tiene lugar: pediste ' + adultosnuevostope +
+              ' adulto(s) y solo caben ' + librestope + ' de ' + ocuptope.capacidad + '.', 9000
+            )
+            return { ok: false, campos: ['adultos'] }
+          }
+        }
+
         const calc = calc_total_prospecto({
           ...datos,
           areamonto: datos.areamonto,
@@ -262,7 +292,7 @@ export function useprospectos() {
           ninoextracant: datos.ninos,
           minpersonas: zobj ? min_seccion(zobj, (secciones || []).map(map_precio),
             (juegos || []).find((j) => String(j.id) === String(datos.juegoid))) : 0,
-        }, { descuentosvolumen })
+        }, { descuentosvolumen, areas })
 
         const res = await actualizar_verificado(sb, usuario, 'pipeline_prospectos', {
           nombre: datos.nombre, email: datos.email,

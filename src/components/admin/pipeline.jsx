@@ -11,6 +11,10 @@
 // dejar el tablero inoperable sin el no es aceptable. Las cinco reglas que
 // deciden si una tarjeta puede cambiar de columna viven en lib/prospectos.js,
 // probadas aparte.
+//
+// FILTRO "tipo de zona" (05 sep 2026): la v1 elimino su pagina propia
+// "Pipeline de Palcos" y lo integro aqui como un filtro mas (mismo criterio
+// que ya tenia Reservas) — ver filtrar_tarjetas en lib/pipeline.js.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useMemo, useState } from 'react'
@@ -39,7 +43,7 @@ function tono_dias(d) {
 }
 
 export default function pipeline() {
-  const { pipeline: cards, juegos, cobros, usuarios, cargando, errores } = useadmindatos()
+  const { pipeline: cards, juegos, areas, cobros, usuarios, cargando, errores } = useadmindatos()
   const {
     puede, crear, editar, mover, generar_reserva, eliminar, registrar_pago,
     guardando, moviendo, borrando, pagando,
@@ -55,6 +59,7 @@ export default function pipeline() {
   const [serie, setserie] = useState('')
   const [juego, setjuego] = useState('')
   const [texto, settexto] = useState('')
+  const [tipozona, settipozona] = useState('')
 
   const series = useMemo(() => series_de(juegos), [juegos])
   // el selector de juego se acota a la serie elegida, como en la v1.
@@ -74,7 +79,7 @@ export default function pipeline() {
     () =>
       pipeline_etapas.map((etapa) => {
         const propias = filtrar_tarjetas(cards, etapa.id, {
-          vendedora, juego, seriejuegoids: serie_ids, texto,
+          vendedora, juego, seriejuegoids: serie_ids, texto, tipozona, areas,
         })
         const total = propias.reduce((s, c) => s + (c.monto || 0), 0)
         // el abonado usa el MISMO criterio que la tarjeta: cobros activos,
@@ -84,7 +89,7 @@ export default function pipeline() {
           : null
         return { etapa, cards: propias, total, abonado }
       }),
-    [cards, vendedora, juego, serie_ids, texto, cobros]
+    [cards, vendedora, juego, serie_ids, texto, tipozona, areas, cobros]
   )
 
   const est_select = { fontSize: '13px', width: '180px' }
@@ -175,6 +180,15 @@ export default function pipeline() {
               {juegos_filtro.map((j) => (
                 <option key={j.id} value={String(j.id)}>{j.fecha} · vs {j.rival}</option>
               ))}
+            </select>
+            <select
+              className="input select btn-sm" style={est_select}
+              title="Los palcos se venden por lugares y admiten varias reservas a la vez; las zonas exclusivas se venden completas"
+              value={tipozona} onChange={(e) => settipozona(e.target.value)}
+            >
+              <option value="">Todas las zonas</option>
+              <option value="exclusiva">Zonas exclusivas</option>
+              <option value="compartida">Palcos compartidos</option>
             </select>
             {puede && (
               <button className="btn btn-primary btn-sm" onClick={() => setabrirnuevo(true)}>

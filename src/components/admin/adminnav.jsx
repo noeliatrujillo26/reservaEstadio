@@ -36,12 +36,6 @@ export const secciones_nav = [
         icono: (<svg className="nav-icon" viewBox="0 0 16 16" fill="none"><path d="M9 1H3a1 1 0 00-1 1v12a1 1 0 001 1h10a1 1 0 001-1V6l-5-5z" stroke="currentColor" strokeWidth="1.4" /><path d="M9 1v5h5M5 9h6M5 12h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>),
       },
       {
-        id: "palcos",
-        texto: "Pipeline de Palcos",
-        badge: null,
-        icono: (<svg className="nav-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.5" /><path d="M2 9h12" stroke="currentColor" strokeWidth="1.5" /></svg>),
-      },
-      {
         id: "pipeline",
         texto: "Pipeline Comercial",
         badge: "pipeline-nav-badge",

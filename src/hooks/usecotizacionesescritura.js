@@ -85,7 +85,7 @@ export function usecotizacionesescritura() {
 
       setguardando(true)
       try {
-        const calc = calcular_cotizacion(datos, { descuentosvolumen })
+        const calc = calcular_cotizacion(datos, { descuentosvolumen, areas })
         const editando = datos.editando || null
         const hoy = hoy_hermosillo()
         const valida = fecha_validez_cotizacion(hoy, datos.diasvalida)
@@ -175,7 +175,7 @@ export function usecotizacionesescritura() {
         setguardando(false)
       }
     },
-    [usuario, guardando, cotizaciones, descuentosvolumen, mostrartoast, recargar]
+    [usuario, guardando, cotizaciones, descuentosvolumen, areas, mostrartoast, recargar]
   )
 
   // ── CAMBIAR ESTADO ────────────────────────────────────────────

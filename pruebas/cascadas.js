@@ -12,6 +12,8 @@ export {
   saldo_pendiente_card, etapa_por_abono, pct_abonado, debe_reclasificar,
   num_monto, pipeline_etapas, capacidad_palco, lugares_de_reserva,
   ocupacion_palco, palcos_del_mapa, estado_pago_palco, suma_pagos_dinero,
+  base_descuento_grupo, etiqueta_grupo, es_palco_tarjeta, caben_en_palco,
+  filtrar_tarjetas, filas_reporte_palcos, csv_reporte_palcos,
 } from '../src/lib/pipeline'
 
 export {
@@ -35,7 +37,9 @@ export {
   mas_frecuente, mes_label, rango_reporte,
 } from '../src/lib/reportes'
 export { celda_csv, csv_de_filas, csv_texto, fila_csv } from '../src/lib/exportarcsv'
-export { escritura_admin, motivo_bloqueo, actualizar_verificado } from '../src/lib/escritura'
+export {
+  escritura_admin, motivo_bloqueo, actualizar_verificado, upsertar_verificado,
+} from '../src/lib/escritura'
 export { ruta_comprobante, comprobante_excede_limite } from '../src/lib/storage'
 
 export { concepto_color, formato_fecha, hora_cobro, instante_cobro } from '../src/lib/cobros'

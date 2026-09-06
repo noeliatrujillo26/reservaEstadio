@@ -20,6 +20,11 @@
 // La ZONA solo ofrece secciones LIBRES para el juego elegido (mas la propia
 // cuando se edita) — mismo criterio que reservaform.jsx: la disponibilidad se
 // resuelve en el propio <select>, no con una opcion deshabilitada aparte.
+//
+// PALCO COMPARTIDO (05 sep 2026): sin tipo de comida (All-Inclusive, el
+// selector se oculta y el valor interno vuelve a carne_asada) y el
+// descuento por grupo cuenta/calcula solo sobre adultos — ver
+// calcular_cotizacion en lib/cotizaciones.js.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useEffect, useMemo, useState } from 'react'
@@ -27,6 +32,7 @@ import useadmindatos from '../../hooks/useadmindatos'
 import { catalogo_clientes, cliente_coincide } from '../../lib/clientes'
 import { calcular_cotizacion } from '../../lib/cotizaciones'
 import { estado_vivo } from '../../lib/mapaocupacion'
+import { etiqueta_grupo } from '../../lib/pipeline'
 import { map_precio } from '../../lib/preciosadmin'
 import { min_seccion, precio_seccion } from '../../lib/reservasadmin'
 import { mxn2 } from '../../lib/dinero'
@@ -105,6 +111,8 @@ function cotiz_form({ abierto, editando, oncerrar, onguardar, guardando }) {
     () => (areas || []).find((a) => a.id === d.zonaid) || null,
     [areas, d.zonaid]
   )
+  // PALCO COMPARTIDO: es All-Inclusive, sin tipo de comida que elegir.
+  const espalco = !!(area && area.escompartida)
 
   const areacatalogo = area ? precio_seccion(area, catalogo) || 0 : 0
   const minpersonas = area ? min_seccion(area, catalogo, juego) : 0
@@ -112,9 +120,9 @@ function cotiz_form({ abierto, editando, oncerrar, onguardar, guardando }) {
   const calc = useMemo(
     () => calcular_cotizacion(
       { ...d, personasincluidas: d.personasincluidas || minpersonas },
-      { descuentosvolumen }
+      { descuentosvolumen, areas }
     ),
-    [d, minpersonas, descuentosvolumen]
+    [d, minpersonas, descuentosvolumen, areas]
   )
 
   const catalogoclientes = useMemo(
@@ -137,6 +145,7 @@ function cotiz_form({ abierto, editando, oncerrar, onguardar, guardando }) {
     const r = await onguardar({
       ...d,
       zona: area ? area.nombre : '',
+      tipocomida: espalco ? 'carne_asada' : d.tipocomida,
       editando,
     })
     if (r && r.ok) oncerrar()
@@ -294,6 +303,7 @@ function cotiz_form({ abierto, editando, oncerrar, onguardar, guardando }) {
                     zonaid: zid,
                     areamonto: elegida ? (precio_seccion(elegida, catalogo) || 0) : x.areamonto,
                     personasincluidas: elegida ? min_seccion(elegida, catalogo, juego) : x.personasincluidas,
+                    tipocomida: elegida && elegida.escompartida ? 'carne_asada' : x.tipocomida,
                   }))
                 }}
               >
@@ -303,14 +313,17 @@ function cotiz_form({ abierto, editando, oncerrar, onguardar, guardando }) {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Tipo de comida</label>
-              <select className="input select" value={d.tipocomida} onChange={(e) => set('tipocomida', e.target.value)}>
-                <option value="carne_asada">Carne asada</option>
-                <option value="discada">Discada</option>
-              </select>
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: espalco ? '1fr' : '1fr 1fr', gap: '12px' }}>
+            {/* PALCO COMPARTIDO: All-Inclusive, sin tipo de comida que elegir. */}
+            {!espalco && (
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Tipo de comida</label>
+                <select className="input select" value={d.tipocomida} onChange={(e) => set('tipocomida', e.target.value)}>
+                  <option value="carne_asada">Carne asada</option>
+                  <option value="discada">Discada</option>
+                </select>
+              </div>
+            )}
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Vendedor(a)</label>
               <select className="input select" value={d.vendedora} onChange={(e) => set('vendedora', e.target.value)}>
@@ -375,7 +388,8 @@ function cotiz_form({ abierto, editando, oncerrar, onguardar, guardando }) {
             <div>Subtotal (IVA incluido): <strong>{money(calc.subtotal)}</strong></div>
             {calc.volumenpct > 0 && (
               <div style={{ color: 'var(--verde)' }}>
-                Descuento por grupo: {calc.volumenpct}%{calc.volumennombre ? ' · ' + calc.volumennombre : ''} (automático, {calc.personas} personas)
+                {etiqueta_grupo(calc.volumenpct, calc.espalco)}{calc.volumennombre ? ' · ' + calc.volumennombre : ''}
+                {' '}(automático, {calc.espalco ? calc.totaladultos + ' adulto(s)' : calc.personas + ' personas'})
               </div>
             )}
             {calc.descuentototal > 0 && <div>Descuento total: −{money(calc.descuentototal)}</div>}

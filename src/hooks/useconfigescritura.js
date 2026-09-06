@@ -1,10 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════
-// useconfigescritura.js — escritura de los parametros globales (app_config).
-// Sin equivalente en la v1 — ver la cabecera de lib/config.js y
-// migracion-app-config.sql.
+// useconfigescritura.js — escritura de los parametros globales
+// (configuracion_panel: 'fiscal', 'cuenta_bancaria_default_id',
+// 'cotiz_plantilla'). Ver la cabecera de lib/ajustes.js y
+// migracion-configuracion-panel.sql.
 //
-// La fila es UNICA (id=1, sembrada por la migracion): guardar es siempre un
-// UPDATE, nunca un INSERT — no hay alta que hacer.
+// Guardar es un UPSERT de las TRES filas de un golpe: cualquiera de ellas
+// puede no existir todavia (nunca se habia tocado esa llave), a diferencia
+// de la version anterior sobre app_config (fila unica sembrada por su propia
+// migracion, donde guardar era siempre un UPDATE).
 // ═══════════════════════════════════════════════════════════════════
 
 import { useCallback, useState } from 'react'
@@ -13,11 +16,9 @@ import useadmin from './useadmin'
 import useadmindatos from './useadmindatos'
 import { usetoast } from '../context/toastcontext'
 import {
-  actualizar_verificado, mensajes_bloqueo, motivo_bloqueo, registrar_movimiento,
+  mensajes_bloqueo, motivo_bloqueo, registrar_movimiento, upsertar_verificado,
 } from '../lib/escritura'
 import { validar_config } from '../lib/ajustes'
-
-const claves_legacy_config = ['fiscal', 'cuenta_bancaria_default_id', 'plantilla_recibos']
 
 export function useconfigescritura() {
   const { usuario } = useadmin()
@@ -25,14 +26,14 @@ export function useconfigescritura() {
   const { mostrartoast } = usetoast()
   const [guardando, setguardando] = useState(false)
 
-  const puede = motivo_bloqueo(usuario, 'app_config') === null
+  const puede = motivo_bloqueo(usuario, 'configuracion_panel') === null
 
   // datos = { fiscal: {razonsocial, nombrecomercial, rfc, domicilio,
   //           telefonos}, cuentabancariadefaultid, plantillarecibos:
   //           {nombre, color, logourl} }
   const guardar = useCallback(
     async (datos) => {
-      const bloqueo = motivo_bloqueo(usuario, 'app_config')
+      const bloqueo = motivo_bloqueo(usuario, 'configuracion_panel')
       if (bloqueo) { mostrartoast(mensajes_bloqueo[bloqueo]); return { ok: false } }
       if (guardando) return { ok: false }
 
@@ -44,33 +45,42 @@ export function useconfigescritura() {
 
       setguardando(true)
       try {
-        const payload = {
-          fiscal: {
-            razon_social: (datos.fiscal && datos.fiscal.razonsocial) || '',
-            nombre_comercial: (datos.fiscal && datos.fiscal.nombrecomercial) || '',
-            rfc: (datos.fiscal && datos.fiscal.rfc) || '',
-            domicilio: (datos.fiscal && datos.fiscal.domicilio) || '',
-            telefonos: (datos.fiscal && datos.fiscal.telefonos) || '',
+        const ahora = new Date().toISOString()
+        const filas = [
+          {
+            clave: 'fiscal',
+            valor: {
+              razon_social: (datos.fiscal && datos.fiscal.razonsocial) || '',
+              nombre_comercial: (datos.fiscal && datos.fiscal.nombrecomercial) || '',
+              rfc: (datos.fiscal && datos.fiscal.rfc) || '',
+              domicilio: (datos.fiscal && datos.fiscal.domicilio) || '',
+              telefonos: (datos.fiscal && datos.fiscal.telefonos) || '',
+            },
+            actualizado_en: ahora,
           },
-          cuenta_bancaria_default_id: datos.cuentabancariadefaultid
-            ? Number(datos.cuentabancariadefaultid)
-            : null,
-          plantilla_recibos: {
-            nombre: (datos.plantillarecibos && datos.plantillarecibos.nombre) || '',
-            color: (datos.plantillarecibos && datos.plantillarecibos.color) || '',
-            logo_url: (datos.plantillarecibos && datos.plantillarecibos.logourl) || '',
+          {
+            clave: 'cuenta_bancaria_default_id',
+            valor: datos.cuentabancariadefaultid ? Number(datos.cuentabancariadefaultid) : null,
+            actualizado_en: ahora,
           },
-          actualizado_en: new Date().toISOString(),
-          actualizado_por: usuario ? usuario.nombre : '—',
-        }
+          {
+            // MISMA llave que usa la v1 para su plantilla del PDF de
+            // cotizacion — ver la cabecera de lib/ajustes.js.
+            clave: 'cotiz_plantilla',
+            valor: {
+              nombre: (datos.plantillarecibos && datos.plantillarecibos.nombre) || '',
+              color: (datos.plantillarecibos && datos.plantillarecibos.color) || '',
+              logo_url: (datos.plantillarecibos && datos.plantillarecibos.logourl) || '',
+            },
+            actualizado_en: ahora,
+          },
+        ]
 
-        const res = await actualizar_verificado(
-          sb, usuario, 'app_config', payload, 1, claves_legacy_config
-        )
+        const res = await upsertar_verificado(sb, usuario, 'configuracion_panel', filas, 'clave')
         if (!res.ok) {
           mostrartoast(
             res.motivo === 'sin_filas'
-              ? '⚠️ La base no aceptó el cambio (0 filas). Revisa las políticas RLS de `app_config` o si ya corriste migracion-app-config.sql.'
+              ? '⚠️ La base no aceptó el cambio (0 filas). Revisa las políticas RLS de `configuracion_panel` o si ya corriste migracion-configuracion-panel.sql.'
               : '⚠️ No se pudo guardar en Supabase' +
                 ((res.error && res.error.message) ? ': ' + res.error.message : '.')
           )
@@ -85,7 +95,7 @@ export function useconfigescritura() {
         await recargar()
         return { ok: true }
       } catch (err) {
-        console.error('guardar app_config:', err)
+        console.error('guardar configuracion_panel:', err)
         mostrartoast('⚠️ No se pudo guardar. Intenta de nuevo.')
         return { ok: false }
       } finally {

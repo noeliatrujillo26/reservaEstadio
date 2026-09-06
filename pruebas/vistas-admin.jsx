@@ -33,7 +33,6 @@ import Landing from '../src/components/admin/landing'
 import Precios from '../src/components/admin/precios'
 import Cotizaciones from '../src/components/admin/cotizaciones'
 import Pipeline from '../src/components/admin/pipeline'
-import Palcos from '../src/components/admin/palcos'
 import Completados from '../src/components/admin/completados'
 import Ajustes from '../src/components/admin/ajustes'
 import DetalleCobro from '../src/components/admin/detallecobro'
@@ -54,9 +53,10 @@ const areas=[{id:'sec-1',nombre:'Terraza Derecha 1',cap:64,escompartida:false,es
  {id:'sec-2',nombre:'Palco All-Inc 2',cap:60,escompartida:true,capacidadmaxima:40,estado:'libre'}]
 const juegos=[{id:'j1',mes:'oct',fecha:'2026-10-14',hora:'19:30',rival:'Mayos',num:1,serie:'S1',estado:'Confirmado'}]
 const reservas=[{id:1,cliente:'Ana',zona:'Terraza Derecha 1',juego:'vs Mayos',juegoid:'j1',zonaid:'sec-1',monto:9750,montopagado:5000,descuentomonto:0,estadopago:'parcial',pago:'',estado:'activa',email:'a@x.com',tel:'6621234567',personas:20,adultos:null,ninos:2,saldoconsumo:500},
- // ocupa un palco COMPARTIDO (sec-2): sin esta fila el tablero de Palcos
- // siempre pintaba "Sin ventas todavia" en el banco de pruebas y la tarjeta
- // clicable —con role/tabIndex segun el modo de la bandera— nunca se probaba.
+ // ocupa un palco COMPARTIDO (sec-2): sin esta fila la ocupacion de palcos en
+ // Reservas/Pipeline siempre pintaba "Sin ventas todavia" en el banco de
+ // pruebas y la tarjeta clicable —con role/tabIndex segun el modo de la
+ // bandera— nunca se probaba.
  {id:2,cliente:'Luis',zona:'Palco All-Inc 2',juego:'vs Mayos',juegoid:'j1',zonaid:'sec-2',monto:12000,montopagado:12000,descuentomonto:0,estadopago:'pagado',pago:'Completo',estado:'activa',email:'l@x.com',tel:'6629876543',personas:8,adultos:8,ninos:0,saldoconsumo:0}]
 const cobros=[{id:1,fecha:'2026-08-05',mes:'Agosto',cliente:'Ana',concepto:'ABONO',monto:5000,formapago:'EFECTIVO',folio:'1',estado:'',createdat:'2026-08-05T17:24:00Z',zona:'Terraza Derecha 1',area:'ASADOR',recibio:'FER',factura:'REQUERIDA',email:'a@x.com',notas:'captura manual',evidencia:'https://x.supabase.co/storage/v1/object/sign/comprobantes_pagos/cobros/1_v.pdf?token=t',facturapdf:'',facturaxml:''},
  {id:2,fecha:'2026-08-06',mes:'Agosto',cliente:'Luis',concepto:'CRÉDITO',monto:3000,formapago:'CREDITO',folio:'1',estado:'cancelado',createdat:null,zona:'Palco All-Inc 2',area:'ASADOR',recibio:'MELI',factura:'',email:'',notas:'',evidencia:'',facturapdf:'https://x/cfdi.pdf',facturaxml:''}]
@@ -76,7 +76,7 @@ const valor={secciones,areas,juegos,reservas,cobros,areasestados:{j1:{'sec-1':'r
  pipeline:[{id:'p-1735689600000',folio:'002',nombre:'Luis',zona:'Terraza Derecha 1',juego:'j1',monto:9750,etapa:'reservado',vendedora:'FER',adultos:20,ninos:2,reservaids:['1'],tipocomida:'carne_asada',etapacambiadaen:'2026-08-01T10:00:00Z'},
   {id:'p-2',folio:'003',nombre:'Eva',zona:'Palco All-Inc 2',juego:'j1',monto:5000,etapa:'completado',vendedora:'MELI',reservaids:['9'],tipocomida:'discada'}],
  politica:{enganche_minimo:50,dias_limite_liquidar:5},
- config:{fiscal:{razonsocial:'CLUB DEPORTIVO TRIPLE "A" S.A. DE C.V.',nombrecomercial:'Naranjeros',rfc:'CDT990319SR7',domicilio:'Blvd. Hector Espino 2A',telefonos:'662 119 5169'},cuentabancariadefaultid:'1',plantillarecibos:{nombre:'Naranjeros',color:'#E05C1A',logourl:''},actualizadoen:'2026-09-04T18:00:00Z',actualizadopor:'Ana'},
+ config:{fiscal:{razonsocial:'CLUB DEPORTIVO TRIPLE "A" S.A. DE C.V.',nombrecomercial:'Naranjeros',rfc:'CDT990319SR7',domicilio:'Blvd. Hector Espino 2A',telefonos:'662 119 5169'},cuentabancariadefaultid:'1',plantillarecibos:{nombre:'Naranjeros',color:'#E05C1A',logourl:''},actualizadoen:'2026-09-04T18:00:00Z'},
  cargando:false,errores:[]}
 const sesion={usuario:{id:1,nombre:'Admin Uno',email:'a@n.mx',rol:'Administrador',permisos:{},iniciales:'AU'},estado:'dentro',error:'',seterror(){},iniciar_sesion(){},cerrar_sesion(){},escritura_admin:false}
 
@@ -126,7 +126,7 @@ const ClienteDetalleVacio = () => {
 export const vistas={dashboard:Dashboard,cobros:Cobros,seccionesreservadas:Reservas,clientes:Clientes,
  usuarios:Usuarios,movimientos:Movimientos,consumos:Consumos,temporadas:Temporadas,descuentos:Descuentos,metodos:Metodos,
  reportes:Reportes,mensajes:Mensajes,landing:Landing,precios:Precios,cotizaciones:Cotizaciones,
- pipeline:Pipeline,palcos:Palcos,completados:Completados,ajustes:Ajustes,
+ pipeline:Pipeline,completados:Completados,ajustes:Ajustes,
  detallecobro:DetalleAbierto,detallecancelado:DetalleCancelado,nuevocobro:NuevoAbierto,
  evidenciapdf:EvidenciaPdf,evidenciasinliga:EvidenciaSinLiga,
  reservanueva:ReservaNueva,reservaeditar:ReservaEditar,

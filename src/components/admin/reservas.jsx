@@ -31,6 +31,8 @@ import {
   badge_categoria, badge_estado, es_palco_compartido, filas_reservas,
   folio_visible, label_estado, total_personas_seccion,
 } from '../../lib/reservasadmin'
+import { csv_reporte_palcos, filas_reporte_palcos } from '../../lib/pipeline'
+import { descargar_csv } from '../../lib/exportarcsv'
 import { hoy_hermosillo } from '../../lib/fechas'
 
 export default function reservas() {
@@ -141,6 +143,27 @@ export default function reservas() {
     recargar()
   }
 
+  // espejo de descargarReportePalcos() (js/20-editor-mapa.js): CSV de
+  // ocupacion y cobranza de cada palco compartido, para el juego elegido en
+  // el filtro de arriba.
+  function reporte_palcos_click() {
+    if (!juego) {
+      mostrartoast('⚠️ Elige primero un juego para reportar su ocupación')
+      return
+    }
+    const filas = filas_reporte_palcos({ areas, reservas: todas, juegoid: juego.id })
+    if (!filas.length) {
+      mostrartoast('⚠️ No hay palcos compartidos configurados. Márcalos en el editor del mapa.', 7000)
+      return
+    }
+    const nombre = 'palcos-' + String(juego.fecha || '').slice(0, 10) + '-vs-' +
+      String(juego.rival || '').replace(/[^A-Za-z0-9]+/g, '-').toLowerCase() + '.csv'
+    descargar_csv(nombre, csv_reporte_palcos({ areas, reservas: todas, juegoid: juego.id }))
+    const conreserva = filas.filter((f) => f.folio).length
+    mostrartoast('📊 Reporte descargado: ' + conreserva + ' reserva(s) en ' +
+      new Set(filas.map((f) => f.palco)).size + ' palco(s)')
+  }
+
   return (
     <div className="page active" id="page-seccionesreservadas">
       <div className="page-inner" style={{ padding: '28px' }}>
@@ -215,6 +238,14 @@ export default function reservas() {
             <option value="exclusiva">Zonas exclusivas</option>
             <option value="compartida">Palcos compartidos</option>
           </select>
+
+          <button
+            className="btn btn-outline btn-sm" id="sr-btn-reporte-palcos"
+            title="Ocupación de cada palco y el detalle de sus reservas, para el juego seleccionado"
+            onClick={reporte_palcos_click}
+          >
+            📊 Reporte de Palcos
+          </button>
 
           <span id="sr-count" className="badge badge-gray" style={{ marginLeft: 'auto' }}>{conteo}</span>
         </div>

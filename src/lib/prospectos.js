@@ -11,19 +11,40 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { redondear_dinero } from './dinero'
-import { pipeline_etapas, reservas_activas, abonado_etapa, enganche_requerido } from './pipeline'
+import {
+  base_descuento_grupo, pipeline_etapas, reservas_activas, abonado_etapa, enganche_requerido,
+} from './pipeline'
 import { email_valido, tel_valido } from './reservasadmin'
 
 // ── FOLIO ────────────────────────────────────────────────────────
-// PROS-001, PROS-002… El siguiente sale del maximo ya usado, igual que la v1
-// al cargar el tablero. Se recalcula cada vez en vez de guardarse en una
-// variable de modulo: dos pestañas abiertas compartian contador y se pisaban.
-export function nuevo_folio_prospecto(pipeline) {
-  const max = (pipeline || []).reduce((m, p) => {
-    const n = parseInt(String(p.folio || '').replace(/^PROS-0*/, ''), 10)
-    return isNaN(n) ? m : Math.max(m, n)
-  }, 0)
-  return 'PROS-' + String(max + 1).padStart(3, '0')
+// espejo de _nuevoProspectoFolio() (js/modules/pipeline.js, corregida 05 sep
+// 2026). Los PAGOS se enganchan a la tarjeta por este folio, asi que dos
+// tarjetas con el mismo folio COMPARTEN sus cobros: el historial de una
+// muestra los abonos de la otra y el "Pagado" sale sumado.
+//
+// El contador secuencial (maximo+1) tenia esta falla: dos sesiones creando
+// un prospecto casi al mismo tiempo —o una que llevaba rato sin recargar—
+// podian calcular el MISMO siguiente numero. Se vio primero con los palcos
+// porque son la primera zona donde varias tarjetas conviven, pero no
+// dependia de la zona: dependia del folio.
+//
+// Ahora, igual que generar_folio_reserva(): sufijo aleatorio verificado
+// contra las tarjetas YA CARGADAS. El prefijo PROS- se conserva — es lo que
+// distingue un folio de prospecto de uno de reserva.
+const abc_folio_prospecto = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+
+export function nuevo_folio_prospecto(pipeline, aleatorio) {
+  const rnd = aleatorio || Math.random
+  const vivos = pipeline || []
+  for (let intento = 0; intento < 20; intento++) {
+    let cod = ''
+    for (let i = 0; i < 5; i++) cod += abc_folio_prospecto[Math.floor(rnd() * abc_folio_prospecto.length)]
+    const folio = 'PROS-' + cod
+    if (!vivos.some((p) => String(p.folio) === folio)) return folio
+  }
+  // 20 choques seguidos entre 33^5 combinaciones no ocurre; si ocurriera, el
+  // sello de tiempo garantiza unicidad igual.
+  return 'PROS-' + Date.now().toString(36).toUpperCase()
 }
 
 // ── DESCUENTO POR VOLUMEN / GRUPO ────────────────────────────────
@@ -58,12 +79,21 @@ export function descuento_volumen_aplicable(reglas, personas, juegoid, zonaid) {
 }
 
 // ── TOTAL DE UNA COTIZACION DE PROSPECTO ─────────────────────────
-// espejo de calcPipTotal(). Las cantidades capturadas son personas
-// ADICIONALES al minimo que ya incluye el precio del area, y cada una se cobra
-// SIEMPRE a su tarifa extra — sin restar el minimo de la seccion.
+// espejo de calcPipTotal() (js/modules/pipeline.js). Las cantidades
+// capturadas son personas ADICIONALES al minimo que ya incluye el precio
+// del area, y cada una se cobra SIEMPRE a su tarifa extra — sin restar el
+// minimo de la seccion.
 //
-// El descuento por grupo es ADITIVO al manual (mismo modelo que el checkout:
-// cupon + volumen sobre el subtotal), y el combinado se acota al 100%: sin ese
+// PALCO COMPARTIDO (05 sep 2026): el umbral de la regla de grupo cuenta
+// SOLO adultos —los ninos ni suman para el minimo ni reciben descuento— y
+// el % de grupo se aplica sobre "paquete + adultos extra" en vez del
+// subtotal completo (ver base_descuento_grupo en pipeline.js). `ctx.areas`
+// es necesario para resolver esto por zonaid; sin el, se asume zona normal.
+//
+// El manual va sobre el subtotal SIEMPRE; el de grupo sobre su base propia.
+// No se suman los porcentajes —pueden tener bases distintas—: cada uno se
+// convierte a pesos por separado y el de grupo jamas excede lo que queda
+// despues del manual (100% de manual anula el de grupo del todo). Sin ese
 // tope, un manual del 80% mas un grupo del 30% daba un total NEGATIVO.
 //
 // Un cupon de MONTO FIJO se convierte a su % equivalente sobre el subtotal de
@@ -80,24 +110,32 @@ export function calc_total_prospecto(d, ctx) {
   const ninocant = parseInt(d.ninoextracant, 10) || 0
   const minimo = parseInt(d.minpersonas, 10) || 0
 
-  const subtotal = area + consumo + extra + adultoprecio * adultocant + ninoprecio * ninocant
+  const adultosextramonto = adultoprecio * adultocant
+  const subtotal = area + consumo + extra + adultosextramonto + ninoprecio * ninocant
   const totaladultos = minimo + adultocant
   const personas = totaladultos + ninocant
 
+  const zonaobj = ((ctx && ctx.areas) || []).find((a) => String(a.id) === String(d.zonaid))
+  const espalco = !!(zonaobj && zonaobj.escompartida)
+
   const regla = descuento_volumen_aplicable(
-    (ctx && ctx.descuentosvolumen) || [], personas, d.juegoid, d.zonaid
+    (ctx && ctx.descuentosvolumen) || [], espalco ? totaladultos : personas, d.juegoid, d.zonaid
   )
   const volumenpct = regla ? Number(regla.porcentaje) || 0 : 0
 
   let manualpct = Number(d.descuento) || 0
   const cupon = d.cupon || null
   if (cupon && cupon.tipo === 'fijo') {
-    const pesos = Math.min(Number(cupon.valor) || 0, subtotal)
-    manualpct = subtotal > 0 ? (pesos / subtotal) * 100 : 0
+    const pesos = Math.min(redondear_dinero(Number(cupon.valor) || 0), redondear_dinero(subtotal))
+    manualpct = subtotal > 0 ? redondear_dinero((pesos / subtotal) * 100) : 0
   }
+  manualpct = Math.max(0, manualpct)
 
-  const pcttotal = Math.min(100, Math.max(0, manualpct + volumenpct))
-  const descuentototal = redondear_dinero((subtotal * pcttotal) / 100)
+  const montomanual = redondear_dinero((subtotal * manualpct) / 100)
+  const basegrupo = base_descuento_grupo(espalco, area, adultosextramonto, subtotal)
+  let montogrupo = redondear_dinero((basegrupo * volumenpct) / 100)
+  montogrupo = manualpct >= 100 ? 0 : Math.min(montogrupo, Math.max(0, subtotal - montomanual))
+  const descuentototal = redondear_dinero(montomanual + montogrupo)
   const total = Math.max(0, redondear_dinero(subtotal - descuentototal))
 
   return {
@@ -110,6 +148,7 @@ export function calc_total_prospecto(d, ctx) {
     adultocant,
     ninocant,
     totaladultos,
+    espalco,
   }
 }
 

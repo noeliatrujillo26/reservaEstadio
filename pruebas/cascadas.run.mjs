@@ -522,8 +522,14 @@ function base_falsa(filas, opciones) {
           // Un UPDATE sobre una fila que no existe no toca nada: es lo que
           // empuja a set_estado_zona a insertar.
           const noExiste = o.sinFila && q._op === 'update'
+          // un upsert de VARIAS filas (configuracion_panel: una por llave)
+          // se echa de vuelta tal cual, no fusionado con una fila semilla
+          // unica — ese merge es solo para el caso de una tabla singleton.
           const devuelve = (o.filas === 0 || noExiste)
-            ? [] : [{ ...(filas[tabla] || {}), ...q._payload }]
+            ? []
+            : Array.isArray(q._payload)
+              ? q._payload
+              : [{ ...(filas[tabla] || {}), ...q._payload }]
           const err = o.error && !(o.errorSoloEn && o.errorSoloEn !== q._op) ? o.error : null
           return Promise.resolve({ data: err ? null : devuelve, error: err }).then(res, rej)
         },
@@ -1159,8 +1165,14 @@ function _descuentoVolumenAplicable(personas, juegoId, zonaId) {
   return mejor
 }
 
-// calcPipTotal(), con los valores del formulario como argumentos.
-function _calcPipTotalV1(f, cuponFijo, juegoId, zonaId) {
+// calcPipTotal() (js/modules/pipeline.js), con los valores del formulario
+// como argumentos. Reescrita 05 sep 2026: el manual y el de grupo se
+// convierten a PESOS por separado (antes se sumaban los dos porcentajes y se
+// aplicaban de una vez sobre el subtotal) — la propia v1 documenta que el
+// resultado es el mismo "salvo por algun centavo de redondeo", y en un PALCO
+// COMPARTIDO la base del descuento de grupo es solo paquete + adultos extra
+// (_baseDescuentoGrupo), nunca el subtotal completo.
+function _calcPipTotalV1(f, cuponFijo, juegoId, zonaId, esPalco) {
   const area = parseFloat(f.area || 0) || 0
   const consumo = parseFloat(f.consumo || 0) || 0
   const extra = parseFloat(f.extra || 0) || 0
@@ -1177,17 +1189,20 @@ function _calcPipTotalV1(f, cuponFijo, juegoId, zonaId) {
   const totalAdultos = minimo + adultoCant
   const personas = totalAdultos + ninoCant
 
-  const rg = _descuentoVolumenAplicable(personas, juegoId, zonaId)
+  const rg = _descuentoVolumenAplicable(esPalco ? totalAdultos : personas, juegoId, zonaId)
   const volPct = rg ? (Number(rg.porcentaje) || 0) : 0
   if (cuponFijo) {
-    const pesos = Math.min(Number(cuponFijo.valor) || 0, subtotal)
-    desc = subtotal > 0 ? (pesos / subtotal) * 100 : 0
+    const pesosCupon = Math.min(redondearDinero(cuponFijo.valor), redondearDinero(subtotal))
+    desc = subtotal > 0 ? redondearDinero(pesosCupon * 100 / subtotal) : 0
   }
-  const pctTotal = Math.min(100, Math.max(0, desc + volPct))
-  const descuentoTotal = redondearDinero(subtotal * pctTotal / 100)
-  const total = Math.max(0, redondearDinero(subtotal - descuentoTotal))
+  const montoDesc = redondearDinero(subtotal * desc / 100)
+  const baseGrupo = esPalco ? (area + adultosExtra) : subtotal
+  let montoVol = redondearDinero(baseGrupo * volPct / 100)
+  montoVol = desc >= 100 ? 0 : Math.min(montoVol, Math.max(0, redondearDinero(subtotal - montoDesc)))
+  const descuentoTotal = redondearDinero(montoDesc + montoVol)
+  const total = Math.max(0, redondearDinero(subtotal - montoDesc - montoVol))
   return { subtotal: redondearDinero(subtotal), total, descuentoTotal, volumenPct: volPct,
-    personas, adultoCant, ninoCant, totalAdultos }
+    personas, adultoCant, ninoCant, totalAdultos, espalco: !!esPalco }
 }
 
 // _pdBrutoTarjeta(), con montoBase como argumento.
@@ -1279,21 +1294,26 @@ for (let i = 0; i < 6000; i++) {
   const cuponFijo = rnd() < 0.2 ? { tipo: 'fijo', valor: dinero(0, 6000) } : null
   const juegoId = rnd() < 0.7 ? 'j1' : ''
   const zonaId = rnd() < 0.7 ? 'sec-1' : ''
+  // el mismo caso corre a veces sobre un palco compartido y a veces sobre
+  // una zona exclusiva: la base del descuento de grupo cambia entre las dos.
+  const esPalco = !!zonaId && rnd() < 0.4
+  const areasCtx = zonaId ? [{ id: zonaId, escompartida: esPalco }] : []
 
-  const v1calc = _calcPipTotalV1(f, cuponFijo, juegoId, zonaId)
+  const v1calc = _calcPipTotalV1(f, cuponFijo, juegoId, zonaId, esPalco)
   const v2calc = v2.calc_total_prospecto({
     areamonto: f.area, consumomonto: f.consumo, extramonto: f.extra,
     adultoextraprecio: f.adultoPrecio, adultoextracant: f.adultoCant,
     ninoextraprecio: f.ninoPrecio, ninoextracant: f.ninoCant,
     descuento: f.desc, minpersonas: f.minimo, juegoid: juegoId, zonaid: zonaId,
     cupon: cuponFijo,
-  }, { descuentosvolumen: reg_v2 })
+  }, { descuentosvolumen: reg_v2, areas: areasCtx })
 
-  if (!comparar('calc_total_prospecto.total', v1calc.total, v2calc.total, { f, cuponFijo })) fallos++
+  if (!comparar('calc_total_prospecto.total', v1calc.total, v2calc.total, { f, cuponFijo, esPalco })) fallos++
   if (!comparar('calc_total_prospecto.subtotal', v1calc.subtotal, v2calc.subtotal, { f })) fallos++
-  if (!comparar('calc_total_prospecto.descuento', v1calc.descuentoTotal, v2calc.descuentototal, { f })) fallos++
+  if (!comparar('calc_total_prospecto.descuento', v1calc.descuentoTotal, v2calc.descuentototal, { f, esPalco })) fallos++
   if (!comparar('calc_total_prospecto.personas', v1calc.personas, v2calc.personas, { f })) fallos++
   if (!comparar('calc_total_prospecto.volumen', v1calc.volumenPct, v2calc.volumenpct, { f })) fallos++
+  if (!comparar('calc_total_prospecto.espalco', v1calc.espalco, v2calc.espalco, { f, esPalco })) fallos++
 
   // ── bruto de la tarjeta, en las DOS grafias
   const cbase = {
@@ -1309,13 +1329,21 @@ for (let i = 0; i < 6000; i++) {
   if (!comparar('bruto_tarjeta', _pdBrutoTarjetaV1(card_v1, mb),
     v2.bruto_tarjeta(card_v2, mb), { cbase, mb })) fallos++
 
-  // ── folio del prospecto
+  // ── folio del prospecto: YA NO es diferencial contra la v1.
+  // Fix 05 sep 2026: el contador secuencial max+1 (aun copiado arriba en
+  // _nuevoProspectoFolioV1, solo como referencia historica) podia repetir un
+  // folio si dos sesiones lo generaban en el mismo instante — la v1 lo
+  // cambio por un codigo aleatorio de 5 caracteres con reintento anticolision,
+  // igual que generar_folio_reserva(). Aqui se prueba la propiedad que
+  // importa: nunca choca con un folio YA presente en el pipeline cargado.
   const pipe = []
   for (let k = 0; k < Math.floor(rnd() * 5); k++) {
     pipe.push({ folio: rnd() < 0.2 ? '' : 'PROS-' + String(Math.floor(rnd() * 400)).padStart(3, '0') })
   }
-  if (!comparar('nuevo_folio_prospecto', _nuevoProspectoFolioV1(pipe),
-    v2.nuevo_folio_prospecto(pipe), { pipe })) fallos++
+  const nuevoFolio = v2.nuevo_folio_prospecto(pipe)
+  const yaExiste = pipe.some((p) => String(p.folio) === nuevoFolio)
+  if (!comparar('nuevo_folio_prospecto: nunca choca con uno ya cargado', false, yaExiste, { pipe, nuevoFolio })) fallos++
+  if (!comparar('nuevo_folio_prospecto: formato PROS-XXXXX', true, /^PROS-[A-Z0-9]{5}$/.test(nuevoFolio), { nuevoFolio })) fallos++
 }
 
 // ── LAS CINCO REGLAS DE COLUMNA (8,000 escenarios) ──
@@ -1436,6 +1464,89 @@ for (let i = 0; i < 8000; i++) {
   afirmar('cupon fijo no supera el subtotal', c3.total === 0 && c3.descuentototal === 300)
 }
 
+// ── PALCOS: base del descuento de grupo, tipo de comida y capacidad ──
+// fix 02/05 sep 2026 portado de _baseDescuentoGrupo/_etiquetaGrupo/
+// _cabenEnPalco (js/modules/utils.js) y _pipCardEsPalco (js/modules/pipeline.js).
+{
+  afirmar('base de grupo: zona normal usa el subtotal completo',
+    v2.base_descuento_grupo(false, 9000, 1000, 15000) === 15000)
+  afirmar('base de grupo: palco usa SOLO paquete + adultos extra (nunca consumo/extra/ninos)',
+    v2.base_descuento_grupo(true, 9000, 1000, 15000) === 10000)
+
+  // La MISMA regla dentro de calc_total_prospecto: 20% de grupo sobre
+  // $9,000 de paquete + $1,000 de adultos extra = $2,000 — NO sobre el
+  // subtotal de $15,000 (que darian $3,000).
+  const areasPalco = [{ id: 'sec-2', escompartida: true }]
+  const cPalco = v2.calc_total_prospecto(
+    { areamonto: 9000, consumomonto: 4000, extramonto: 1000, adultoextraprecio: 500,
+      adultoextracant: 2, minpersonas: 20, zonaid: 'sec-2' },
+    { descuentosvolumen: [{ minpersonas: 1, porcentaje: 20, activo: true }], areas: areasPalco }
+  )
+  afirmar('calc_total_prospecto en un palco: grupo se calcula sobre paquete+adultos extra',
+    cPalco.espalco === true && cPalco.subtotal === 15000 && cPalco.descuentototal === 2000)
+  // La MISMA zona pero SIN marcarla compartida usa el subtotal completo.
+  const cExclusiva = v2.calc_total_prospecto(
+    { areamonto: 9000, consumomonto: 4000, extramonto: 1000, adultoextraprecio: 500,
+      adultoextracant: 2, minpersonas: 20, zonaid: 'sec-1' },
+    { descuentosvolumen: [{ minpersonas: 1, porcentaje: 20, activo: true }],
+      areas: [{ id: 'sec-1', escompartida: false }] }
+  )
+  afirmar('calc_total_prospecto fuera de un palco: grupo sobre el subtotal completo',
+    cExclusiva.espalco === false && cExclusiva.descuentototal === 3000)
+
+  afirmar('etiqueta de grupo aclara la base cuando es palco',
+    v2.etiqueta_grupo(20, true).indexOf('paquete + adultos extra') >= 0)
+  afirmar('etiqueta de grupo no aclara nada fuera de un palco',
+    v2.etiqueta_grupo(20, false).indexOf('paquete') < 0)
+
+  const areas = [{ id: 'a1', nombre: 'Palco All-Inc 2', escompartida: true }, { id: 'a2', nombre: 'Terraza', escompartida: false }]
+  afirmar('es_palco_tarjeta resuelve por zonaid', v2.es_palco_tarjeta({ zonaid: 'a1' }, areas) === true)
+  afirmar('es_palco_tarjeta cae al nombre sin zonaid (tarjetas viejas)',
+    v2.es_palco_tarjeta({ zona: 'palco all-inc 2' }, areas) === true)
+  afirmar('es_palco_tarjeta: zona exclusiva no es palco', v2.es_palco_tarjeta({ zonaid: 'a2' }, areas) === false)
+  afirmar('es_palco_tarjeta sin tarjeta', v2.es_palco_tarjeta(null, areas) === false)
+
+  const areaChica = { id: 'p1', capacidadmaxima: 10 }
+  const resLlenas = [{ id: 'r1', zonaid: 'p1', juegoid: 'j1', estado: 'activa', personas: 8, adultos: 8, ninos: 0 }]
+  afirmar('caben_en_palco: si hay sitio para los que faltan', v2.caben_en_palco(areaChica, 'j1', resLlenas, 2) === true)
+  afirmar('caben_en_palco: no alcanza el sitio', v2.caben_en_palco(areaChica, 'j1', resLlenas, 3) === false)
+  afirmar('caben_en_palco: sin capacidad configurada, nunca caben', v2.caben_en_palco({ id: 'p2' }, 'j1', [], 1) === false)
+}
+
+// ── PIPELINE: filtro "tipo de zona" (reemplazo de la pagina de Palcos) ──
+// espejo del filtro pipeline-filtro-tipo agregado a index.html cuando la v1
+// elimino "Pipeline de Palcos" e integro la venta por lugares como un filtro
+// mas del tablero comercial (05 sep 2026).
+{
+  const areas = [{ id: 'a1', escompartida: true }, { id: 'a2', escompartida: false }]
+  const cards = [
+    { etapa: 'prospecto', zonaid: 'a1', nombre: 'En un palco' },
+    { etapa: 'prospecto', zonaid: 'a2', nombre: 'En zona exclusiva' },
+  ]
+  const soloPalcos = v2.filtrar_tarjetas(cards, 'prospecto', { tipozona: 'compartida', areas })
+  afirmar('tipozona=compartida deja solo las tarjetas en un palco',
+    soloPalcos.length === 1 && soloPalcos[0].nombre === 'En un palco')
+  const soloExclusivas = v2.filtrar_tarjetas(cards, 'prospecto', { tipozona: 'exclusiva', areas })
+  afirmar('tipozona=exclusiva deja solo las tarjetas fuera de un palco',
+    soloExclusivas.length === 1 && soloExclusivas[0].nombre === 'En zona exclusiva')
+  const todas = v2.filtrar_tarjetas(cards, 'prospecto', { tipozona: '', areas })
+  afirmar('sin tipozona pasan las dos', todas.length === 2)
+}
+
+// ── FOLIO DE PROSPECTO: agotados los reintentos, cae al respaldo por tiempo ──
+// espejo de la misma regla de generar_folio_reserva(): 20 intentos contra el
+// pipeline cargado y despues un sufijo de tiempo — nunca se cuelga ni repite
+// un folio ya usado, ni siquiera con un generador de numeros amañado.
+{
+  const siempreElPrimero = () => 0
+  const codigoQueChoca = 'PROS-AAAAA'
+  const folioRespaldo = v2.nuevo_folio_prospecto([{ folio: codigoQueChoca }], siempreElPrimero)
+  afirmar('folio de prospecto: agotados los 20 intentos, cae al respaldo por tiempo',
+    folioRespaldo.indexOf('PROS-') === 0 &&
+    folioRespaldo !== codigoQueChoca &&
+    folioRespaldo.length > codigoQueChoca.length)
+}
+
 // ── mover: escrituras y bloqueos contra la base falsa ──
 {
   // Saltarse etapas se bloquea.
@@ -1516,14 +1627,13 @@ for (let i = 0; i < 8000; i++) {
     { nombre: 'Vendedora (pipeline)', rol: 'Vendedora', permisos: { pipeline: 'editar' } },
     { nombre: 'Vendedora (reservas)', rol: 'Vendedora', permisos: { seccionesreservadas: 'editar' } },
     { nombre: 'Cajero (cobros)', rol: 'Cajero', permisos: { cobros: 'editar' } },
-    { nombre: 'Palcos', rol: 'Vendedora', permisos: { palcos: 'editar' } },
     { nombre: 'Editor del mapa', rol: 'Vendedora', permisos: { crear: 'editar' } },
     { nombre: 'Solo lectura', rol: 'Solo lectura', permisos: { reportes: 'ver' } },
   ]
   // La invariante es sobre quien CREA O LIBERA reservas, no sobre todo el que
   // toca la tabla: Cajero escribe `reservas` para mover el saldo de una que ya
   // existe, y eso no aparta ninguna seccion.
-  const crea_reservas = ['pipeline', 'seccionesreservadas', 'palcos']
+  const crea_reservas = ['pipeline', 'seccionesreservadas']
   perfiles.forEach((p) => {
     const crea = p.rol === 'Administrador' ||
       crea_reservas.some((m) => (p.permisos || {})[m] === 'editar')
@@ -1931,14 +2041,26 @@ function _capacidadPalcoV1(z) {
   if (!z) return 0
   return Number(z.capacidadMaxima) || Number(z.cap) || 0
 }
+// espejo de _lugaresDeReserva() (js/modules/utils.js), corregida 05 sep
+// 2026: SOLO ADULTOS ocupan lugar en un palco — antes contaba adultos+ninos.
+// `adultos != null` distingue la firma de cada flujo: el PANEL guarda
+// `personas` = base+adultos+ninos (adultos numerico), el CHECKOUT por
+// persona guarda `personas` = solo adultos (adultos = null).
 function _lugaresDeReservaV1(r) {
   if (!r) return 0
+  const personasR = Number(r.personas) || 0
+  const ninosR = Number(r.ninos) || 0
+  const conNinosDentro = r.adultos != null && ninosR > 0
   const n = Number(r.lugares)
-  if (n > 0) return n
-  let personas = (Number(r.adultos) || 0) + (Number(r.ninos) || 0)
-  if (personas > 0) return personas
-  personas = Number(r.personas) || 0
-  return personas > 0 ? personas : 1
+  if (n > 0) {
+    // fila historica contaminada (lugares = personas con los ninos dentro):
+    // se sanea al vuelo.
+    if (conNinosDentro && n === personasR) return Math.max(1, n - ninosR)
+    return n
+  }
+  let adultosSolo = conNinosDentro ? Math.max(0, personasR - ninosR) : personasR
+  if (!adultosSolo) adultosSolo = Number(r.adultos) || 0
+  return adultosSolo > 0 ? adultosSolo : 1
 }
 function _ocupacionPalcoV1(z, juegoId, reservasData) {
   const cap = _capacidadPalcoV1(z)
@@ -1985,12 +2107,23 @@ for (let i = 0; i < 8000; i++) {
   for (let k = 0; k < nres; k++) {
     const mismazona = rnd() < 0.75
     const mismojuego = rnd() < 0.85
+    // dos firmas reales conviven en la tabla: el PANEL guarda adultos
+    // numerico y `personas` = base+adultos+ninos; el CHECKOUT por persona
+    // guarda adultos = null y `personas` = solo adultos. Ademas una fraccion
+    // de filas de panel con ninos simula el dato historico contaminado
+    // (lugares == personas, con los ninos adentro) para probar el saneo.
+    const flujopanel = rnd() < 0.6
+    const ninos = Math.floor(rnd() * 4)
+    const adultosreales = Math.floor(rnd() * 8)
+    const personas = flujopanel ? adultosreales + ninos : adultosreales
+    const contaminado = flujopanel && ninos > 0 && rnd() < 0.3
+    const lugares = contaminado ? personas : (rnd() < 0.2 ? Math.floor(rnd() * 6) : null)
     const base = {
       id: 'R' + i + '-' + k,
       estado: rnd() < 0.15 ? 'cancelada' : (rnd() < 0.1 ? 'pendiente' : 'activa'),
-      lugares: rnd() < 0.2 ? Math.floor(rnd() * 6) : null,
-      adultos: Math.floor(rnd() * 8), ninos: Math.floor(rnd() * 4),
-      personas: Math.floor(rnd() * 10),
+      lugares,
+      adultos: flujopanel ? adultosreales : null, ninos,
+      personas,
       monto: dinero(0, 20000), descuentoMonto: dinero(0, 5000),
       montoPagado: dinero(0, 20000),
     }
@@ -2038,8 +2171,13 @@ for (let i = 0; i < 8000; i++) {
 {
   afirmar('sin ningun dato, se cuenta 1 lugar (nunca 0)', v2.lugares_de_reserva({}) === 1)
   afirmar('lugares explicito manda sobre personas', v2.lugares_de_reserva({ lugares: 3, personas: 10 }) === 3)
-  afirmar('sin lugares, adultos+ninos manda sobre personas',
-    v2.lugares_de_reserva({ adultos: 2, ninos: 1, personas: 10 }) === 3)
+  // fix 05 sep 2026: los ninos NUNCA ocupan lugar en un palco compartido.
+  afirmar('flujo panel: sin lugares, se resta ninos de personas (solo adultos ocupan)',
+    v2.lugares_de_reserva({ adultos: 2, ninos: 1, personas: 10 }) === 9)
+  afirmar('flujo checkout (adultos null): personas ya son solo adultos, no se resta nada',
+    v2.lugares_de_reserva({ adultos: null, ninos: 1, personas: 10 }) === 10)
+  afirmar('lugares contaminado (== personas, con ninos adentro) se sanea restando ninos',
+    v2.lugares_de_reserva({ lugares: 10, adultos: 2, ninos: 1, personas: 10 }) === 9)
 }
 
 // ── capacidad: capacidadmaxima manda sobre cap ──
@@ -2546,7 +2684,9 @@ for (let i = 0; i < 3000; i++) {
   }
   const pay = v2.cotizacion_a_prospecto_payload(c, { areas, pipeline: [] })
   afirmar('id con prefijo p-', pay.id === 'p-COT-005')
-  afirmar('folio con el formato de prospectos (pipeline vacio)', pay.folio === 'PROS-001')
+  // fix 05 sep 2026: el folio ya no es un contador secuencial (PROS-001) sino
+  // un codigo aleatorio anticolision — ver nuevo_folio_prospecto().
+  afirmar('folio con el formato de prospectos', /^PROS-[A-Z0-9]{5}$/.test(pay.folio))
   afirmar('zona por el nombre real del catalogo', pay.zona === 'Palco Norte')
   afirmar('monto = total de la cotizacion cuando es > 0', pay.monto === 12000)
   afirmar('etapa "cotizado"', pay.etapa === 'cotizado')
@@ -2699,35 +2839,52 @@ for (let i = 0; i < 3000; i++) {
     JSON.stringify(v2.roles_disponibles) === JSON.stringify(['Administrador', 'Vendedora', 'Cajero', 'Solo lectura']))
 }
 
-// ══ 18. AJUSTES: PARAMETROS GLOBALES (app_config) ══════════════════
-// Modulo NUEVO, sin equivalente en la v1 (ver la cabecera de lib/config.js):
-// pruebas directas, no diferenciales.
+// ══ 18. AJUSTES: PARAMETROS GLOBALES (configuracion_panel) ═════════
+// 'fiscal' y 'cuenta_bancaria_default_id' son llaves NUEVAS, sin equivalente
+// en la v1; 'cotiz_plantilla' reutiliza la MISMA llave de la v1, con la forma
+// propia de v2 — ver la cabecera de lib/ajustes.js. Pruebas directas, no
+// diferenciales.
 
-// ── map_config: snake_case de la fila -> camelCase del formulario ──
+// ── map_config: arreglo de filas clave/valor -> camelCase del formulario ──
 {
-  const fila = {
-    fiscal: { razon_social: 'CLUB DEPORTIVO TRIPLE "A" S.A. DE C.V.', rfc: 'CDT990319SR7' },
-    cuenta_bancaria_default_id: 3,
-    plantilla_recibos: { nombre: 'Naranjeros', color: '#E05C1A' },
-    actualizado_en: '2026-09-04T18:00:00Z',
-    actualizado_por: 'Ana',
-  }
-  const c = v2.map_config(fila)
-  afirmar('fiscal.razonsocial mapea desde razon_social', c.fiscal.razonsocial === fila.fiscal.razon_social)
+  const filas = [
+    { clave: 'fiscal', valor: { razon_social: 'CLUB DEPORTIVO TRIPLE "A" S.A. DE C.V.', rfc: 'CDT990319SR7' },
+      actualizado_en: '2026-09-04T18:00:00Z' },
+    { clave: 'cuenta_bancaria_default_id', valor: 3, actualizado_en: '2026-09-03T10:00:00Z' },
+    { clave: 'cotiz_plantilla', valor: { nombre: 'Naranjeros', color: '#E05C1A' },
+      actualizado_en: '2026-09-05T08:00:00Z' },
+  ]
+  const c = v2.map_config(filas)
+  afirmar('fiscal.razonsocial mapea desde razon_social', c.fiscal.razonsocial === filas[0].valor.razon_social)
   afirmar('un campo fiscal ausente llega como cadena vacia, no undefined',
     c.fiscal.domicilio === '')
   afirmar('el id de la cuenta bancaria viaja como STRING (para el <select>)',
     c.cuentabancariadefaultid === '3')
-  afirmar('plantillarecibos.logourl ausente llega vacio', c.plantillarecibos.logourl === '')
-  afirmar('actualizadopor se conserva', c.actualizadopor === 'Ana')
+  afirmar('plantillarecibos.logourl ausente llega vacio (llave cotiz_plantilla)', c.plantillarecibos.logourl === '')
+  afirmar('actualizadoen es el mas reciente de las tres llaves', c.actualizadoen === '2026-09-05T08:00:00Z')
 
   const vacia = v2.map_config(null)
-  afirmar('una fila null no truena: todo llega en blanco',
-    vacia.fiscal.rfc === '' && vacia.cuentabancariadefaultid === '' && vacia.plantillarecibos.nombre === '')
+  afirmar('sin filas no truena: todo llega en blanco',
+    vacia.fiscal.rfc === '' && vacia.cuentabancariadefaultid === '' &&
+    vacia.plantillarecibos.nombre === '' && vacia.actualizadoen === null)
 
-  const sinCuenta = v2.map_config({ fiscal: {}, plantilla_recibos: {}, cuenta_bancaria_default_id: null })
+  const sinCuenta = v2.map_config([
+    { clave: 'fiscal', valor: {} }, { clave: 'cotiz_plantilla', valor: {} },
+    { clave: 'cuenta_bancaria_default_id', valor: null },
+  ])
   afirmar('sin cuenta bancaria asignada, el id llega vacio (no "null" como texto)',
     sinCuenta.cuentabancariadefaultid === '')
+
+  // Cualquiera de las tres llaves puede no existir todavia (nunca se guardo):
+  // a diferencia de la fila unica de app_config, aqui faltar una NO es un
+  // error, cada una llega en blanco por separado.
+  const faltaUna = v2.map_config([
+    { clave: 'fiscal', valor: { rfc: 'CDT990319SR7' }, actualizado_en: '2026-09-01T00:00:00Z' },
+  ])
+  afirmar('con solo una llave guardada, las otras dos llegan en blanco sin tronar',
+    faltaUna.fiscal.rfc === 'CDT990319SR7' &&
+    faltaUna.cuentabancariadefaultid === '' &&
+    faltaUna.plantillarecibos.nombre === '')
 }
 
 // ── validar_config: nada es obligatorio, solo el RFC se valida SI viene ──
@@ -2740,6 +2897,28 @@ for (let i = 0; i < 3000; i++) {
     v2.validar_config({ fiscal: { rfc: 'no-es-un-rfc' } }).length >= 1)
   afirmar('sin bloque fiscal en absoluto no truena',
     v2.validar_config({}).length === 0)
+}
+
+// ── upsertar_verificado: las TRES filas de configuracion_panel de un golpe ──
+{
+  const filasAguardar = [
+    { clave: 'fiscal', valor: { rfc: 'CDT990319SR7' } },
+    { clave: 'cuenta_bancaria_default_id', valor: 3 },
+    { clave: 'cotiz_plantilla', valor: { nombre: 'Naranjeros' } },
+  ]
+  const sb1 = base_falsa({})
+  const admin1 = { id: 1, nombre: 'Admin', rol: 'Administrador', permisos: {} }
+  const r1 = await v2.upsertar_verificado(sb1, admin1, 'configuracion_panel', filasAguardar, 'clave')
+  afirmar('upsert de configuracion_panel: las 3 filas se cuentan como exito',
+    r1.ok === true && r1.filas === 3)
+  afirmar('upsert manda las 3 filas en un solo payload (no 3 escrituras sueltas)',
+    sb1.escrituras.length === 1 && sb1.escrituras[0].payload.length === 3)
+
+  // sin permiso de 'ajustes', ni se intenta la escritura.
+  const vendedora = { id: 5, nombre: 'Vero', rol: 'Vendedora', permisos: { pipeline: 'editar' } }
+  const sb2 = base_falsa({})
+  const r2 = await v2.upsertar_verificado(sb2, vendedora, 'configuracion_panel', filasAguardar, 'clave')
+  afirmar('sin permiso de ajustes, el upsert no se intenta', r2.ok === false && sb2.escrituras.length === 0)
 }
 
 // ══ RESULTADO ═════════════════════════════════════════════════════

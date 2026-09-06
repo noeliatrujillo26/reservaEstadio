@@ -2,13 +2,24 @@
 // pipeline.js — tablero comercial y ocupacion de palcos compartidos.
 // espejo 1:1 de v1: el map de cargarPipelineDesdeSupabase() (js/30-init.js),
 // pipelineEtapas, _pipDiasEnEtapa() y el filtrado de renderPipelineBoard()
-// (js/modules/pipeline.js), mas _palcosDelMapa(), _ocupacionPalco(),
-// _lugaresDeReserva() y _capacidadPalco() (palcos.js / utils.js).
+// (js/modules/pipeline.js), mas _ocupacionPalco(), _lugaresDeReserva(),
+// _capacidadPalco(), _baseDescuentoGrupo() y _cabenEnPalco()
+// (js/modules/utils.js).
+//
+// PALCOS (05 sep 2026): la v1 elimino su pagina propia "Pipeline de Palcos"
+// (palcos.js) y integro la venta por lugares como un filtro "tipo de zona"
+// dentro del Pipeline Comercial y de Reservas — misma zona, dos negocios
+// distintos (exclusiva se vende entera, palco se vende por lugares), pero ya
+// no ameritan una pagina aparte. v2 sigue el mismo camino: palcos.jsx se
+// elimino: ver filtrar_tarjetas (tipozona) aqui y filas_reservas en
+// reservasadmin.js. Las funciones de ocupacion siguen aqui, ahora
+// consumidas desde ambas vistas en vez de una pagina dedicada.
 // ═══════════════════════════════════════════════════════════════════
 
 import { cobro_cancelado, es_cobro_credito } from './cobros'
 import { redondear_dinero } from './dinero'
-import { reserva_liquidada } from './reservasadmin'
+import { csv_de_filas } from './exportarcsv'
+import { folio_visible, reserva_liquidada } from './reservasadmin'
 
 // Etapas FIJAS del tablero, en su orden.
 export const pipeline_etapas = [
@@ -114,7 +125,28 @@ export function coincide_texto(c, texto) {
     .some((v) => String(v || '').toLowerCase().includes(q))
 }
 
-export function filtrar_tarjetas(cards, etapaid, { vendedora, juego, seriejuegoids, texto }) {
+// ¿La zona de esta tarjeta es un palco compartido? espejo de
+// _pipeCardEsPalco(): por zonaid primero, que es el identificador real; las
+// tarjetas viejas solo traen el NOMBRE de la zona, asi que se cae a buscar
+// por nombre en el catalogo. Sin ese respaldo, un prospecto creado antes de
+// que existiera zona_id desaparecia del filtro.
+export function es_palco_tarjeta(card, areas) {
+  if (!card) return false
+  if (card.zonaid) {
+    const a = (areas || []).find((x) => String(x.id) === String(card.zonaid))
+    return !!(a && a.escompartida)
+  }
+  const nom = String(card.zona || '').trim().toUpperCase()
+  if (!nom) return false
+  const z = (areas || []).find((a) => String(a.nombre || '').trim().toUpperCase() === nom)
+  return !!(z && z.escompartida)
+}
+
+// tipozona: '' (todas), 'exclusiva' o 'compartida' — mismo filtro "tipo de
+// zona" que ya existe en Reservas (filas_reservas), agregado aqui al
+// tablero cuando la v1 elimino la pagina propia de Palcos y lo integro en
+// el Pipeline Comercial (05 sep 2026).
+export function filtrar_tarjetas(cards, etapaid, { vendedora, juego, seriejuegoids, texto, tipozona, areas }) {
   return cards.filter(
     (c) =>
       c.etapa === etapaid &&
@@ -123,6 +155,7 @@ export function filtrar_tarjetas(cards, etapaid, { vendedora, juego, seriejuegoi
       // una tarjeta SIN juego pasa el filtro de serie: la v1 lo permite a
       // proposito para que los prospectos aun sin partido no desaparezcan.
       (!seriejuegoids || !c.juego || seriejuegoids.indexOf(c.juego) >= 0) &&
+      (!tipozona || (tipozona === 'compartida' ? es_palco_tarjeta(c, areas) : !es_palco_tarjeta(c, areas))) &&
       coincide_texto(c, texto)
   )
 }
@@ -151,16 +184,32 @@ export function capacidad_palco(area) {
   return Number(area.capacidadmaxima) || Number(area.cap) || 0
 }
 
-// lugares que ocupa una reserva: `lugares` manda; si no, adultos + ninos; y
-// si tampoco, el total de personas. Nunca menos de 1.
+// lugares que ocupa una reserva EN UN PALCO. SOLO ADULTOS: los niños son
+// asistencia informativa, no ocupan lugar ni cuentan contra la capacidad —
+// regla agregada en v1 el 02 sep 2026 (antes contaba adultos+ninos).
+//
+// Firma de cada flujo: el PANEL guarda `personas` = base + adultos + ninos y
+// `adultos` con numero; el CHECKOUT por persona guarda `personas` = solo
+// adultos y `adultos` = null. `adultos != null` dice si `personas` trae
+// niños dentro y hay que restarlos.
+//
+// `lugares` manda si ya viene guardado, salvo que sea una fila vieja
+// contaminada (lugares === personas con niños dentro): ahi se sanea al
+// vuelo restando los niños, igual que la migracion de la base lo hace en
+// las filas existentes. Nunca menos de 1.
 export function lugares_de_reserva(r) {
   if (!r) return 0
+  const personas = Number(r.personas) || 0
+  const ninos = Number(r.ninos) || 0
+  const conninosdentro = r.adultos != null && ninos > 0
   const n = Number(r.lugares)
-  if (n > 0) return n
-  let personas = (Number(r.adultos) || 0) + (Number(r.ninos) || 0)
-  if (personas > 0) return personas
-  personas = Number(r.personas) || 0
-  return personas > 0 ? personas : 1
+  if (n > 0) {
+    if (conninosdentro && n === personas) return Math.max(1, n - ninos)
+    return n
+  }
+  let adultossolo = conninosdentro ? Math.max(0, personas - ninos) : personas
+  if (!adultossolo) adultossolo = Number(r.adultos) || 0
+  return adultossolo > 0 ? adultossolo : 1
 }
 
 // foto de ocupacion de un palco en un juego.
@@ -197,6 +246,98 @@ export function estado_pago_palco(r) {
 
 export function palcos_del_mapa(areas) {
   return (areas || []).filter((a) => a && a.escompartida)
+}
+
+// ¿Caben `lugares` mas en este palco? espejo de _cabenEnPalco: misma regla
+// que aplica el checkout publico, aqui sirve para avisar ANTES de intentarlo.
+export function caben_en_palco(area, juegoid, reservas, lugares) {
+  const o = ocupacion_palco(area, juegoid, reservas)
+  return o.capacidad > 0 && o.ocupados + Math.max(1, Number(lugares) || 1) <= o.capacidad
+}
+
+// ── DESCUENTO POR GRUPO: BASE SEGUN EL TIPO DE ZONA ──────────────
+// espejo de _baseDescuentoGrupo() (js/modules/utils.js, agregada 02 sep
+// 2026): en un PALCO COMPARTIDO el % de grupo se calcula sobre el paquete
+// (precio del area) MAS los adultos extra — nunca sobre consumo, cargos
+// extra ni niños. En las demas zonas la base sigue siendo el subtotal
+// completo, como siempre.
+//
+// Vive en un solo sitio porque la MISMA cuenta se hace en la tarjeta del
+// Pipeline, su detalle, el cotizador y (del lado del servidor) el checkout
+// publico — con la regla repetida en cuatro lugares, una version se separa
+// de las otras en cuanto alguien toca una.
+export function base_descuento_grupo(espalco, area, adultosextra, subtotal) {
+  return espalco
+    ? (Number(area) || 0) + (Number(adultosextra) || 0)
+    : (Number(subtotal) || 0)
+}
+
+// Etiqueta de la fila del desglose: en un palco aclara sobre que se calculo,
+// para que la cifra no parezca un error cuando no coincide con el % del
+// subtotal completo.
+export function etiqueta_grupo(pct, espalco) {
+  return 'Descuento por Grupo (' + pct + '%' + (espalco ? ' · paquete + adultos extra' : '') + ')'
+}
+
+// ── REPORTE DE PALCOS: ocupacion y cobranza por reserva ──────────
+// espejo de _filasReportePalcos() (js/20-editor-mapa.js): una fila por
+// reserva activa de cada palco compartido en el juego elegido, mas una fila
+// "Sin reservas" para el palco que no vendio nada — omitirlo haria creer que
+// ese palco no existe para ese juego. El CSV en si pasa por exportarcsv.js
+// (arquitectura estandarizada del panel), no por el armado a mano de la v1.
+//
+// DEVIACION documentada: la v1 imprime el id crudo de la reserva en "Folio";
+// aqui se usa folio_visible() (RES-XXX) para que la columna combine con el
+// resto del panel, donde el mismo folio siempre se ve asi.
+export function filas_reporte_palcos({ areas, reservas, juegoid }) {
+  const filas = []
+  palcos_del_mapa(areas).forEach((a) => {
+    const o = ocupacion_palco(a, juegoid, reservas || [])
+    if (!o.reservas.length) {
+      filas.push({
+        palco: a.nombre, capacidad: o.capacidad, ocupados: 0, libres: o.capacidad,
+        pct: '0%', folio: '', cliente: '', email: '', tel: '', lugares: 0,
+        monto: 0, pagado: 0, saldo: 0, estado: 'Sin reservas',
+      })
+      return
+    }
+    o.reservas.forEach((r) => {
+      const est = estado_pago_palco(r)
+      filas.push({
+        palco: a.nombre, capacidad: o.capacidad, ocupados: o.ocupados,
+        libres: o.libres, pct: o.pct + '%',
+        folio: folio_visible(r), cliente: r.cliente || '', email: r.email || '',
+        tel: r.tel || '', lugares: lugares_de_reserva(r),
+        monto: redondear_dinero(est.neto), pagado: redondear_dinero(est.pagado),
+        saldo: redondear_dinero(est.saldo), estado: r.estado || '',
+      })
+    })
+  })
+  return filas
+}
+
+const columnas_reporte_palcos = [
+  { clave: 'palco', titulo: 'Palco' },
+  { clave: 'capacidad', titulo: 'Capacidad' },
+  { clave: 'ocupados', titulo: 'Lugares vendidos' },
+  { clave: 'libres', titulo: 'Lugares disponibles' },
+  { clave: 'pct', titulo: '% ocupación' },
+  { clave: 'folio', titulo: 'Folio' },
+  { clave: 'cliente', titulo: 'Cliente' },
+  { clave: 'email', titulo: 'Email' },
+  { clave: 'tel', titulo: 'Teléfono' },
+  { clave: 'lugares', titulo: 'Lugares de esta reserva' },
+  { clave: 'monto', titulo: 'Importe neto' },
+  { clave: 'pagado', titulo: 'Pagado' },
+  { clave: 'saldo', titulo: 'Saldo' },
+  { clave: 'estado', titulo: 'Estado' },
+]
+
+// El formato del archivo (BOM, separador, comillas) es el MISMO en todo el
+// panel — ver lib/exportarcsv.js. Aqui solo se decide QUE columnas lleva el
+// reporte de palcos.
+export function csv_reporte_palcos({ areas, reservas, juegoid }) {
+  return csv_de_filas(columnas_reporte_palcos, filas_reporte_palcos({ areas, reservas, juegoid }))
 }
 
 // ── completados ─────────────────────────────────────────────────

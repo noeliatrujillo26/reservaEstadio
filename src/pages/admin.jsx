@@ -39,7 +39,6 @@ import Landing from '../components/admin/landing'
 import Precios from '../components/admin/precios'
 import Cotizaciones from '../components/admin/cotizaciones'
 import Pipeline from '../components/admin/pipeline'
-import Palcos from '../components/admin/palcos'
 import Completados from '../components/admin/completados'
 import Ajustes from '../components/admin/ajustes'
 import secciones_nav from '../components/admin/adminnav'
@@ -65,7 +64,6 @@ const MIGRADOS = {
   precios: <Precios />,
   cotizaciones: <Cotizaciones />,
   pipeline: <Pipeline />,
-  palcos: <Palcos />,
   completados: <Completados />,
   ajustes: <Ajustes />,
 }
