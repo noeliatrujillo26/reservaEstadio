@@ -9,8 +9,11 @@
 // honesto que esconderlos, porque asi se ve el avance real de la migracion.
 // ═══════════════════════════════════════════════════════════════════
 
+import { useMemo } from 'react'
 import useadmin from '../../hooks/useadmin'
+import useadmindatos from '../../hooks/useadmindatos'
 import { puedo_acceder } from '../../lib/permisos'
+import { conteo_pendientes_pipeline } from '../../lib/pipeline'
 import secciones_nav from './adminnav'
 
 // modulos ya migrados. conforme avance la migracion se agregan aqui.
@@ -18,6 +21,11 @@ const migrados = ['dashboard', 'cobros', 'seccionesreservadas', 'clientes', 'usu
 
 export default function adminsidebar({ vista, onvista, oncerrardrawer }) {
   const { usuario, cerrar_sesion } = useadmin()
+  const { pipeline } = useadmindatos()
+  // el unico badge hoy es el de Pipeline Comercial (ver adminnav.jsx):
+  // prospectos/reservas que aun no terminan el proceso (ni completados ni
+  // archivados/descartados).
+  const pendientespipeline = useMemo(() => conteo_pendientes_pipeline(pipeline), [pipeline])
 
   return (
     <aside className="sidebar">
@@ -64,6 +72,7 @@ export default function adminsidebar({ vista, onvista, oncerrardrawer }) {
                 >
                   {it.icono}
                   {it.texto}
+                  {it.badge && <span className="nav-badge">{pendientespipeline}</span>}
                 </button>
               )
             })}

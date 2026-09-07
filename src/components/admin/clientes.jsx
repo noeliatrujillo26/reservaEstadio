@@ -2,40 +2,108 @@
 // clientes.jsx — expediente de clientes.
 // espejo 1:1 de v1: #page-clientes de index.html (lineas 2870-2915),
 // initClientesPage(), renderClientesTabla(), sortClientes(),
-// onBuscarClientes() y paginaClientes().
+// onBuscarClientes(), paginaClientes() y el menu de acciones por fila
+// (ver detalle/editar/autorizar credito/eliminar).
 //
-// SOLO LECTURA: se omiten "Nuevo cliente", importar/exportar CSV y el menu de
-// acciones por fila (editar/ocultar/eliminar/autorizar credito). Quedan la
-// tabla, el buscador, el orden, la paginacion y el expediente completo:
-// reservas, PAGOS (historial unificado, cliente_id/folio/identidad — NUNCA
-// el correo), consumo incluido y las tarjetas del Pipeline vinculadas.
+// ESCRITURA (Fase 2): nuevo cliente, editar la ficha, autorizar/revocar
+// credito, eliminar e importar por CSV — ver useclientesescritura.js.
+// "Descargar formato" y "Exportar CSV" son de solo lectura, disponibles
+// tambien sin permiso de escritura. El formato de importacion/exportacion es
+// el mismo de todo el panel (ver lib/exportarcsv.js): sin equivalente EXACTO
+// en la v1, que exportaba a Excel con un armado propio por modulo.
 //
 // EL TOTAL PAGADO SE RECONCILIA: armar_clientes hace un pase final que toma
 // lo MAYOR entre lo atribuido por reserva y la suma real de TODOS los cobros
 // del cliente — incluye abonos registrados con el folio de su tarjeta del
 // Pipeline antes de que existiera la reserva. Es la misma cuenta que pinta
-// esta vista, para que nunca puedan decir cosas distintas.
+// el expediente, para que nunca puedan decir cosas distintas.
 // ═══════════════════════════════════════════════════════════════════
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
+import useclientesescritura from '../../hooks/useclientesescritura'
+import { useconfirmarseguro } from './confirmarseguro'
 import ClienteDetalle from './clientedetalle'
+import ClienteForm from './clienteform'
 import {
-  armar_clientes, filtrar_clientes, ordenar_clientes, pagos_de_cliente,
-  folios_de_cliente, por_pagina,
+  armar_clientes, columnas_csv_clientes, columnas_csv_export_clientes,
+  fila_csv_export_cliente, filas_csv_a_clientes, filtrar_clientes, ordenar_clientes,
+  pagos_de_cliente, folios_de_cliente, por_pagina,
 } from '../../lib/clientes'
 import { consumos_de_cliente } from '../../lib/consumos'
-import { redondear_dinero, mxn2 } from '../../lib/dinero'
+import { csv_de_filas, descargar_csv, parsear_csv } from '../../lib/exportarcsv'
+import { hoy_hermosillo } from '../../lib/fechas'
 
-const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2)
+// ── menu de acciones "⋯" por fila ──────────────────────────────────
+function MenuAcciones({ cliente, puede, oneditar, ondetalle, oncredito, oneliminar }) {
+  const [abierto, setabierto] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!abierto) return
+    const cerrar = (e) => { if (ref.current && !ref.current.contains(e.target)) setabierto(false) }
+    document.addEventListener('mousedown', cerrar)
+    return () => document.removeEventListener('mousedown', cerrar)
+  }, [abierto])
+
+  const item = (onclick, texto, extra) => (
+    <button
+      type="button"
+      onClick={() => { setabierto(false); onclick() }}
+      style={{
+        display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none',
+        padding: '8px 14px', fontSize: '12.5px', cursor: 'pointer', color: 'var(--text-1)',
+        whiteSpace: 'nowrap', ...extra,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-2)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'none' }}
+    >
+      {texto}
+    </button>
+  )
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        className="btn btn-ghost btn-xs" onClick={() => setabierto((a) => !a)}
+        title="Más acciones" aria-label="Más acciones"
+      >
+        ⋯
+      </button>
+      {abierto && (
+        <div
+          style={{
+            position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 500,
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: '8px', minWidth: '190px', overflow: 'hidden',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+          }}
+        >
+          {item(ondetalle, 'Ver Detalle / Historial')}
+          {puede && item(oneditar, 'Editar')}
+          {puede && item(
+            oncredito,
+            cliente.creditoautorizado ? 'Revocar crédito autorizado' : 'Autorizar Crédito'
+          )}
+          {puede && item(oneliminar, '🗑️ Eliminar', { color: 'var(--rojo)' })}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function clientes() {
-  const { clientes: tabla, reservas, cobros, pipeline, cargando, errores } = useadmindatos()
+  const { clientes: tabla, reservas, cobros, pipeline, cargando, errores, recargar } = useadmindatos()
+  const { puede, editar, guardando, autorizar_credito, eliminar, importar, importando } = useclientesescritura()
+  const { confirmarseguro, dialogo } = useconfirmarseguro()
 
   const [busqueda, setbusqueda] = useState('')
   const [orden, setorden] = useState({ col: 'nombre', dir: 'asc' })
   const [pagina, setpagina] = useState(0)
   const [detalle, setdetalle] = useState(null)
+  const [form, setform] = useState(null) // { editando } | null
+  const [refrescando, setrefrescando] = useState(false)
+  const refarchivo = useRef(null)
 
   const todos = useMemo(
     () => armar_clientes({ clientes: tabla, reservas, cobros, pipeline }),
@@ -87,46 +155,112 @@ export default function clientes() {
 
   const flecha = (col) => (orden.col === col ? (orden.dir === 'asc' ? ' ↑' : ' ↓') : ' ↕')
 
-  // metricas de consumo del conjunto filtrado.
-  const metricas = useMemo(() => {
-    const pagado = filtrados.reduce((s, c) => s + c.totalpagado, 0)
-    const saldo = filtrados.reduce((s, c) => s + c.saldototal, 0)
-    const credito = filtrados.reduce((s, c) => s + c.creditototal, 0)
-    const conreserva = filtrados.filter((c) => c.reservas.length > 0).length
-    return { pagado, saldo, credito, conreserva }
-  }, [filtrados])
+  // ELIMINAR. Contraseña de administrador para confirmar — el historial de
+  // reservas/cobros del cliente no se toca, solo desaparece su ficha.
+  async function pedir_eliminar(c) {
+    const conf = await confirmarseguro({
+      titulo: '🗑 Eliminar cliente',
+      descripcion: <>¿Eliminar a <strong>{c.nombre}</strong> del expediente de clientes? Esta acción no se puede deshacer.</>,
+      pedirmotivo: false,
+      etiquetapass: 'Contraseña de administrador *',
+      textoconfirmar: 'Confirmar y Eliminar',
+    })
+    if (!conf) return
+    await eliminar(c)
+  }
+
+  // AUTORIZAR / REVOCAR CRÉDITO. Misma puerta de contraseña: es un cambio de
+  // control financiero (le permite al cliente registrar cobros como
+  // compromiso a crédito, sin dinero de por medio).
+  async function pedir_autorizar_credito(c) {
+    const autorizando = !c.creditoautorizado
+    const conf = await confirmarseguro({
+      titulo: autorizando ? '🔓 Autorizar crédito' : '🔒 Revocar crédito autorizado',
+      descripcion: autorizando ? (
+        <>Estás por autorizar crédito a <strong>{c.nombre}</strong>. Podrá registrar cobros como compromiso a
+          crédito, sin que se trate de dinero cobrado todavía.</>
+      ) : (
+        <>Estás por revocar el crédito autorizado a <strong>{c.nombre}</strong>.</>
+      ),
+      pedirmotivo: false,
+      etiquetapass: 'Contraseña de administrador *',
+      textoconfirmar: autorizando ? 'Autorizar crédito' : 'Revocar crédito',
+    })
+    if (!conf) return
+    await autorizar_credito(c, autorizando)
+  }
+
+  // ACTUALIZAR. El icono gira mientras recargar() trae datos frescos — la
+  // clase .cl-refresh-icon.girando ya vive en admin.css.
+  async function actualizar_lista() {
+    if (refrescando) return
+    setrefrescando(true)
+    try { await recargar() } finally { setrefrescando(false) }
+  }
+
+  // DESCARGAR FORMATO. Solo la cabecera (Nombre/Email/Teléfono/Empresa): la
+  // misma plantilla que espera Importar CSV, para llenarla en Excel.
+  function descargar_formato() {
+    descargar_csv('formato_clientes.csv', csv_de_filas(columnas_csv_clientes, []))
+  }
+
+  // EXPORTAR CSV. El conjunto FILTRADO y ordenado tal como se ve en pantalla
+  // (no solo la página visible), con las cifras de solo lectura del
+  // expediente además de los campos editables.
+  function exportar_csv() {
+    const filas = ordenados.map(fila_csv_export_cliente)
+    descargar_csv('clientes_' + hoy_hermosillo() + '.csv', csv_de_filas(columnas_csv_export_clientes, filas))
+  }
+
+  // IMPORTAR CSV. El input de archivo vive oculto; el botón solo lo dispara.
+  function disparar_importar() {
+    if (refarchivo.current) refarchivo.current.click()
+  }
+  async function manejar_archivo(e) {
+    const archivo = e.target.files && e.target.files[0]
+    e.target.value = '' // permite volver a elegir el mismo archivo despues
+    if (!archivo) return
+    const texto = await archivo.text()
+    const filas = filas_csv_a_clientes(parsear_csv(texto))
+    await importar(filas)
+  }
 
   return (
     <div className="page active" id="page-clientes">
       <div className="page-inner" style={{ padding: '28px' }}>
-        <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <h2>Clientes</h2>
             <p>Registrados vía plataforma web y manual</p>
           </div>
-        </div>
-
-        {/* metricas de consumo del conjunto mostrado */}
-        <div className="stats-grid" style={{ marginTop: '20px', marginBottom: '4px' }}>
-          <div className="stat-card">
-            <div className="stat-card-label">Clientes</div>
-            <div className="stat-card-value">{filtrados.length}</div>
-            <div className="stat-card-delta">{metricas.conreserva} con reservas</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-card-label">Total pagado</div>
-            <div className="stat-card-value" style={{ color: 'var(--verde)' }}>{money(metricas.pagado)}</div>
-            <div className="stat-card-delta">dinero recibido</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-card-label">Saldo pendiente</div>
-            <div className="stat-card-value" style={{ color: 'var(--rojo)' }}>{money(metricas.saldo)}</div>
-            <div className="stat-card-delta">por cobrar</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-card-label">A crédito</div>
-            <div className="stat-card-value" style={{ color: 'var(--naranja)' }}>{money(metricas.credito)}</div>
-            <div className="stat-card-delta">compromiso, sin cobrar</div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <button
+              className="btn btn-outline btn-sm" onClick={actualizar_lista} disabled={refrescando}
+              title="Actualizar"
+            >
+              <span className={'cl-refresh-icon' + (refrescando ? ' girando' : '')} style={{ display: 'inline-block' }}>↻</span>
+              {' '}Actualizar
+            </button>
+            <button className="btn btn-outline btn-sm" onClick={descargar_formato}>
+              Descargar formato
+            </button>
+            {puede && (
+              <button className="btn btn-outline btn-sm" onClick={disparar_importar} disabled={importando}>
+                ↑ {importando ? 'Importando…' : 'Importar CSV'}
+              </button>
+            )}
+            <button className="btn btn-outline btn-sm" onClick={exportar_csv}>
+              ↓ Exportar CSV
+            </button>
+            {puede && (
+              <button className="btn btn-primary btn-sm" onClick={() => setform({ editando: null })}>
+                + Nuevo cliente
+              </button>
+            )}
+            <input
+              ref={refarchivo} type="file" accept=".csv,text/csv" style={{ display: 'none' }}
+              onChange={manejar_archivo}
+            />
           </div>
         </div>
 
@@ -171,12 +305,6 @@ export default function clientes() {
                   <th style={{ cursor: 'pointer', userSelect: 'none', textAlign: 'center', whiteSpace: 'nowrap' }} onClick={() => ordenar_por('reservas')}>
                     Reservas<span className="sort-arrow">{flecha('reservas')}</span>
                   </th>
-                  <th style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }} onClick={() => ordenar_por('totalpagado')}>
-                    Pagado<span className="sort-arrow">{flecha('totalpagado')}</span>
-                  </th>
-                  <th style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }} onClick={() => ordenar_por('saldototal')}>
-                    Saldo<span className="sort-arrow">{flecha('saldototal')}</span>
-                  </th>
                   <th></th>
                 </tr>
               </thead>
@@ -192,12 +320,15 @@ export default function clientes() {
                     <td className="td-muted">{c.email}</td>
                     <td className="td-muted">{c.tel}</td>
                     <td style={{ textAlign: 'center', fontWeight: 700 }}>{c.reservas.length}</td>
-                    <td style={{ color: 'var(--verde)', fontWeight: 600 }}>{money(c.totalpagado)}</td>
-                    <td style={{ color: c.saldototal > 0 ? 'var(--rojo)' : 'var(--text-3)' }}>{money(c.saldototal)}</td>
-                    <td>
-                      <button className="btn btn-ghost btn-xs" onClick={() => setdetalle(c)} title="Ver expediente">
-                        Ver
-                      </button>
+                    <td style={{ textAlign: 'right' }}>
+                      <MenuAcciones
+                        cliente={c}
+                        puede={puede}
+                        oneditar={() => setform({ editando: c })}
+                        ondetalle={() => setdetalle(c)}
+                        oncredito={() => pedir_autorizar_credito(c)}
+                        oneliminar={() => pedir_eliminar(c)}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -234,6 +365,15 @@ export default function clientes() {
           oncerrar={() => setdetalle(null)}
         />
       )}
+
+      <ClienteForm
+        abierto={!!form}
+        editando={form ? form.editando : null}
+        oncerrar={() => setform(null)}
+        oneditar={editar}
+        guardando={guardando}
+      />
+      {dialogo}
     </div>
   )
 }

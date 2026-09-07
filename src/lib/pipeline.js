@@ -165,6 +165,109 @@ export function columna_lleva_abonado(etapaid) {
   return etapaid === 'reservado' || etapaid === 'reserva_momentanea'
 }
 
+// Etapas del tablero que TODAVIA no terminan el proceso: para el badge del
+// menu lateral. 'cerrado' (reserva completada) y 'boletos_entregados' ya
+// concluyeron, igual que 'completado'/'descartado' (archivo, fuera del
+// tablero) — ninguno de esos cuatro cuenta como pendiente.
+const etapas_sin_completar = ['prospecto', 'cotizado', 'reserva_momentanea', 'reservado']
+
+export function conteo_pendientes_pipeline(cards) {
+  return (cards || []).filter((c) => etapas_sin_completar.indexOf(c.etapa) >= 0).length
+}
+
+// ── CSV: formato / exportar / importar ───────────────────────────
+// Sin equivalente exacto en la v1. "Descargar formato" imprime solo la
+// cabecera minima para dar de alta un prospecto (nombre/email/tel + el
+// juego de interes, que es el UNICO campo obligatorio ademas de la
+// identidad — ver validar_prospecto en lib/prospectos.js); zona/vendedora/
+// notas son opcionales, igual que en el modal "Nuevo prospecto".
+export const columnas_csv_prospecto = [
+  { clave: 'nombre', titulo: 'Nombre' },
+  { clave: 'email', titulo: 'Email' },
+  { clave: 'tel', titulo: 'Teléfono' },
+  { clave: 'fecha', titulo: 'Fecha del juego (AAAA-MM-DD)' },
+  { clave: 'zona', titulo: 'Zona (opcional)' },
+  { clave: 'vendedora', titulo: 'Vendedora (opcional)' },
+  { clave: 'notas', titulo: 'Notas (opcional)' },
+]
+
+export const columnas_csv_export_pipeline = [
+  { clave: 'folio', titulo: 'Folio' },
+  { clave: 'nombre', titulo: 'Cliente' },
+  { clave: 'email', titulo: 'Email' },
+  { clave: 'tel', titulo: 'Teléfono' },
+  { clave: 'zona', titulo: 'Zona' },
+  { clave: 'juego', titulo: 'Fecha del juego' },
+  { clave: 'vendedora', titulo: 'Vendedora' },
+  { clave: 'etapa', titulo: 'Etapa' },
+  { clave: 'monto', titulo: 'Monto' },
+  { clave: 'abonado', titulo: 'Abonado' },
+  { clave: 'adultos', titulo: 'Adultos' },
+  { clave: 'ninos', titulo: 'Niños' },
+  { clave: 'tipocomida', titulo: 'Tipo de comida' },
+  { clave: 'notas', titulo: 'Notas' },
+]
+
+export function fila_csv_export_prospecto(c, cobros) {
+  const etapa = pipeline_etapas.find((e) => e.id === c.etapa)
+  return {
+    folio: c.folio || c.id,
+    nombre: c.nombre,
+    email: c.email || '',
+    tel: c.tel || '',
+    zona: c.zona || '',
+    juego: c.juego || '',
+    vendedora: c.vendedora || '',
+    etapa: etapa ? etapa.label : c.etapa,
+    monto: redondear_dinero(c.monto),
+    abonado: redondear_dinero(suma_pagos_dinero(pagos_de_tarjeta(c, cobros))),
+    adultos: c.adultos || 0,
+    ninos: c.ninos || 0,
+    tipocomida: c.tipocomida === 'discada' ? 'Discada' : 'Carne asada',
+    notas: c.notas || '',
+  }
+}
+
+// cabecera → llave, insensible a mayusculas/acentos/paréntesis — mismo
+// criterio que filas_csv_a_clientes en lib/clientes.js.
+const alias_columna_prospecto = {
+  NOMBRE: 'nombre', EMAIL: 'email', CORREO: 'email', 'TELEFONO': 'tel', TEL: 'tel',
+  'FECHA DEL JUEGO': 'fecha', FECHA: 'fecha', JUEGO: 'fecha',
+  ZONA: 'zona', VENDEDORA: 'vendedora', NOTAS: 'notas',
+}
+
+function normalizar_encabezado_prospecto(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toUpperCase().replace(/\s*\([^)]*\)/g, '').trim()
+}
+
+// filas: arreglo de arreglos CON cabecera (ver parsear_csv en
+// lib/exportarcsv.js). Resuelve juegoid por FECHA EXACTA y zonaid por NOMBRE
+// exacto (insensible a mayusculas) contra los catalogos YA CARGADOS — el
+// precio (areamonto/minpersonas) se calcula despues, en el componente, con
+// las MISMAS funciones que usa el modal "Nuevo prospecto"
+// (precio_seccion/min_seccion), para no inventar una segunda cuenta.
+export function filas_csv_a_prospectos(filas, { juegos, areas }) {
+  if (!filas || !filas.length) return []
+  const encabezado = filas[0].map((h) => alias_columna_prospecto[normalizar_encabezado_prospecto(h)] || null)
+  return filas.slice(1)
+    .map((fila) => {
+      const c = { nombre: '', email: '', tel: '', fecha: '', zona: '', vendedora: '', notas: '' }
+      encabezado.forEach((clave, i) => { if (clave) c[clave] = String(fila[i] || '').trim() })
+      const juego = c.fecha ? (juegos || []).find((j) => j.fecha === c.fecha) : null
+      const area = c.zona
+        ? (areas || []).find((a) => String(a.nombre || '').trim().toUpperCase() === c.zona.toUpperCase())
+        : null
+      return {
+        nombre: c.nombre, email: c.email, tel: c.tel, notas: c.notas, vendedora: c.vendedora,
+        juego, area,
+        juegofecha: c.fecha, zonanombre: c.zona,
+      }
+    })
+    .filter((c) => c.nombre || c.email)
+}
+
 // series del calendario, agrupadas por rival, para el selector.
 export function series_de(juegos) {
   const sm = {}

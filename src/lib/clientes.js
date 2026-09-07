@@ -232,7 +232,7 @@ export function armar_clientes({ clientes, reservas, cobros, pipeline }) {
     if (!c) {
       c = {
         id: null, nombre: r.cliente || '—', email: r.email || '—', tel: r.tel || '—',
-        empresa: '', creditoautorizado: false, saldofavor: 0,
+        empresa: '', creditoautorizado: false, saldofavor: 0, facturacion: null,
         reservas: [], totalpagado: 0, saldototal: 0, creditototal: 0,
       }
       lista.push(c)
@@ -256,6 +256,7 @@ export function armar_clientes({ clientes, reservas, cobros, pipeline }) {
       existente.empresa = c.empresa || existente.empresa || ''
       existente.creditoautorizado = !!c.credito_autorizado
       existente.saldofavor = Number(c.saldo_favor) || 0
+      existente.facturacion = c.facturacion || null
     } else {
       lista.push({
         id: c.id,
@@ -265,6 +266,7 @@ export function armar_clientes({ clientes, reservas, cobros, pipeline }) {
         empresa: c.empresa || '',
         creditoautorizado: !!c.credito_autorizado,
         saldofavor: Number(c.saldo_favor) || 0,
+        facturacion: c.facturacion || null,
         reservas: [], totalpagado: 0, saldototal: 0, creditototal: 0,
       })
     }
@@ -314,6 +316,73 @@ export function ordenar_clientes(lista, col, dir) {
     if (col === 'saldototal') return (a.saldototal - b.saldototal) * s
     return String(a[col] || '').localeCompare(String(b[col] || ''), 'es') * s
   })
+}
+
+// ── CSV: formato / exportar / importar ───────────────────────────
+// Sin equivalente exacto en la v1: se define aqui el formato minimo
+// editable — el MISMO que ya acepta el modal "Editar cliente" (nombre,
+// email, telefono, empresa). "Descargar formato" imprime solo la cabecera,
+// para llenarla en Excel y subirla de vuelta con "Importar CSV".
+export const columnas_csv_clientes = [
+  { clave: 'nombre', titulo: 'Nombre' },
+  { clave: 'email', titulo: 'Email' },
+  { clave: 'tel', titulo: 'Teléfono' },
+  { clave: 'empresa', titulo: 'Empresa' },
+]
+
+// El export completo agrega las cifras de solo lectura del expediente, para
+// tener una foto exportable del listado — no se reimportan.
+export const columnas_csv_export_clientes = [
+  ...columnas_csv_clientes,
+  { clave: 'reservas', titulo: 'Reservas' },
+  { clave: 'totalpagado', titulo: 'Total pagado' },
+  { clave: 'saldototal', titulo: 'Saldo pendiente' },
+  { clave: 'creditoautorizado', titulo: 'Crédito autorizado' },
+]
+
+export function fila_csv_export_cliente(c) {
+  return {
+    nombre: c.nombre === '—' ? '' : c.nombre,
+    email: c.email === '—' ? '' : c.email,
+    tel: c.tel === '—' ? '' : c.tel,
+    empresa: c.empresa || '',
+    reservas: c.reservas.length,
+    totalpagado: redondear_dinero(c.totalpagado),
+    saldototal: redondear_dinero(c.saldototal),
+    creditoautorizado: c.creditoautorizado ? 'Sí' : 'No',
+  }
+}
+
+// cabecera → llave, insensible a mayusculas/acentos, para que la fila leida
+// no dependa del orden ni de la grafia exacta de columnas_csv_clientes.
+const alias_columna = {
+  NOMBRE: 'nombre',
+  EMAIL: 'email',
+  CORREO: 'email',
+  'TELEFONO': 'tel',
+  TEL: 'tel',
+  EMPRESA: 'empresa',
+}
+
+function normalizar_encabezado(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toUpperCase().trim()
+}
+
+// filas: arreglo de arreglos (ver parsear_csv en lib/exportarcsv.js), CON la
+// fila de cabecera como primer elemento. Devuelve solo las filas con nombre
+// o email — una fila completamente vacia no es un cliente a crear.
+export function filas_csv_a_clientes(filas) {
+  if (!filas || !filas.length) return []
+  const encabezado = filas[0].map((h) => alias_columna[normalizar_encabezado(h)] || null)
+  return filas.slice(1)
+    .map((fila) => {
+      const c = { nombre: '', email: '', tel: '', empresa: '' }
+      encabezado.forEach((clave, i) => { if (clave) c[clave] = String(fila[i] || '').trim() })
+      return c
+    })
+    .filter((c) => c.nombre || c.email)
 }
 
 export const por_pagina = 25

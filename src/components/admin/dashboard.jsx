@@ -3,13 +3,15 @@
 // espejo 1:1 de v1: #page-dashboard de index.html (lineas 1886-1975) y
 // loadDashboardStats() de js/modules/dashboard.js.
 //
-// las 8 piezas de la v1, en el mismo orden: 4 tarjetas de KPI, ingresos por
-// juego, ocupacion por seccion, actividad reciente y proximas series.
+// las 7 piezas de la v1, en el mismo orden: 4 tarjetas de KPI, ingresos por
+// juego (TODOS los juegos con ingresos registrados, sin recorte), actividad
+// reciente y proximas series. La v1 no tiene "Ocupación por sección" — no se
+// migra.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useMemo } from 'react'
 import useadmindatos from '../../hooks/useadmindatos'
-import { calcular_dashboard, colores_categoria } from '../../lib/dashboard'
+import { calcular_dashboard } from '../../lib/dashboard'
 import { redondear_dinero, mxn2 } from '../../lib/dinero'
 import app_config from '../../lib/config'
 
@@ -100,72 +102,37 @@ export default function dashboard() {
           </div>
         </div>
 
-        {/* ── Ingresos por juego · Ocupación por sección ── */}
-        <div className="grid-2" style={{ marginBottom: '20px' }}>
-          <div className="card">
-            <div className="card-header">
-              <div>
-                <div className="card-title">Ingresos por juego</div>
-                <div className="card-sub" id="dash-ingresos-juego-sub">
-                  {d.con_ingreso.length
-                    ? d.con_ingreso.length + ' juego(s) con ingresos registrados'
-                    : 'Sin datos aún'}
-                </div>
+        {/* ── Ingresos por juego ── */}
+        <div className="card" style={{ marginBottom: '20px' }}>
+          <div className="card-header">
+            <div>
+              <div className="card-title">Ingresos por juego</div>
+              <div className="card-sub" id="dash-ingresos-juego-sub">
+                {d.con_ingreso.length
+                  ? d.con_ingreso.length + ' juego(s) con ingresos registrados'
+                  : 'Sin datos aún'}
               </div>
-            </div>
-            <div className="card-body" id="dash-ingresos-juego">
-              {d.con_ingreso.length ? (
-                <div className="bar-chart">
-                  {d.con_ingreso.map((j) => {
-                    const v = d.por_juego[j.id]
-                    return (
-                      <div className="bar-wrap" key={j.id} title={'vs ' + j.rival + ' · ' + money(v)}>
-                        <div className="bar-val">{fmt_k(v)}</div>
-                        <div className="bar" style={{ height: Math.max(6, Math.round((v / d.max_ingreso) * 100)) + '%' }} />
-                        <div className="bar-label">{fmt_fecha(j.fecha)}</div>
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <p style={vacio}>
-                  Aquí se mostrarán los ingresos conforme se registren pagos de reservas.
-                </p>
-              )}
             </div>
           </div>
-
-          <div className="card">
-            <div className="card-header">
-              <div>
-                <div className="card-title">Ocupación por sección</div>
-                <div className="card-sub" id="dash-ocupacion-sub">
-                  {d.proximo && d.grupos
-                    ? 'Próximo juego · ' + fmt_fecha(d.proximo.fecha) + ' vs ' + d.proximo.rival
-                    : 'Sin datos'}
-                </div>
-              </div>
-            </div>
-            <div className="card-body" id="dash-ocupacion-body" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {d.grupos ? (
-                Object.entries(d.grupos).map(([cat, g]) => {
-                  const pct = g.total ? Math.round((g.res / g.total) * 100) : 0
+          <div className="card-body" id="dash-ingresos-juego">
+            {d.con_ingreso.length ? (
+              <div className="bar-chart">
+                {d.con_ingreso.map((j) => {
+                  const v = d.por_juego[j.id]
                   return (
-                    <div key={cat}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
-                        <span>{cat} ({g.res}/{g.total})</span>
-                        <span className="fw-700">{pct}%</span>
-                      </div>
-                      <div style={{ height: '6px', background: '#F1F3F7', borderRadius: '3px' }}>
-                        <div style={{ width: pct + '%', height: '100%', background: colores_categoria[cat] || 'var(--naranja)', borderRadius: '3px' }} />
-                      </div>
+                    <div className="bar-wrap" key={j.id} title={'vs ' + j.rival + ' · ' + money(v)}>
+                      <div className="bar-val">{fmt_k(v)}</div>
+                      <div className="bar" style={{ height: Math.max(6, Math.round((v / d.max_ingreso) * 100)) + '%' }} />
+                      <div className="bar-label">{fmt_fecha(j.fecha)}</div>
                     </div>
                   )
-                })
-              ) : (
-                <p style={vacio}>Sin juegos próximos o secciones configuradas.</p>
-              )}
-            </div>
+                })}
+              </div>
+            ) : (
+              <p style={vacio}>
+                Aquí se mostrarán los ingresos conforme se registren pagos de reservas.
+              </p>
+            )}
           </div>
         </div>
 

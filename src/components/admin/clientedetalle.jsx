@@ -1,30 +1,48 @@
 // ═══════════════════════════════════════════════════════════════════
 // clientedetalle.jsx — expediente completo de un cliente.
 // espejo 1:1 de v1: _renderDetalleCliente() (js/22-usuarios-clientes.js
-// 1635-1722), salvo la seccion de facturas (ver nota abajo).
+// 1635-1722), salvo la seccion "Facturas" (ver nota abajo).
 //
 // HISTORIAL UNIFICADO: reservas, PAGOS realizados (cliente_id / folio de sus
 // reservas o de las tarjetas del Pipeline ligadas / identidad telefono+
 // nombre — NUNCA el correo) y consumo incluido. Es la MISMA cuenta que arma
 // "Total pagado" arriba: si un pago aparece en la tabla, ya esta contado.
 //
+// DATOS DE FACTURACION: el objeto `facturacion` (jsonb) de la propia ficha
+// del cliente — RFC, regimen, razon social, uso de CFDI, codigo postal —, el
+// MISMO que lee buscar_facturacion_cliente() para el detalle de un cobro
+// (ver lib/facturacion.js). Se edita desde "Editar" en el menu de acciones
+// de clientes.jsx.
+//
 // El padre (clientes.jsx) monta este componente SOLO con un cliente y sus
 // tres listas ya calculadas — igual que detalleprospecto.jsx, para que el
 // banco de pruebas pueda montarlo con props propias sin depender de un clic.
 //
-// FUERA DE ALCANCE: la seccion "Facturas" de la v1 lee `facturasData`, que
-// sale de #page-facturas — una pagina sin entrada en el menu lateral,
-// inalcanzable en la v1 (ver commit de Cobros). No se migra por la misma
-// razon: no hay forma de generar ese dato todavia.
+// FUERA DE ALCANCE, y es DISTINTO de "Datos de facturación" arriba: la
+// seccion "Facturas" de la v1 lee `facturasData`, que sale de #page-facturas
+// — una pagina sin entrada en el menu lateral, inalcanzable en la v1 (ver
+// commit de Cobros). No se migra por la misma razon: no hay forma de generar
+// ese dato todavia.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useEffect } from 'react'
 import { es_cobro_credito } from '../../lib/dashboard'
 import { formato_fecha } from '../../lib/cobros'
 import { pipeline_etapas } from '../../lib/pipeline'
+import { regimen_legible } from '../../lib/facturacion'
 import { redondear_dinero, mxn2 } from '../../lib/dinero'
 
 const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2)
+
+function chip({ label, children }) {
+  return (
+    <div className="info-chip">
+      <div className="info-chip-label">{label}</div>
+      <div className="info-chip-val">{children}</div>
+    </div>
+  )
+}
+const Chip = chip
 
 function cliente_detalle({ cliente, pagos, consumos, tarjetas, oncerrar }) {
   // El padre (clientes.jsx) monta este componente solo mientras esta
@@ -53,10 +71,14 @@ function cliente_detalle({ cliente, pagos, consumos, tarjetas, oncerrar }) {
         </div>
 
         <div style={{ padding: '18px 22px', maxHeight: '72vh', overflowY: 'auto' }}>
-          <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: '18px' }}>
+          <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginBottom: '18px' }}>
             <div className="stat-card" style={{ padding: '12px 14px' }}>
               <div className="stat-card-label">Reservas</div>
               <div className="stat-card-value" style={{ fontSize: '20px' }}>{cliente.reservas.length}</div>
+            </div>
+            <div className="stat-card" style={{ padding: '12px 14px' }}>
+              <div className="stat-card-label">Pagos realizados</div>
+              <div className="stat-card-value" style={{ fontSize: '20px' }}>{pagos.length}</div>
             </div>
             <div className="stat-card" style={{ padding: '12px 14px' }}>
               <div className="stat-card-label">Total pagado</div>
@@ -65,7 +87,7 @@ function cliente_detalle({ cliente, pagos, consumos, tarjetas, oncerrar }) {
               </div>
             </div>
             <div className="stat-card" style={{ padding: '12px 14px' }}>
-              <div className="stat-card-label">Saldo</div>
+              <div className="stat-card-label">Saldo pendiente</div>
               <div className="stat-card-value" style={{ fontSize: '20px', color: 'var(--rojo)' }}>
                 {money(cliente.saldototal)}
               </div>
@@ -206,6 +228,27 @@ function cliente_detalle({ cliente, pagos, consumos, tarjetas, oncerrar }) {
                 </table>
               </div>
             </>
+          )}
+
+          {/* Datos de facturación — el objeto `facturacion` (jsonb) de la
+              ficha del cliente, el MISMO que lee buscar_facturacion_cliente()
+              para el detalle de un cobro (ver lib/facturacion.js). Se edita
+              desde "Editar" en el menú de acciones de la tabla. */}
+          <div className="card-title" style={{ fontSize: '13px', margin: '20px 0 8px' }}>
+            Datos de facturación
+          </div>
+          {cliente.facturacion ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+              <Chip label="RFC">{cliente.facturacion.rfc || '—'}</Chip>
+              <Chip label="Régimen fiscal">{regimen_legible(cliente.facturacion.regimen)}</Chip>
+              <Chip label="Razón social">{cliente.facturacion.razonSocial || '—'}</Chip>
+              <Chip label="Uso de CFDI">{cliente.facturacion.usoCfdi || '—'}</Chip>
+              <Chip label="Código postal">{cliente.facturacion.cp || '—'}</Chip>
+            </div>
+          ) : (
+            <p style={{ fontSize: '13px', color: 'var(--text-3)', padding: '4px 0 12px' }}>
+              Sin datos de facturación registrados.
+            </p>
           )}
 
           {/* Tarjetas del Pipeline vinculadas — conecta el expediente con

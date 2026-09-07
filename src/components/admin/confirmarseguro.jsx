@@ -25,7 +25,7 @@ export function useconfirmarseguro() {
   const [estado, setestado] = useState(null)
   const resolver = useRef(null)
 
-  // opciones: { titulo, descripcion, textoconfirmar, pedirmotivo }
+  // opciones: { titulo, descripcion, textoconfirmar, pedirmotivo, etiquetamotivo, etiquetapass }
   const confirmarseguro = useCallback((opciones) => {
     return new Promise((resolve) => {
       resolver.current = resolve
@@ -128,7 +128,7 @@ function confirmar_seguro({ estado, oncerrar }) {
         )}
 
         <label className="form-label" style={{ display: 'block', margin: '14px 0 4px' }}>
-          Tu contraseña *
+          {estado.etiquetapass || 'Tu contraseña *'}
         </label>
         <input
           ref={refpass} className="input" type="password" autoComplete="current-password"

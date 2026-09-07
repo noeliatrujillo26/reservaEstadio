@@ -94,18 +94,11 @@ export default function cotizaciones() {
             <h2>Cotizaciones</h2>
             <p>Propuestas de zonas de asadores y su seguimiento</p>
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <input
-              className="input" id="cotiz-search" placeholder="Buscar cliente, descripción..."
-              style={{ width: '240px', fontSize: '13px' }}
-              value={busqueda} onChange={(e) => setbusqueda(e.target.value)}
-            />
-            {puede && (
-              <button className="btn btn-primary btn-sm" onClick={() => setform({ editando: null })}>
-                + Nueva cotización
-              </button>
-            )}
-          </div>
+          {puede && (
+            <button className="btn btn-primary btn-sm" onClick={() => setform({ editando: null })}>
+              + Nueva cotización
+            </button>
+          )}
         </div>
 
         <div className="stats-grid" id="cotiz-kpis" style={{ marginBottom: '20px' }}>
@@ -139,6 +132,20 @@ export default function cotizaciones() {
         </div>
 
         <div className="card" style={{ borderRadius: '0 0 10px 10px', borderTop: 'none' }}>
+          <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <input
+              className="input" id="cotiz-search" placeholder="Buscar cliente, descripción..."
+              style={{ width: '240px', fontSize: '13px' }}
+              value={busqueda} onChange={(e) => setbusqueda(e.target.value)}
+            />
+            <button
+              className="btn btn-ghost btn-xs" title="Quitar el orden de columna"
+              disabled={!orden.col} onClick={() => setorden({ col: null, dir: 'asc' })}
+              style={{ border: '1px solid var(--border)', borderRadius: '6px', padding: '3px 10px', opacity: orden.col ? 1 : 0.5 }}
+            >
+              ↕ Limpiar orden
+            </button>
+          </div>
           <div className="table-wrap">
             <table>
               <thead>

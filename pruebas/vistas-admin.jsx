@@ -40,6 +40,7 @@ import NuevoCobro from '../src/components/admin/nuevocobro'
 import Evidencia from '../src/components/admin/evidencia'
 import ReservaForm from '../src/components/admin/reservaform'
 import CotizForm from '../src/components/admin/cotizform'
+import ClienteForm from '../src/components/admin/clienteform'
 import UsuarioForm from '../src/components/admin/usuarioform'
 import { perms_default } from '../src/lib/permisos'
 import NuevoProspecto from '../src/components/admin/nuevoprospecto'
@@ -94,6 +95,8 @@ const CotizNueva = () => <CotizForm abierto editando={null} oncerrar={()=>{}} on
 // la zona propia (sec-1) esta 'reservada' en areasestados a proposito: prueba
 // que editar conserva la zona ya ocupada en el <select>, igual que reservaform.jsx.
 const CotizEditar = () => <CotizForm abierto editando={valor.cotizaciones[0]} oncerrar={()=>{}} onguardar={async()=>({ok:true})} guardando={false} />
+const ClienteNuevo = () => <ClienteForm abierto editando={null} oncerrar={()=>{}} oneditar={async()=>({ok:true})} guardando={false} />
+const ClienteEditar = () => <ClienteForm abierto editando={valor.clientes[0]} oncerrar={()=>{}} oneditar={async()=>({ok:true})} guardando={false} />
 const UsuarioNuevo = () => <UsuarioForm abierto editando={null} permisosdefault={perms_default.Vendedora} oncerrar={()=>{}} onguardar={async()=>({ok:true})} guardando={false} />
 const UsuarioEditar = () => <UsuarioForm abierto editando={valor.usuarios[1]} permisosdefault={perms_default.Vendedora} oncerrar={()=>{}} onguardar={async()=>({ok:true})} guardando={false} />
 const ConfirmSimple = () => <Confirmar estado={{mensaje:'¿Cancelar este cobro?',textoconfirmar:'Sí, cancelar'}} oncerrar={()=>{}} />
@@ -106,11 +109,12 @@ const ProspectoSinReserva = () => <DetalleProspecto card={{...valor.pipeline[0],
 const ProspectoSoloLectura = () => <DetalleProspecto card={valor.pipeline[0]} puede={false} oncerrar={()=>{}} oneditar={async()=>({ok:true})} ongenerar={async()=>({ok:true})} oneliminar={async()=>{}} onpagar={async()=>({ok:true})} guardando={false} borrando={null} pagando={false} />
 // en Boletos enviados el borrado esta prohibido: el boton sale apagado.
 const ProspectoBoletos = () => <DetalleProspecto card={{...valor.pipeline[0], etapa:'boletos_entregados'}} puede oncerrar={()=>{}} oneditar={async()=>({ok:true})} ongenerar={async()=>({ok:true})} oneliminar={async()=>{}} onpagar={async()=>({ok:true})} guardando={false} borrando={null} pagando={false} />
-const ConfirmSeguroSinMotivo = () => <ConfirmarSeguro estado={{titulo:'🔒 Bloquear',descripcion:'Sale de venta.',textoconfirmar:'Bloquear',pedirmotivo:false}} oncerrar={()=>{}} />
+const ConfirmSeguroSinMotivo = () => <ConfirmarSeguro estado={{titulo:'🔓 Autorizar crédito',descripcion:'Estás por autorizar crédito a Ana.',textoconfirmar:'Autorizar crédito',pedirmotivo:false,etiquetapass:'Contraseña de administrador *'}} oncerrar={()=>{}} />
 
 const ClienteDetalleAbierto = () => {
   const expediente = { id: 1, nombre: 'Ana', email: 'a@x.com', tel: '6621234567', empresa: '',
     creditoautorizado: true, saldofavor: 300, creditototal: 0,
+    facturacion: { rfc: 'XAXX010101000', regimen: '626', razonSocial: 'ANA SA', usoCfdi: 'G03', cp: '83000' },
     reservas: [{ folio: 1, zona: 'Terraza Derecha 1', juego: 'vs Mayos', montopagado: 5000, saldo: 4750, cortesia: false }],
     totalpagado: 5000, saldototal: 4750 }
   const pagos = [{ id: 1, fecha: '2026-08-05', concepto: 'ABONO', monto: 5000, formapago: 'EFECTIVO', folio: '1' }]
@@ -130,7 +134,7 @@ export const vistas={dashboard:Dashboard,cobros:Cobros,seccionesreservadas:Reser
  detallecobro:DetalleAbierto,detallecancelado:DetalleCancelado,nuevocobro:NuevoAbierto,
  evidenciapdf:EvidenciaPdf,evidenciasinliga:EvidenciaSinLiga,
  reservanueva:ReservaNueva,reservaeditar:ReservaEditar,
- cotiznueva:CotizNueva,cotizeditar:CotizEditar,
+ cotiznueva:CotizNueva,cotizeditar:CotizEditar,clientenuevo:ClienteNuevo,clienteeditar:ClienteEditar,
  usuarionuevo:UsuarioNuevo,usuarioeditar:UsuarioEditar,
  confirmsimple:ConfirmSimple,confirmseguro:ConfirmSeguro,confirmseguro2:ConfirmSeguroSinMotivo,
  prospectonuevo:ProspectoNuevo,prospectodetalle:ProspectoDetalle,

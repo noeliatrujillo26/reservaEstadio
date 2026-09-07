@@ -92,14 +92,6 @@ export function estado_zona(areasestados, areas, juegoid, zonaid) {
   return porjuego[String(zonaid)] || (local && local.estado) || 'libre'
 }
 
-export const colores_categoria = {
-  Terraza: 'var(--naranja)',
-  Platea: '#2563EB',
-  Palco: '#7C3AED',
-  'Jardín': '#16A34A',
-  General: '#5A6478',
-}
-
 // ── KPIs y listas ───────────────────────────────────────────────
 // espejo de loadDashboardStats(). Devuelve todo lo que pinta la vista.
 export function calcular_dashboard({ cobros, reservas, juegos, areas, areasestados, movimientos }) {
@@ -150,27 +142,14 @@ export function calcular_dashboard({ cobros, reservas, juegos, areas, areasestad
     const mp = Number(r.montopagado) || 0
     if (mp > 0 && r.juegoid) por_juego[r.juegoid] = (por_juego[r.juegoid] || 0) + mp
   })
-  // los 6 mas recientes por fecha
-  const con_ingreso = juegos.filter((j) => por_juego[j.id] > 0).slice(-6)
+  // TODOS los juegos con ingresos registrados, en el orden del calendario.
+  const con_ingreso = juegos.filter((j) => por_juego[j.id] > 0)
   const max_ingreso = con_ingreso.length ? Math.max(...con_ingreso.map((j) => por_juego[j.id])) : 0
 
-  // 6) Ocupacion por seccion (categorias) para el proximo juego
-  const proximo = futuros[0] || null
-  let grupos = null
-  if (proximo && areas.length) {
-    grupos = {}
-    areas.forEach((a) => {
-      const cat = categoria_sec(a.nombre)
-      if (!grupos[cat]) grupos[cat] = { total: 0, res: 0 }
-      grupos[cat].total++
-      if (estado_zona(areasestados, areas, proximo.id, a.id) === 'reservada') grupos[cat].res++
-    })
-  }
-
-  // 7) Actividad reciente: ultimos 5 movimientos
+  // 6) Actividad reciente: ultimos 5 movimientos
   const actividad = (movimientos || []).slice(0, 5)
 
-  // 8) Proximas series en casa: juegos futuros agrupados por rival
+  // 7) Proximas series en casa: juegos futuros agrupados por rival
   const series = []
   futuros.forEach((j) => {
     const ult = series[series.length - 1]
@@ -193,7 +172,6 @@ export function calcular_dashboard({ cobros, reservas, juegos, areas, areasestad
       ? con_saldo.length + ' liquidación(es) por cobrar'
       : 'Sin liquidaciones por cobrar',
     por_juego, con_ingreso, max_ingreso,
-    proximo, grupos,
     actividad,
     series: series.slice(0, 3),
   }

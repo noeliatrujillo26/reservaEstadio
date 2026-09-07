@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════
-// exportarcsv.js — utilidad UNICA de exportacion a CSV de todo el panel.
-// Sin equivalente en la v1 (sus exports a Excel salian de un boton por
-// modulo, cada uno con su propio armado). Cualquier pantalla que necesite
-// "Exportar a Excel" pasa por aqui: un solo criterio de formato, no uno
-// ligeramente distinto por cada componente.
+// exportarcsv.js — utilidad UNICA de exportacion E IMPORTACION de CSV de
+// todo el panel. Sin equivalente en la v1 (sus exports a Excel salian de un
+// boton por modulo, cada uno con su propio armado). Cualquier pantalla que
+// necesite "Exportar a Excel" o "Importar CSV" pasa por aqui: un solo
+// criterio de formato, no uno ligeramente distinto por cada componente.
 //
-// FORMATO, pensado para Excel en español (Windows) — el mismo publico que
-// exportarReporteExcel() de la v1 servia:
+// FORMATO de exportacion, pensado para Excel en español (Windows) — el mismo
+// publico que exportarReporteExcel() de la v1 servia:
 //   · BOM UTF-8 (el caracter U+FEFF) al inicio: sin el, Excel abre el
 //     archivo como ANSI y los acentos y la ñ salen rotos.
 //   · separador ; en vez de , — la configuracion regional en español de
@@ -47,6 +47,60 @@ export function csv_de_filas(columnas, filas) {
   const encabezados = columnas.map((c) => c.titulo)
   const valores = (filas || []).map((f) => columnas.map((c) => f[c.clave]))
   return csv_texto(encabezados, valores)
+}
+
+// Variante "CSV" simple, para quien vaya a abrirlo con otra herramienta que
+// no sea Excel en español: coma como separador y sin BOM (RFC4180 liso). Las
+// celdas se siguen citando siempre, por la misma razon que csv_texto.
+export function csv_de_filas_simple(columnas, filas) {
+  const fila = (valores) => (valores || []).map(celda_csv).join(',')
+  const encabezados = columnas.map((c) => c.titulo)
+  const valores = (filas || []).map((f) => columnas.map((c) => f[c.clave]))
+  return [encabezados, ...valores].map(fila).join('\r\n')
+}
+
+// ── importar ────────────────────────────────────────────────────
+// Lee un CSV de vuelta a filas-arreglo. Tolera el formato que produce
+// csv_texto (BOM, celdas entre comillas dobles con "" como escape, ;) Y un
+// csv "simple" guardado a mano (sin comillas, separado por , o ;) — quien
+// sube el archivo probablemente lo edito en Excel, que puede resguardarlo en
+// cualquiera de los dos.
+export function parsear_csv(texto) {
+  let s = String(texto == null ? '' : texto)
+  if (s.charCodeAt(0) === 0xfeff) s = s.slice(1) // BOM
+  if (!s.trim()) return []
+
+  const primeralinea = s.split(/\r?\n/, 1)[0] || ''
+  const sep = primeralinea.includes(';') ? ';' : ','
+
+  const filas = []
+  let fila = []
+  let celda = ''
+  let entrecomillas = false
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (entrecomillas) {
+      if (c === '"') {
+        if (s[i + 1] === '"') { celda += '"'; i++ } else entrecomillas = false
+      } else {
+        celda += c
+      }
+    } else if (c === '"') {
+      entrecomillas = true
+    } else if (c === sep) {
+      fila.push(celda); celda = ''
+    } else if (c === '\r') {
+      // se ignora: el \n que sigue cierra la fila
+    } else if (c === '\n') {
+      fila.push(celda); filas.push(fila); fila = []; celda = ''
+    } else {
+      celda += c
+    }
+  }
+  if (celda !== '' || fila.length) { fila.push(celda); filas.push(fila) }
+
+  // filas totalmente vacias (renglones en blanco al final del archivo) no cuentan.
+  return filas.filter((f) => f.some((c) => String(c || '').trim() !== ''))
 }
 
 // Dispara la descarga de un archivo de texto — el UNICO lugar del panel que
