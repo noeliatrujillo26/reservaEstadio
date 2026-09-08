@@ -398,14 +398,16 @@ export function usereservaexpress() {
   // apartado sin cobro, falta el enganche — a diferencia de la plantilla de
   // "confirmación" que habla de un monto YA pagado.
   //
-  // window.open('', '_blank') se llama SINCRONO, antes de cualquier await:
-  // abrirlo despues de la subida a Storage lo hace bloqueable por el
-  // navegador (deja de contar como respuesta directa al clic). Se navega esa
-  // pestaña ya abierta hasta que el link esta listo.
+  // SIN window.open('', '_blank'): ese truco (pestaña en blanco que se
+  // navega despues, para esquivar el bloqueo de pop-ups) deja en iOS/Safari
+  // una pestaña "about:blank" huerfana de fondo — el deep link salta a la
+  // app de WhatsApp, pero Safari nunca la cierra, porque el handoff a la app
+  // no cuenta como "usar" la pestaña. Aqui se navega el DOCUMENTO ACTUAL con
+  // window.location.href: no abre nada nuevo, asi que no hay nada que
+  // esquivar ni nada que quede huerfano.
   const compartir_whatsapp = useCallback(
     async (exito) => {
       if (!exito) return { ok: false }
-      const ventana = window.open('', '_blank')
       setcompartiendo(true)
       try {
         const juegolabel = exito.juego
@@ -444,12 +446,10 @@ export function usereservaexpress() {
         const numerowa = telcliente.length === 10 ? '52' + telcliente : ''
         const url = 'https://wa.me/' + numerowa + '?text=' + encodeURIComponent(mensaje)
 
-        if (ventana) ventana.location.href = url
-        else window.open(url, '_blank')
+        window.location.href = url
         return { ok: true, link }
       } catch (e) {
         console.error('compartir_whatsapp (Reserva Exprés):', e)
-        if (ventana) ventana.close()
         mostrartoast('⚠️ No se pudo preparar el ticket para WhatsApp.')
         return { ok: false }
       } finally {
