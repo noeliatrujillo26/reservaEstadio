@@ -299,6 +299,20 @@ export function precio_seccion(area, catalogo) {
   return precio_respaldo[categoria_sec(area && area.nombre)] || null
 }
 
+// Tarifa BASE (DOM-MIE, carne asada) de persona extra que ya trae
+// configurada la zona en el catalogo de Precios — mismo nivel de detalle que
+// precio_seccion (sin variante JUE-SAB ni discada): sirve para PRELLENAR el
+// campo, que el vendedor puede seguir editando si el trato pactado es otro.
+export function precio_extra_seccion(area, catalogo) {
+  const fila = fila_catalogo(area, catalogo)
+  return (fila && fila.precioextra != null) ? fila.precioextra : 0
+}
+
+export function precio_nino_seccion(area, catalogo) {
+  const fila = fila_catalogo(area, catalogo)
+  return (fila && fila.precionino != null) ? fila.precionino : 0
+}
+
 // Personas INCLUIDAS en la seccion. Jueves, viernes y sabado usan la columna
 // alterna (min2) cuando esta configurada — la misma regla de dia que los
 // precios.

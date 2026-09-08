@@ -48,10 +48,9 @@ import usereservaexpress from '../../hooks/usereservaexpress'
 import { catalogo_clientes, cliente_coincide } from '../../lib/clientes'
 import { validar_codigo_descuento } from '../../lib/catalogos'
 import { estado_vivo } from '../../lib/mapaocupacion'
-import { etiqueta_grupo } from '../../lib/pipeline'
 import { map_precio } from '../../lib/preciosadmin'
 import { calc_total_prospecto } from '../../lib/prospectos'
-import { min_seccion, precio_seccion } from '../../lib/reservasadmin'
+import { min_seccion, precio_extra_seccion, precio_nino_seccion, precio_seccion } from '../../lib/reservasadmin'
 import { redondear_dinero, mxn2 } from '../../lib/dinero'
 
 const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2)
@@ -216,6 +215,22 @@ export default function formularioexpress() {
   const catalogo = useMemo(() => (secciones || []).map(map_precio), [secciones])
   const areamonto = zonaelegida ? precio_seccion(zonaelegida, catalogo) || 0 : 0
   const minpersonas = zonaelegida ? min_seccion(zonaelegida, catalogo, juego) : 0
+  const precioadultobase = zonaelegida ? precio_extra_seccion(zonaelegida, catalogo) : 0
+  const precioninobase = zonaelegida ? precio_nino_seccion(zonaelegida, catalogo) : 0
+
+  // "Precio adulto/niño extra" se PRELLENAN con la tarifa de la zona en
+  // cuanto se elige — el vendedor solo teclea cuántos, no cuánto. Atados a
+  // d.zonaid (no al precio en si) para no pisar un ajuste manual en cada
+  // render; cambiar de zona SI refresca el precio, igual que "Área/Zona".
+  useEffect(() => {
+    if (!zonaelegida) return
+    setd((x) => ({
+      ...x,
+      adultoextraprecio: precioadultobase > 0 ? String(precioadultobase) : x.adultoextraprecio,
+      ninoextraprecio: precioninobase > 0 ? String(precioninobase) : x.ninoextraprecio,
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d.zonaid])
 
   const calc = useMemo(
     () => calc_total_prospecto(
@@ -224,6 +239,9 @@ export default function formularioexpress() {
     ),
     [d, areamonto, minpersonas, cupon, areas, descuentosvolumen]
   )
+  // % EFECTIVO mostrado en la tarjeta: junta el manual/código Y el
+  // automático por volumen en una sola línea, como pide el desglose.
+  const pctdescuento = calc.subtotal > 0 ? Math.round((calc.descuentototal / calc.subtotal) * 100) : 0
 
   // ── código de descuento ─────────────────────────────────────────
   function aplicar_codigo() {
@@ -546,6 +564,11 @@ export default function formularioexpress() {
               />
             </div>
           </div>
+          {zonaelegida && (
+            <div className="re-ayuda" style={{ marginTop: '-6px', marginBottom: '14px' }}>
+              Prellenados con la tarifa de {zonaelegida.nombre} — solo agrega cuántos adultos/niños extra.
+            </div>
+          )}
 
           <div className="re-fila-2">
             <div className="re-campo">
@@ -642,14 +665,9 @@ export default function formularioexpress() {
               </div>
             )}
             <div className="re-desglose-fila"><span>Subtotal</span><span>{money(calc.subtotal)}</span></div>
-            {calc.volumenpct > 0 && (
-              <div className="re-desglose-fila re-desglose-verde">
-                <span>{etiqueta_grupo(calc.volumenpct, calc.espalco)}</span><span>automático</span>
-              </div>
-            )}
             {calc.descuentototal > 0 && (
-              <div className="re-desglose-fila re-desglose-verde">
-                <span>Descuento total</span><span>−{money(calc.descuentototal)}</span>
+              <div className="re-desglose-fila re-desglose-descuento">
+                <span>Descuento ({pctdescuento}%)</span><span>−{money(calc.descuentototal)}</span>
               </div>
             )}
             <div className="re-desglose-fila re-desglose-personas">
