@@ -10,6 +10,16 @@
 // La v1 pagina `cobros` y `reservas` con sbSelectTodas porque supabase corta
 // en 1000 filas y, con orden ascendente, los registros MAS NUEVOS eran justo
 // los que se caian del resultado. Ese paginado se conserva aqui.
+//
+// `zona_juego_estado` se agrego a la lista paginada (05 sep 2026): crece SIN
+// TOPE con el uso — una fila por cada (juego, zona) que se toca, para
+// siempre — y se leia con un .select('*') simple, sin paginar y sin orden.
+// Al pasar de 1000 filas, supabase recortaba el resultado y una zona
+// RESERVADA en un juego mas viejo podia quedar fuera del recorte — y
+// estado_vivo() trata "sin fila" como 'libre'. El sintoma era exactamente
+// este: la zona parecia liberarse sola al crear una reserva nueva (lo que
+// dispara el recargar() que vuelve a leer la tabla completa), sin que
+// ninguna escritura la hubiera tocado. La base nunca estuvo mal; el fetch si.
 // ═══════════════════════════════════════════════════════════════════
 
 import { createContext, useCallback, useEffect, useState } from 'react'
@@ -210,7 +220,7 @@ export function admindatosprovider({ children }) {
       sb.from('juegos').select('*').order('fecha'),
       sb.from('areas').select('*'),
       sb.from('mapa_secciones').select('*').order('orden'),
-      sb.from('zona_juego_estado').select('*'),
+      select_todas('zona_juego_estado', 'id'),
       sb.from('movimientos').select('*').order('created_at', { ascending: false }).limit(50),
       select_todas('clientes', 'id'),
       sb.from('usuarios').select('*').order('id'),

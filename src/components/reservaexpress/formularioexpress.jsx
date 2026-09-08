@@ -187,25 +187,34 @@ export default function formularioexpress() {
     [juegos, d.juegoid]
   )
 
-  // solo zonas LIBRES para el juego elegido — misma regla que reservaform.jsx
-  // y cotizform.jsx (estado_vivo contra areasestados, no el estado estatico).
-  const zonaslibres = useMemo(() => {
+  // TODAS las zonas del juego elegido, cada una con su libre/ocupada —
+  // misma fuente que reservaform.jsx/cotizform.jsx (estado_vivo contra
+  // areasestados, no el estado estatico) pero SIN filtrar: las ocupadas se
+  // muestran deshabilitadas en el <select> en vez de desaparecer, para que
+  // se note que el juego ya tiene zonas tomadas.
+  const zonasconestado = useMemo(() => {
     if (!d.juegoid) return []
-    return (areas || []).filter((a) => estado_vivo(areasestados, d.juegoid, a.id) === 'libre')
+    return (areas || []).map((a) => ({
+      area: a,
+      libre: estado_vivo(areasestados, d.juegoid, a.id) === 'libre',
+    }))
   }, [areas, areasestados, d.juegoid])
 
-  // si cambia el juego (o la zona elegida deja de estar libre), se limpia.
+  const hayzonaslibres = zonasconestado.some((z) => z.libre)
+
+  // si cambia el juego (o la zona elegida deja de estar libre — alguien mas
+  // la tomo mientras tanto), se limpia el valor seleccionado.
   useEffect(() => {
-    if (d.zonaid && !zonaslibres.some((a) => a.id === d.zonaid)) set('zonaid', '')
+    if (d.zonaid && d.juegoid && estado_vivo(areasestados, d.juegoid, d.zonaid) !== 'libre') set('zonaid', '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [d.juegoid, zonaslibres])
+  }, [d.juegoid, areasestados])
 
   const vendedoras = useMemo(
     () => (usuarios || []).filter((u) => u.rol === 'Vendedora' && u.estado === 'Activo').map((u) => u.nombre),
     [usuarios]
   )
 
-  const zonaelegida = zonaslibres.find((a) => a.id === d.zonaid) || null
+  const zonaelegida = (areas || []).find((a) => a.id === d.zonaid) || null
 
   // ── motor de precios — EL MISMO que "Nuevo prospecto" ──────────
   // catálogo de Precios (map_precio) para resolver el "Monto Área" y el
@@ -274,6 +283,14 @@ export default function formularioexpress() {
 
   async function guardar() {
     setcampos([])
+    // validacion preventiva LOCAL: si la zona elegida ya se ve ocupada en el
+    // mapa que tenemos cargado, ni se intenta el guardado — se avisa aqui
+    // mismo. crear_express() vuelve a verificar en vivo contra Supabase por
+    // si se ocupo justo despues de que se cargo este mapa.
+    if (d.zonaid && d.juegoid && estado_vivo(areasestados, d.juegoid, d.zonaid) !== 'libre') {
+      setcampos(['zona'])
+      return
+    }
     const r = await crear_express({
       ...d, zona: zonaelegida ? zonaelegida.nombre : '', areamonto, minpersonas, cupon,
     })
@@ -441,13 +458,15 @@ export default function formularioexpress() {
               onKeyDown={alenter_avanzar(refzona)}
             >
               <option value="">
-                {d.juegoid ? '— Selecciona una zona libre —' : '— Elige primero el juego —'}
+                {d.juegoid ? '— Selecciona una zona —' : '— Elige primero el juego —'}
               </option>
-              {zonaslibres.map((a) => (
-                <option key={a.id} value={a.id}>{a.nombre}</option>
+              {zonasconestado.map(({ area: a, libre }) => (
+                <option key={a.id} value={a.id} disabled={!libre}>
+                  {a.nombre}{!libre ? ' (Ocupada)' : ''}
+                </option>
               ))}
             </select>
-            {d.juegoid && !zonaslibres.length && (
+            {d.juegoid && !hayzonaslibres && (
               <div className="re-ayuda" style={{ color: 'var(--rojo)' }}>
                 No hay zonas libres para este juego.
               </div>

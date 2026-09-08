@@ -180,7 +180,33 @@ export function usereservaexpress() {
 
       setguardando(true)
       try {
-        // 1. FICHA DE CLIENTE — mejor esfuerzo, no fatal: un fallo aqui deja
+        // 1. VALIDACION PREVENTIVA: re-verificar la zona EN VIVO contra
+        // Supabase, no contra el catálogo que trae el formulario — el
+        // formulario pudo llevar minutos abierto mientras se habla por
+        // teléfono, y alguien más pudo ocuparla mientras tanto. Mismo
+        // criterio que convertir_a_prospecto() en
+        // usecotizacionesescritura.js: zona_juego_estado primero y, por si
+        // se apartó con una reserva real que aún no dejó su marca ahí,
+        // también reservas activas sobre la misma zona/juego.
+        try {
+          let ocupada = false
+          const rz = await sb.from('zona_juego_estado').select('estado')
+            .eq('juego_id', datos.juegoid).eq('zona_id', datos.zonaid).maybeSingle()
+          if (!rz.error && rz.data && rz.data.estado && rz.data.estado !== 'libre') ocupada = true
+          if (!ocupada) {
+            const rr = await sb.from('reservas').select('id, estado')
+              .eq('zona_id', datos.zonaid).eq('juego_id', datos.juegoid)
+            if (!rr.error && (rr.data || []).some((r) => !/cancelad/i.test(r.estado || ''))) ocupada = true
+          }
+          if (ocupada) {
+            mostrartoast('⛔ Esa zona ya fue ocupada por otra persona. Elige otra.', 8000)
+            return { ok: false, campos: ['zona'] }
+          }
+        } catch (edisp) {
+          console.error('Verificación de disponibilidad en vivo falló (Reserva Exprés):', edisp)
+        }
+
+        // 2. FICHA DE CLIENTE — mejor esfuerzo, no fatal: un fallo aqui deja
         // la tarjeta sin vincular a su ficha, no sin guardar. Identidad
         // nombre+telefono, igual que en todo el panel.
         let clienteid = null
@@ -201,7 +227,7 @@ export function usereservaexpress() {
           console.error('Alta de cliente desde Reserva Exprés falló (no-fatal):', e)
         }
 
-        // 2. LA TARJETA, directo en "Reserva Momentánea".
+        // 3. LA TARJETA, directo en "Reserva Momentánea".
         const notas = datos.notas || ''
 
         const folio = nuevo_folio_prospecto(pipeline)
@@ -247,7 +273,7 @@ export function usereservaexpress() {
           if (!r.ok) console.warn('codigo_descuento no se guardó:', r.motivo)
         }
 
-        // 3. BLOQUEAR LA ZONA en vivo — el paso que distingue a esta
+        // 4. BLOQUEAR LA ZONA en vivo — el paso que distingue a esta
         // pantalla del alta normal de un prospecto. No-fatal para la
         // tarjeta (ya se guardó); si falla, se avisa para marcarla a mano.
         const bloq = await bloquear_zona_directo(datos.juegoid, datos.zonaid, 'reservada')
