@@ -44,6 +44,70 @@ export function puede_bloquearse(areasestados, juegoid, zonaid) {
   return estado_vivo(areasestados, juegoid, zonaid) !== 'reservada'
 }
 
+// ── DISPONIBILIDAD EN VIVO DE UN JUEGO (para selectores, no para pintar) ──
+// El mapa publico (api/sitio.js → zonaEstados()) pinta el gris leyendo
+// zona_juego_estado DIRECTO de Supabase en cada seleccion de juego — nunca
+// contra un cache. Cualquier <select> de zona que arme su lista contra
+// `areasestados` (el mapa que trae useadmindatos/admindatoscontext, cargado
+// UNA VEZ al abrir la sesion y solo refrescado cuando algo llama recargar())
+// puede quedarse desfasado si otra sesion ocupa una zona mientras la pantalla
+// ya estaba abierta — esa es la causa real del "el selector no coincide con
+// el mapa" reportado en /reserva-express.
+//
+// Esta funcion es el equivalente para selectores: la MISMA tabla y el MISMO
+// filtro (`zona_juego_estado` por `juego_id`) que zonaEstados(), consultados
+// DIRECTO via el cliente de Supabase ya autenticado del panel (sin pasar por
+// el endpoint publico /api/sitio, que exige service_role y no corre en
+// `npm run dev` local) — y ADEMAS, a diferencia del mapa publico, tambien
+// reservas activas y prospectos con zona ya asignada: el mapa deliberadamente
+// no los mira (ver el comentario "EL HOLD DEL CHECKOUT NO SE PINTA" en
+// api/sitio.js), pero un selector de venta SI debe evitar ofrecer una zona
+// que otra vendedora ya tiene comprometida, aunque el bloqueo manual en
+// zona_juego_estado todavia no se haya escrito (p. ej. si bloquear_zona_directo
+// fallo y solo quedo el aviso "zona NO bloqueada").
+export async function zonas_ocupadas_en_vivo(sb, juegoid) {
+  const ocupadas = new Set()
+  if (!juegoid) return ocupadas
+
+  const [rz, rr, rp] = await Promise.allSettled([
+    sb.from('zona_juego_estado').select('zona_id, estado').eq('juego_id', juegoid),
+    sb.from('reservas').select('zona_id, estado').eq('juego_id', juegoid),
+    sb.from('pipeline_prospectos').select('zona_id, etapa').eq('juego', juegoid),
+  ])
+
+  if (rz.status === 'fulfilled' && !rz.value.error) {
+    (rz.value.data || []).forEach((f) => {
+      if (f.zona_id != null && f.estado && f.estado !== 'libre') ocupadas.add(String(f.zona_id))
+    })
+  } else {
+    console.warn('zonas_ocupadas_en_vivo: no se pudo leer zona_juego_estado', rz.reason || rz.value?.error)
+  }
+
+  if (rr.status === 'fulfilled' && !rr.value.error) {
+    (rr.value.data || []).forEach((f) => {
+      if (f.zona_id != null && !/cancelad/i.test(f.estado || '')) ocupadas.add(String(f.zona_id))
+    })
+  } else {
+    console.warn('zonas_ocupadas_en_vivo: no se pudo leer reservas', rr.reason || rr.value?.error)
+  }
+
+  // Solo la "Reserva Momentanea" de /reserva-express llena zona_id de forma
+  // confiable en pipeline_prospectos (el modal "Nuevo prospecto" solo guarda
+  // el nombre de zona en texto libre) — cuando existe, es una zona comprometida
+  // aunque su bloqueo en zona_juego_estado haya fallado. 'descartado' es el
+  // unico estado terminal que libera: una tarjeta cerrada o completada siguio
+  // siendo una venta real.
+  if (rp.status === 'fulfilled' && !rp.value.error) {
+    (rp.value.data || []).forEach((f) => {
+      if (f.zona_id != null && f.etapa !== 'descartado') ocupadas.add(String(f.zona_id))
+    })
+  } else {
+    console.warn('zonas_ocupadas_en_vivo: no se pudo leer pipeline_prospectos', rp.reason || rp.value?.error)
+  }
+
+  return ocupadas
+}
+
 // El upsert devuelve { ok, motivo, error }. NUNCA lanza.
 //
 // Esto se VERIFICA con .select() como todo lo demas. En la v1 era

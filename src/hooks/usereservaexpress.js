@@ -55,7 +55,7 @@ import useadmindatos from './useadmindatos'
 import { usetoast } from '../context/toastcontext'
 import { buscar_cliente, tel_norm } from '../lib/clientes'
 import { es_error_columna, registrar_movimiento, subset_legacy } from '../lib/escritura'
-import { estados_zona, texto_fallo_estado } from '../lib/mapaocupacion'
+import { estados_zona, texto_fallo_estado, zonas_ocupadas_en_vivo } from '../lib/mapaocupacion'
 import { calc_total_prospecto, nuevo_folio_prospecto } from '../lib/prospectos'
 import { email_valido } from '../lib/reservasadmin'
 import { hoy_hermosillo } from '../lib/fechas'
@@ -183,22 +183,14 @@ export function usereservaexpress() {
         // 1. VALIDACION PREVENTIVA: re-verificar la zona EN VIVO contra
         // Supabase, no contra el catálogo que trae el formulario — el
         // formulario pudo llevar minutos abierto mientras se habla por
-        // teléfono, y alguien más pudo ocuparla mientras tanto. Mismo
-        // criterio que convertir_a_prospecto() en
-        // usecotizacionesescritura.js: zona_juego_estado primero y, por si
-        // se apartó con una reserva real que aún no dejó su marca ahí,
-        // también reservas activas sobre la misma zona/juego.
+        // teléfono, y alguien más pudo ocuparla mientras tanto. Misma
+        // funcion que arma la lista del <select> en formularioexpress.jsx
+        // (zonas_ocupadas_en_vivo: zona_juego_estado + reservas activas +
+        // prospectos con zona asignada), para que el guardado nunca acepte
+        // algo que el propio selector ya habria mostrado como "(Ocupada)".
         try {
-          let ocupada = false
-          const rz = await sb.from('zona_juego_estado').select('estado')
-            .eq('juego_id', datos.juegoid).eq('zona_id', datos.zonaid).maybeSingle()
-          if (!rz.error && rz.data && rz.data.estado && rz.data.estado !== 'libre') ocupada = true
-          if (!ocupada) {
-            const rr = await sb.from('reservas').select('id, estado')
-              .eq('zona_id', datos.zonaid).eq('juego_id', datos.juegoid)
-            if (!rr.error && (rr.data || []).some((r) => !/cancelad/i.test(r.estado || ''))) ocupada = true
-          }
-          if (ocupada) {
+          const ocupadas = await zonas_ocupadas_en_vivo(sb, datos.juegoid)
+          if (ocupadas.has(String(datos.zonaid))) {
             mostrartoast('⛔ Esa zona ya fue ocupada por otra persona. Elige otra.', 8000)
             return { ok: false, campos: ['zona'] }
           }
