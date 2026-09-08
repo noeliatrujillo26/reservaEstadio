@@ -54,6 +54,7 @@ import useadmin from '../../hooks/useadmin'
 import usereservaexpress from '../../hooks/usereservaexpress'
 import { catalogo_clientes, cliente_coincide } from '../../lib/clientes'
 import { validar_codigo_descuento } from '../../lib/catalogos'
+import { categoria_sec } from '../../lib/dashboard'
 import { zonas_ocupadas_en_vivo } from '../../lib/mapaocupacion'
 import { map_precio } from '../../lib/preciosadmin'
 import { calc_total_prospecto } from '../../lib/prospectos'
@@ -236,6 +237,22 @@ export default function formularioexpress() {
   )
 
   const zonaelegida = (areas || []).find((a) => a.id === d.zonaid) || null
+
+  // Palcos van con catering propio (all-inclusive) — el selector de "Tipo de
+  // comida" (carne asada / discada) no aplica ahi. categoria_sec() es la
+  // MISMA regla que usa el resto del panel (badge "Palco" en Reservas,
+  // dashboard) para clasificar una zona por su nombre.
+  const escategoriapalco = zonaelegida ? categoria_sec(zonaelegida.nombre) === 'Palco' : false
+
+  // al elegir una zona: si es Palco se limpia el tipo de comida (no aplica),
+  // y si se vuelve a una zona con comida se restaura el default — sin pisar
+  // una eleccion valida ya hecha en una zona con comida.
+  useEffect(() => {
+    if (!zonaelegida) return
+    if (escategoriapalco && d.tipocomida) set('tipocomida', '')
+    else if (!escategoriapalco && !d.tipocomida) set('tipocomida', 'carne_asada')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zonaelegida, escategoriapalco])
 
   // ── motor de precios — EL MISMO que "Nuevo prospecto" ──────────
   // catálogo de Precios (map_precio) para resolver el "Monto Área" y el
@@ -532,23 +549,25 @@ export default function formularioexpress() {
             </div>
           )}
 
-          <div className="re-campo">
-            <label>Tipo de comida</label>
-            <div className="re-segmento">
-              <button
-                type="button" className={d.tipocomida === 'carne_asada' ? 'activo' : ''}
-                onClick={() => set('tipocomida', 'carne_asada')}
-              >
-                🥩 Carne asada
-              </button>
-              <button
-                type="button" className={d.tipocomida === 'discada' ? 'activo' : ''}
-                onClick={() => set('tipocomida', 'discada')}
-              >
-                🌮 Discada
-              </button>
+          {!escategoriapalco && (
+            <div className="re-campo">
+              <label>Tipo de comida</label>
+              <div className="re-segmento">
+                <button
+                  type="button" className={d.tipocomida === 'carne_asada' ? 'activo' : ''}
+                  onClick={() => set('tipocomida', 'carne_asada')}
+                >
+                  🥩 Carne asada
+                </button>
+                <button
+                  type="button" className={d.tipocomida === 'discada' ? 'activo' : ''}
+                  onClick={() => set('tipocomida', 'discada')}
+                >
+                  🌮 Discada
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="re-campo">
             <label>Vendedora</label>
@@ -757,7 +776,7 @@ export default function formularioexpress() {
               className="re-btn re-btn-whatsapp" disabled={compartiendo}
               onClick={() => compartir_whatsapp(exito)}
             >
-              {compartiendo ? 'Preparando ticket…' : '🟢 Enviar ticket por WhatsApp'}
+              {compartiendo ? 'Preparando ticket…' : 'Enviar ticket por WhatsApp'}
             </button>
             <button className="re-btn re-btn-primario" onClick={nuevaReserva}>
               ¡Listo!
