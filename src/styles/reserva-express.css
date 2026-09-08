@@ -1,0 +1,195 @@
+/* ═══════════════════════════════════════════════════════════════════
+   reserva-express.css — /reserva-express, mobile-first.
+   Sin equivalente en la v1: pantalla nueva, pensada para un celular en
+   plena llamada (inputs y botones grandes, una sola columna).
+
+   Acotada bajo .pagina-reserva-express, igual que legales.css/
+   panel-reserva.css: el css de la spa se junta en un solo bundle y estas
+   reglas no deben chocar con las de panel-inicio.css (cargado siempre) ni
+   con las de admin.css (si esta pestaña abre /admin en otra pestaña).
+   ═══════════════════════════════════════════════════════════════════ */
+
+.pagina-reserva-express {
+  --naranja: #E05C1A;
+  --naranja-dark: #B84A12;
+  --verde: #16A34A;
+  --rojo: #DC2626;
+  --rojo-bg: #FEE2E2;
+  --texto: #16181D;
+  --texto-suave: #5A6478;
+  --texto-tenue: #8A94A8;
+  --borde: #E5E7EB;
+  --fondo: #F5F6F8;
+  --tarjeta: #FFFFFF;
+
+  min-height: 100vh;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+.pagina-reserva-express * { box-sizing: border-box; }
+
+.pagina-reserva-express .re-cargando {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  font-size: 13px; color: var(--texto-tenue); padding: 40px 20px; text-align: center;
+}
+
+/* ── pantalla de acceso (sesión de administrador) ── */
+.pagina-reserva-express .re-acceso {
+  flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px 16px;
+}
+.pagina-reserva-express .re-acceso-card {
+  width: 100%; max-width: 380px; background: var(--tarjeta); border: 1px solid var(--borde);
+  border-radius: 18px; padding: 28px 22px; box-shadow: 0 12px 40px rgba(0,0,0,.08);
+}
+.pagina-reserva-express .re-logo { height: 38px; width: auto; display: block; margin: 0 auto 14px; object-fit: contain; }
+.pagina-reserva-express .re-logo-link { display: block; text-decoration: none; border-radius: 8px; }
+.pagina-reserva-express .re-logo-link:focus-visible { outline: 2px solid var(--naranja); outline-offset: 2px; }
+.pagina-reserva-express .re-acceso-card h1 { font-size: 19px; font-weight: 800; text-align: center; margin-bottom: 4px; }
+.pagina-reserva-express .re-sub { font-size: 13px; color: var(--texto-suave); text-align: center; margin-bottom: 22px; line-height: 1.5; }
+.pagina-reserva-express .re-error {
+  font-size: 12.5px; color: var(--rojo); background: var(--rojo-bg); border-radius: 8px;
+  padding: 10px 12px; margin-bottom: 14px; font-weight: 600;
+}
+
+/* ── layout general del formulario ── */
+.pagina-reserva-express .re-topbar {
+  position: sticky; top: 0; z-index: 20; background: var(--tarjeta); border-bottom: 1px solid var(--borde);
+  padding: 14px 18px; display: flex; align-items: center; gap: 10px;
+}
+.pagina-reserva-express .re-topbar img { height: 26px; width: auto; object-fit: contain; }
+.pagina-reserva-express .re-topbar .re-logo-link { display: inline-flex; flex-shrink: 0; }
+.pagina-reserva-express .re-topbar-titulo { font-size: 15px; font-weight: 800; flex: 1; }
+.pagina-reserva-express .re-topbar-usuario { font-size: 11.5px; color: var(--texto-tenue); text-align: right; line-height: 1.35; }
+.pagina-reserva-express .re-salir {
+  background: none; border: none; color: var(--texto-tenue); font-size: 18px; line-height: 1;
+  cursor: pointer; padding: 6px; flex-shrink: 0;
+}
+
+.pagina-reserva-express .re-form { flex: 1; padding: 18px 16px 100px; max-width: 560px; width: 100%; margin: 0 auto; }
+
+.pagina-reserva-express .re-seccion { margin-bottom: 22px; }
+.pagina-reserva-express .re-seccion-titulo {
+  font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px;
+  color: var(--naranja); margin-bottom: 10px; display: flex; align-items: center; gap: 6px;
+}
+
+.pagina-reserva-express .re-campo { margin-bottom: 14px; }
+.pagina-reserva-express .re-campo label {
+  display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; color: var(--texto);
+}
+.pagina-reserva-express .re-fila-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* ── buscador de cliente con autocompletado (idéntico en función a
+   nuevoprospecto.jsx: catalogo_clientes + cliente_coincide) ── */
+.pagina-reserva-express .re-dropdown {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 500;
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px;
+  max-height: 220px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0,0,0,.15);
+}
+.pagina-reserva-express .re-dropdown-item {
+  padding: 12px 14px; cursor: pointer; border-bottom: 1px solid var(--borde); font-size: 13.5px;
+}
+.pagina-reserva-express .re-dropdown-item:last-child { border-bottom: none; }
+.pagina-reserva-express .re-dropdown-item:hover,
+.pagina-reserva-express .re-dropdown-item:active,
+.pagina-reserva-express .re-dropdown-item.resaltado { background: var(--fondo); }
+.pagina-reserva-express .re-dropdown-nombre { font-weight: 700; color: var(--texto); }
+.pagina-reserva-express .re-dropdown-sub { font-size: 11.5px; color: var(--texto-tenue); margin-top: 2px; }
+
+.pagina-reserva-express .re-cliente-elegido {
+  background: #F0FDF4; border: 1.5px solid var(--verde); border-radius: 12px;
+  padding: 12px 14px; min-height: 50px; display: flex; align-items: center;
+  justify-content: space-between; gap: 10px;
+}
+.pagina-reserva-express .re-cliente-elegido-nombre { font-size: 14.5px; font-weight: 700; color: var(--texto); }
+.pagina-reserva-express .re-cliente-elegido-cambiar {
+  background: none; border: none; cursor: pointer; color: var(--texto-tenue);
+  font-size: 22px; line-height: 1; padding: 4px 6px; flex-shrink: 0;
+}
+
+.pagina-reserva-express .re-input,
+.pagina-reserva-express .re-select,
+.pagina-reserva-express .re-textarea {
+  width: 100%; min-height: 50px; padding: 12px 14px; border: 1.5px solid var(--borde);
+  border-radius: 12px; font-size: 16px; font-family: inherit; background: var(--tarjeta);
+  color: var(--texto); transition: border-color .15s;
+}
+.pagina-reserva-express .re-textarea { min-height: 76px; resize: vertical; }
+.pagina-reserva-express .re-input:focus,
+.pagina-reserva-express .re-select:focus,
+.pagina-reserva-express .re-textarea:focus {
+  outline: none; border-color: var(--naranja);
+}
+.pagina-reserva-express .re-input.re-error,
+.pagina-reserva-express .re-select.re-error { border-color: var(--rojo); background: var(--rojo-bg); }
+.pagina-reserva-express .re-input:disabled,
+.pagina-reserva-express .re-select:disabled { background: var(--fondo); color: var(--texto-tenue); }
+.pagina-reserva-express .re-ayuda { font-size: 11.5px; color: var(--texto-tenue); margin-top: 5px; line-height: 1.4; }
+
+/* selector grande tipo "segmented control" — Carne asada / Discada */
+.pagina-reserva-express .re-segmento { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pagina-reserva-express .re-segmento button {
+  min-height: 52px; border-radius: 12px; border: 1.5px solid var(--borde); background: var(--tarjeta);
+  font-size: 14.5px; font-weight: 700; color: var(--texto-suave); cursor: pointer;
+}
+.pagina-reserva-express .re-segmento button.activo {
+  border-color: var(--naranja); background: #FFF0E8; color: var(--naranja-dark);
+}
+
+.pagina-reserva-express .re-resumen {
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 14px;
+  padding: 14px 16px; font-size: 13px; color: var(--texto-suave); margin-bottom: 18px;
+}
+.pagina-reserva-express .re-resumen strong { color: var(--texto); }
+.pagina-reserva-express .re-resumen .re-resumen-total {
+  font-size: 20px; font-weight: 800; color: var(--naranja-dark); margin-top: 4px;
+}
+
+/* ── botón principal, fijo abajo para el pulgar ── */
+.pagina-reserva-express .re-cta-wrap {
+  position: sticky; bottom: 0; background: linear-gradient(to top, var(--fondo) 60%, transparent);
+  padding: 14px 16px 18px;
+}
+.pagina-reserva-express .re-btn {
+  width: 100%; min-height: 54px; border-radius: 14px; border: none; font-size: 16px; font-weight: 800;
+  cursor: pointer; font-family: inherit;
+}
+.pagina-reserva-express .re-btn-primario { background: var(--naranja); color: #fff; box-shadow: 0 8px 24px rgba(224,92,26,.35); }
+.pagina-reserva-express .re-btn-primario:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
+.pagina-reserva-express .re-btn-secundario { background: var(--tarjeta); color: var(--texto-suave); border: 1.5px solid var(--borde); }
+
+/* ── pantalla de éxito ── */
+.pagina-reserva-express .re-exito-overlay {
+  position: fixed; inset: 0; z-index: 200; background: rgba(20,22,28,.55);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.pagina-reserva-express .re-exito-card {
+  width: 100%; max-width: 400px; background: var(--tarjeta); border-radius: 20px;
+  padding: 32px 26px 26px; text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,.3);
+}
+.pagina-reserva-express .re-exito-icono {
+  width: 64px; height: 64px; border-radius: 50%; background: #DCFCE7; color: var(--verde);
+  display: flex; align-items: center; justify-content: center; font-size: 32px; margin: 0 auto 16px;
+}
+.pagina-reserva-express .re-exito-card h2 { font-size: 19px; font-weight: 800; margin-bottom: 6px; }
+.pagina-reserva-express .re-exito-folio {
+  font-size: 26px; font-weight: 800; color: var(--naranja); letter-spacing: .5px; margin: 6px 0 14px;
+}
+.pagina-reserva-express .re-exito-detalle {
+  text-align: left; background: var(--fondo); border-radius: 12px; padding: 12px 14px;
+  font-size: 13px; color: var(--texto-suave); line-height: 1.7; margin-bottom: 18px;
+}
+.pagina-reserva-express .re-exito-detalle strong { color: var(--texto); }
+.pagina-reserva-express .re-exito-aviso {
+  font-size: 12px; color: var(--rojo); background: var(--rojo-bg); border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 16px; line-height: 1.5; text-align: left;
+}
+
+@media (min-width: 640px) {
+  .pagina-reserva-express .re-form { padding-top: 26px; }
+  .pagina-reserva-express .re-cta-wrap { position: static; background: none; padding: 6px 0 0; }
+}

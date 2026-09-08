@@ -1,9 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════
 // App.jsx — rutas de la spa. cada ruta corresponde a un .html de la v1:
-//   /              → panel-inicio.html
-//   /mis-reservas  → panel-reserva.html
-//   /legales       → legales.html
-//   /admin         → index.html de la v1 (panel de administracion)
+//   /                → panel-inicio.html
+//   /mis-reservas    → panel-reserva.html
+//   /legales         → legales.html
+//   /admin           → index.html de la v1 (panel de administracion)
+//   /reserva-express → sin equivalente en la v1: alta express de una
+//                      Reserva Momentánea, mobile-first, con la MISMA sesión
+//                      de administrador que /admin (ver ReservaExpress.jsx).
 //
 // CARGA DIFERIDA: la landing es lo unico que viaja en el bundle inicial. El
 // panel de administracion, el portal y las paginas legales se descargan solo
@@ -18,6 +21,7 @@ import Inicio from './pages/inicio'
 const Legales = lazy(() => import('./pages/legales'))
 const MisReservas = lazy(() => import('./pages/misreservas'))
 const Admin = lazy(() => import('./pages/admin'))
+const ReservaExpress = lazy(() => import('./pages/ReservaExpress'))
 
 // mientras baja el trozo de la ruta. discreto a proposito: en una conexion
 // normal apenas se alcanza a ver.
@@ -46,6 +50,10 @@ export default function app() {
       <Route
         path="/admin"
         element={<Suspense fallback={<Cargando />}><Admin /></Suspense>}
+      />
+      <Route
+        path="/reserva-express"
+        element={<Suspense fallback={<Cargando />}><ReservaExpress /></Suspense>}
       />
     </Routes>
   )
