@@ -62,7 +62,7 @@ const vacio = {
   juegoid: '', zonaid: '', tipocomida: 'carne_asada',
   adultoextracant: '', ninoextracant: '', vendedora: '',
   consumomonto: '', extramonto: '', adultoextraprecio: '', ninoextraprecio: '',
-  descuento: '', abonoinicial: '', notas: '',
+  descuento: '', notas: '',
 }
 
 function fecha_juego(j) {
@@ -114,11 +114,10 @@ export default function formularioexpress() {
   const refninos = useRef(null)
   const refdescuento = useRef(null)
   const refcodigo = useRef(null)
-  const refabono = useRef(null)
   const refnotas = useRef(null)
   const ordenrefs = [
     reftelefono, refemail, refjuego, refzona, refconsumo, refvendedora,
-    refextra, refadultos, refninos, refdescuento, refcodigo, refabono, refnotas,
+    refextra, refadultos, refninos, refdescuento, refcodigo, refnotas,
   ]
 
   // enfoca el primer campo DESPUES de refactual que no esté deshabilitado
@@ -133,7 +132,7 @@ export default function formularioexpress() {
 
   // Enter en un campo de la cadena: nunca envia nada (no hay <form>), solo
   // avanza. Se usa en Teléfono/Email/Juego/Zona/Consumo/Vendedora/Extra/
-  // Adultos/Niños/Descuento/Abono.
+  // Adultos/Niños/Descuento.
   function alenter_avanzar(refactual) {
     return (e) => {
       if (e.key !== 'Enter') return
@@ -281,7 +280,7 @@ export default function formularioexpress() {
     if (r && r.ok) {
       setexito({
         folio: r.folio, nombre: d.nombre, zona: zonaelegida ? zonaelegida.nombre : '',
-        juego, monto: r.monto, abonoinicial: d.abonoinicial, avisobloqueo: r.avisobloqueo,
+        juego, monto: r.monto, avisobloqueo: r.avisobloqueo,
       })
     } else if (r && r.campos) {
       setcampos(r.campos)
@@ -600,7 +599,7 @@ export default function formularioexpress() {
                       if (e.key !== 'Enter') return
                       e.preventDefault()
                       aplicar_codigo()
-                      if (refabono.current) refabono.current.focus()
+                      if (refnotas.current) refnotas.current.focus()
                     }}
                     placeholder="Ej. NARANJEROS10"
                   />
@@ -626,17 +625,6 @@ export default function formularioexpress() {
               {mensajecupon.texto}
             </div>
           )}
-
-          <div className="re-campo">
-            <label>Abono Inicial ($)</label>
-            <input
-              ref={refabono}
-              className="re-input" type="number" min="0" step="0.01" inputMode="decimal"
-              value={d.abonoinicial} onChange={(e) => set('abonoinicial', e.target.value)}
-              onKeyDown={alenter_avanzar(refabono)}
-              placeholder="0.00"
-            />
-          </div>
 
           <div className="re-campo">
             <label>Notas (opcional)</label>
@@ -688,9 +676,6 @@ export default function formularioexpress() {
         <div className="re-resumen">
           <div><strong>{d.nombre || 'Cliente'}</strong> · {zonaelegida ? zonaelegida.nombre : 'Sin zona'}</div>
           <div>{juego ? fecha_juego(juego) + ' · vs ' + juego.rival : 'Sin juego seleccionado'}</div>
-          {Number(d.abonoinicial) > 0 && (
-            <div>Abono inicial acordado: {money(d.abonoinicial)}</div>
-          )}
         </div>
       </div>
 
@@ -714,9 +699,6 @@ export default function formularioexpress() {
               <div><strong>Zona:</strong> {exito.zona}</div>
               {exito.juego && <div><strong>Juego:</strong> {fecha_juego(exito.juego)} · vs {exito.juego.rival}</div>}
               <div><strong>Monto:</strong> {money(exito.monto)}</div>
-              {Number(exito.abonoinicial) > 0 && (
-                <div><strong>Abono acordado:</strong> {money(exito.abonoinicial)}</div>
-              )}
             </div>
             {exito.avisobloqueo ? (
               <div className="re-exito-aviso">{exito.avisobloqueo}</div>

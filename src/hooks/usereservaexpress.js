@@ -58,14 +58,11 @@ import { es_error_columna, registrar_movimiento, subset_legacy } from '../lib/es
 import { estados_zona, texto_fallo_estado } from '../lib/mapaocupacion'
 import { calc_total_prospecto, nuevo_folio_prospecto } from '../lib/prospectos'
 import { email_valido } from '../lib/reservasadmin'
-import { redondear_dinero, mxn2 } from '../lib/dinero'
 import { hoy_hermosillo } from '../lib/fechas'
 
 const claves_legacy_prospecto = [
   'id', 'nombre', 'zona', 'serie', 'monto', 'etapa', 'badge', 'notas', 'vendedora', 'juego', 'tel',
 ]
-
-const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2)
 
 // ── escritura verificada SIN el candado de permisos por rol/bandera ──
 // Mismo criterio de interpretacion que interpretar() en escritura.js: error
@@ -152,7 +149,7 @@ export function usereservaexpress() {
   //           areamonto, minpersonas, consumomonto, extramonto,
   //           adultoextraprecio, adultoextracant, ninoextraprecio,
   //           ninoextracant, descuento, cupon: {codigo,tipo,valor}|null,
-  //           vendedora, notas, abonoinicial }
+  //           vendedora, notas }
   // El monto NO se pasa: se calcula aqui con calc_total_prospecto(), el
   // MISMO motor que usa "Nuevo prospecto" — lo que ve el formulario en su
   // tarjeta de desglose es EXACTAMENTE lo que se guarda.
@@ -204,16 +201,8 @@ export function usereservaexpress() {
           console.error('Alta de cliente desde Reserva Exprés falló (no-fatal):', e)
         }
 
-        // 2. LA TARJETA, directo en "Reserva Momentánea". El abono inicial
-        // NO se registra como cobro aqui (eso exige forma de pago y, casi
-        // siempre, comprobante — dos cosas que no caben en una llamada):
-        // queda anotado en notas para que quien la atienda lo cobre desde
-        // "+ Registrar pago" en el detalle de la tarjeta.
-        const abono = Number(datos.abonoinicial) || 0
-        const notas = [
-          datos.notas || '',
-          abono > 0 ? 'Abono inicial acordado por teléfono: ' + money(abono) + ' — pendiente de registrar el cobro.' : '',
-        ].filter(Boolean).join('\n')
+        // 2. LA TARJETA, directo en "Reserva Momentánea".
+        const notas = datos.notas || ''
 
         const folio = nuevo_folio_prospecto(pipeline)
         const id = 'pp' + Date.now()
