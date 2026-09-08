@@ -700,19 +700,12 @@ export default function formularioexpress() {
               {exito.juego && <div><strong>Juego:</strong> {fecha_juego(exito.juego)} · vs {exito.juego.rival}</div>}
               <div><strong>Monto:</strong> {money(exito.monto)}</div>
             </div>
-            {exito.avisobloqueo ? (
+            {exito.avisobloqueo && (
               <div className="re-exito-aviso">{exito.avisobloqueo}</div>
-            ) : (
-              <div className="re-ayuda" style={{ marginBottom: '16px' }}>
-                🟢 La zona quedó bloqueada de inmediato en el mapa.
-              </div>
             )}
-            <button className="re-btn re-btn-primario" onClick={nuevaReserva} style={{ marginBottom: '10px' }}>
-              + Crear otra reserva
+            <button className="re-btn re-btn-primario" onClick={nuevaReserva}>
+              ¡Listo!
             </button>
-            <a href="/admin" className="re-btn re-btn-secundario" style={{ textDecoration: 'none' }}>
-              Ir al Pipeline Comercial
-            </a>
           </div>
         </div>
       )}
