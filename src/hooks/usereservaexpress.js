@@ -31,21 +31,24 @@
 //      parametros publicos — aqui SI se valida un codigo contra el catalogo
 //      YA CARGADO (ver validar_codigo_descuento en lib/catalogos.js) y se le
 //      pasa a calc_total_prospecto() tal como espera.
-//   3. Ademas de crear la tarjeta, este flujo BLOQUEA la zona en
-//      zona_juego_estado de inmediato — un paso que en el resto del panel
-//      solo ocurre al GENERAR LA RESERVA real (generar_reserva, mas
-//      adelante en el embudo). Es una desviacion deliberada: el proposito
-//      de esta pantalla es apartar el lugar YA, mientras se sigue
-//      platicando con el cliente.
+//   3. Ademas de crear la tarjeta, este flujo GENERA LA RESERVA FORMAL de
+//      inmediato (folio NRJ-ADM-XXXXX, fila real en `reservas`, zona
+//      'reservada') — el mismo resultado que "🏟 Generar Reserva" en el
+//      detalle de un prospecto (generar_reserva, useprospectos.js), pero
+//      disparado EN EL MISMO CLIC en vez de como un paso posterior. Sigue
+//      siendo una desviacion deliberada del resto del panel (alli una
+//      reserva nace despues, cuando ya hay abono o se marca "Pendiente"):
+//      aqui el proposito es cerrar la venta YA, en plena llamada, sin
+//      esperar un segundo clic desde el Pipeline.
 //
 // Por lo demas reutiliza las MISMAS piezas probadas que useprospectos.js:
-// nuevo_folio_prospecto (folio aleatorio verificado), calc_total_prospecto
-// (EL MISMO motor de precios que "Nuevo prospecto" — area/zona, consumo,
-// extra, adultos/niños extra, descuento manual y por volumen, y ahora
-// tambien un cupon de codigo resuelto por validar_codigo_descuento), es_
-// error_columna/subset_legacy/registrar_movimiento (de escritura.js) y
-// buscar_cliente (identidad nombre+telefono) para no duplicar una ficha ya
-// existente.
+// nuevo_folio_prospecto/generar_folio_reserva (folios aleatorios
+// verificados), calc_total_prospecto (EL MISMO motor de precios que "Nuevo
+// prospecto" — area/zona, consumo, extra, adultos/niños extra, descuento
+// manual y por volumen, y ahora tambien un cupon de codigo resuelto por
+// validar_codigo_descuento), es_error_columna/subset_legacy/
+// registrar_movimiento (de escritura.js) y buscar_cliente (identidad
+// nombre+telefono) para no duplicar una ficha ya existente.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useCallback, useState } from 'react'
@@ -54,15 +57,38 @@ import useadmin from './useadmin'
 import useadmindatos from './useadmindatos'
 import { usetoast } from '../context/toastcontext'
 import { buscar_cliente, tel_norm } from '../lib/clientes'
+import { mxn2 } from '../lib/dinero'
 import { es_error_columna, registrar_movimiento, subset_legacy } from '../lib/escritura'
+import { leer_mensajes } from '../lib/mensajes'
 import { estados_zona, texto_fallo_estado, zonas_ocupadas_en_vivo } from '../lib/mapaocupacion'
 import { calc_total_prospecto, nuevo_folio_prospecto } from '../lib/prospectos'
-import { email_valido } from '../lib/reservasadmin'
+import { html_ticket_reserva, nombre_archivo_ticket } from '../lib/recibo'
+import { email_valido, etiqueta_juego, generar_folio_reserva } from '../lib/reservasadmin'
+import { subir_comprobante } from '../lib/storage'
 import { hoy_hermosillo } from '../lib/fechas'
 
 const claves_legacy_prospecto = [
   'id', 'nombre', 'zona', 'serie', 'monto', 'etapa', 'badge', 'notas', 'vendedora', 'juego', 'tel',
 ]
+
+const claves_legacy_reserva = [
+  'id', 'cliente', 'email', 'tel', 'zona', 'juego', 'juego_id', 'monto',
+  'descuento_monto', 'monto_pagado', 'pago', 'metodo', 'personas', 'estado', 'estado_pago',
+]
+
+function es_duplicado(error) {
+  return !!error && (error.code === '23505' || /duplicate key/i.test(error.message || ''))
+}
+
+const money = (n) => '$' + (Number(n) || 0).toLocaleString('es-MX', mxn2)
+
+// Sustituye {nombre}/{zona}/{juego}/{fecha}/{monto}/{folio} en una plantilla
+// de Ajustes → Mensajes (lib/mensajesdefault.js) — las MISMAS variables que
+// documenta esa pantalla. Un token sin valor se deja tal cual en vez de
+// desaparecer, para que un hueco se note en vez de dejar una frase coja.
+function rellenar_plantilla(txt, vars) {
+  return String(txt || '').replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null && vars[k] !== '' ? String(vars[k]) : m))
+}
 
 // ── escritura verificada SIN el candado de permisos por rol/bandera ──
 // Mismo criterio de interpretacion que interpretar() en escritura.js: error
@@ -136,9 +162,10 @@ async function bloquear_zona_directo(juegoid, zonaid, estado) {
 
 export function usereservaexpress() {
   const { usuario } = useadmin()
-  const { pipeline, clientes, areas, descuentosvolumen, recargar } = useadmindatos()
+  const { pipeline, clientes, areas, juegos, reservas, descuentosvolumen, recargar } = useadmindatos()
   const { mostrartoast } = usetoast()
   const [guardando, setguardando] = useState(false)
+  const [compartiendo, setcompartiendo] = useState(false)
 
   // toda la autorizacion que pide este modulo: que haya sesion de
   // administrador activa (ReservaExpress.jsx ya la exige antes de montar
@@ -265,15 +292,70 @@ export function usereservaexpress() {
           if (!r.ok) console.warn('codigo_descuento no se guardó:', r.motivo)
         }
 
-        // 4. BLOQUEAR LA ZONA en vivo — el paso que distingue a esta
-        // pantalla del alta normal de un prospecto. No-fatal para la
-        // tarjeta (ya se guardó); si falla, se avisa para marcarla a mano.
+        // 4. GENERAR LA RESERVA FORMAL — el mismo resultado que "🏟 Generar
+        // Reserva" en el detalle del prospecto (generar_reserva,
+        // useprospectos.js), replicado sin el candado de motivo_bloqueo por
+        // la misma razon de la cabecera de este archivo. Nace SIN pago
+        // ('Sin pago'/monto_pagado 0): eso es correcto — no se cobro nada
+        // todavia — y por lo mismo la tarjeta del pipeline se queda en
+        // 'reserva_momentanea' (regla de la casa: sin abono, ahi se queda;
+        // ver etapa_por_abono en lib/pipeline.js), sin necesidad de tocar su
+        // etapa aqui. No-fatal: si falla, la tarjeta y el bloqueo de zona de
+        // abajo siguen adelante — se avisa para generarla a mano.
+        let reservaid = null
+        let avisoreserva = null
+        try {
+          const j = (juegos || []).find((x) => String(x.id) === String(datos.juegoid))
+          const a = (areas || []).find((x) => x.id === datos.zonaid)
+          if (!j || !a) throw new Error('juego o zona no encontrados en el catálogo')
+
+          let nuevoid = generar_folio_reserva('admin', reservas)
+          let res = null
+          for (let intento = 0; intento < 5; intento++) {
+            res = await insertar_directo('reservas', {
+              id: nuevoid, cliente: datos.nombre, email: datos.email || '', tel,
+              zona: a.nombre, zona_id: a.id, juego: etiqueta_juego(j), juego_id: j.id,
+              // regla de la casa: monto = BRUTO (calc.subtotal), descuento
+              // aparte — igual que generar_reserva/bruto_tarjeta.
+              monto: calc.subtotal, descuento_monto: calc.descuentototal, monto_pagado: 0,
+              pago: 'Sin pago', metodo: 'Tarjeta', personas: calc.personas,
+              estado: 'Confirmada', estado_pago: 'pendiente',
+              adultos: calc.adultocant, ninos: calc.ninocant,
+              saldo_consumo: Number(datos.consumomonto) || 0,
+              cotizacion_id: null,
+            }, claves_legacy_reserva)
+            if (res.ok || !es_duplicado(res.error)) break
+            nuevoid = generar_folio_reserva('admin', reservas)
+          }
+
+          if (res.ok) {
+            reservaid = nuevoid
+            if (datos.cupon && datos.cupon.codigo) {
+              const rc = await actualizar_directo('reservas', { codigo_descuento: datos.cupon.codigo }, nuevoid, null)
+              if (!rc.ok) console.warn('codigo_descuento no se guardó en la reserva:', rc.motivo)
+            }
+            const vinc = await actualizar_directo('pipeline_prospectos', { reserva_ids: [nuevoid] }, id, null)
+            if (!vinc.ok) console.warn('reserva_ids no se pudo vincular a la tarjeta:', vinc.motivo)
+          } else {
+            avisoreserva = '⚠️ La zona quedó apartada, pero la reserva formal (folio NRJ) NO se pudo generar' +
+              (res.motivo === 'sin_filas' ? ' (0 filas — revisa las políticas RLS de `reservas`).' : '.') +
+              ' Genérala a mano desde el Pipeline.'
+          }
+        } catch (egen) {
+          console.error('Generar reserva formal falló (Reserva Exprés):', egen)
+          avisoreserva = '⚠️ La zona quedó apartada, pero la reserva formal (folio NRJ) NO se pudo generar. ' +
+            'Genérala a mano desde el Pipeline.'
+        }
+
+        // 5. BLOQUEAR LA ZONA en vivo. No-fatal para la tarjeta (ya se
+        // guardó); si falla, se avisa para marcarla a mano.
         const bloq = await bloquear_zona_directo(datos.juegoid, datos.zonaid, 'reservada')
         const avisobloqueo = !bloq.ok ? texto_fallo_estado(bloq, datos.zona) : null
 
         registrar_movimiento(sb, {
           tipo: 'Admin',
           desc: 'Reserva Exprés · Reserva Momentánea creada · ' + datos.nombre +
+            (reservaid ? ' · reserva ' + reservaid : ' · ⚠️ sin reserva formal') +
             (avisobloqueo ? ' · ⚠️ zona NO bloqueada' : ' · zona bloqueada'),
           ref: folio,
           monto: calc.total || null,
@@ -281,8 +363,15 @@ export function usereservaexpress() {
         })
 
         await recargar()
-        if (avisobloqueo) mostrartoast(avisobloqueo, 9000)
-        return { ok: true, folio, avisobloqueo, monto: calc.total }
+        // el toast tiene UNA sola ranura: si hay dos avisos, el segundo
+        // pisaria al primero antes de que se alcance a leer — se juntan en
+        // uno, mismo criterio que generar_reserva() en useprospectos.js.
+        const avisos = [avisoreserva, avisobloqueo].filter(Boolean)
+        if (avisos.length) mostrartoast(avisos.join(' · '), 9000)
+        return {
+          ok: true, folio, reservaid, avisobloqueo, avisoreserva,
+          monto: calc.total, personas: calc.personas,
+        }
       } catch (err) {
         console.error('crear reserva exprés:', err)
         mostrartoast('⚠️ No se pudo crear la reserva. Intenta de nuevo.')
@@ -291,10 +380,86 @@ export function usereservaexpress() {
         setguardando(false)
       }
     },
-    [usuario, guardando, pipeline, clientes, areas, descuentosvolumen, mostrartoast, recargar]
+    [usuario, guardando, pipeline, clientes, juegos, reservas, areas, descuentosvolumen, mostrartoast, recargar]
   )
 
-  return { puede, crear_express, guardando }
+  // ── COMPARTIR EL TICKET POR WHATSAPP ─────────────────────────────
+  // `exito` es el resumen que arma formularioexpress.jsx tras crear_express:
+  // { folio, reservaid, nombre, tel, zona, juego, monto, personas, vendedora }.
+  //
+  // El "PDF" del resto de la app es en realidad un documento HTML imprimible
+  // (window.print → "Guardar como PDF"), publicado en Storage y servido por
+  // /api/recibo?f=... con el Content-Type correcto — mismo patron que el
+  // recibo automatico de un pago (reciboauto.js + useprospectos.js
+  // registrar_pago), aqui aplicado a una reserva SIN pago porque express no
+  // cobra nada. El mensaje reutiliza la plantilla configurable de "Reserva
+  // momentánea" (Ajustes → Mensajes, msg-pip-reserva_momentanea): es la
+  // etapa en la que la tarjeta se queda, y su texto ya dice lo correcto —
+  // apartado sin cobro, falta el enganche — a diferencia de la plantilla de
+  // "confirmación" que habla de un monto YA pagado.
+  //
+  // window.open('', '_blank') se llama SINCRONO, antes de cualquier await:
+  // abrirlo despues de la subida a Storage lo hace bloqueable por el
+  // navegador (deja de contar como respuesta directa al clic). Se navega esa
+  // pestaña ya abierta hasta que el link esta listo.
+  const compartir_whatsapp = useCallback(
+    async (exito) => {
+      if (!exito) return { ok: false }
+      const ventana = window.open('', '_blank')
+      setcompartiendo(true)
+      try {
+        const juegolabel = exito.juego
+          ? etiqueta_juego(exito.juego) + ' · vs ' + exito.juego.rival
+          : ''
+        const fechalabel = exito.juego
+          ? new Date(exito.juego.fecha + 'T12:00').toLocaleDateString('es-MX', {
+              day: 'numeric', month: 'long', year: 'numeric',
+            })
+          : ''
+        const folio = exito.reservaid || exito.folio
+
+        const html = html_ticket_reserva({
+          folio, cliente: exito.nombre, tel: exito.tel, zona: exito.zona,
+          juego: juegolabel, fecha: fechalabel, personas: exito.personas,
+          vendedora: exito.vendedora, monto: exito.monto,
+          estado: 'Reserva registrada · pendiente de enganche',
+        })
+        const archivo = new File([html], nombre_archivo_ticket(folio), { type: 'text/html' })
+        const subida = await subir_comprobante(sb, archivo, 'recibos')
+        const link = subida.ruta && !subida.error
+          ? window.location.origin + '/api/recibo?f=' + encodeURIComponent(subida.ruta)
+          : ''
+        if (!link) console.warn('Ticket de Reserva Exprés no se pudo subir a Storage:', subida.error)
+
+        const plantillas = leer_mensajes()
+        const cuerpo = rellenar_plantilla(plantillas['msg-pip-reserva_momentanea'], {
+          nombre: exito.nombre, zona: exito.zona, juego: juegolabel, fecha: fechalabel,
+          monto: money(exito.monto), folio,
+        })
+        const mensaje = cuerpo +
+          '\n\n🎫 Folio: ' + folio +
+          (link ? '\n📄 Tu ticket: ' + link : '')
+
+        const telcliente = tel_norm(exito.tel)
+        const numerowa = telcliente.length === 10 ? '52' + telcliente : ''
+        const url = 'https://wa.me/' + numerowa + '?text=' + encodeURIComponent(mensaje)
+
+        if (ventana) ventana.location.href = url
+        else window.open(url, '_blank')
+        return { ok: true, link }
+      } catch (e) {
+        console.error('compartir_whatsapp (Reserva Exprés):', e)
+        if (ventana) ventana.close()
+        mostrartoast('⚠️ No se pudo preparar el ticket para WhatsApp.')
+        return { ok: false }
+      } finally {
+        setcompartiendo(false)
+      }
+    },
+    [mostrartoast]
+  )
+
+  return { puede, crear_express, guardando, compartir_whatsapp, compartiendo }
 }
 
 export default usereservaexpress

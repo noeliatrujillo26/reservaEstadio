@@ -194,6 +194,10 @@
 .pagina-reserva-express .re-btn-primario { background: var(--naranja); color: #fff; box-shadow: 0 8px 24px rgba(224,92,26,.35); }
 .pagina-reserva-express .re-btn-primario:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
 .pagina-reserva-express .re-btn-secundario { background: var(--tarjeta); color: var(--texto-suave); border: 1.5px solid var(--borde); }
+.pagina-reserva-express .re-btn-whatsapp {
+  background: #25D366; color: #fff; box-shadow: 0 8px 24px rgba(37,211,102,.35); margin-bottom: 10px;
+}
+.pagina-reserva-express .re-btn-whatsapp:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
 
 /* ── pantalla de éxito ── */
 .pagina-reserva-express .re-exito-overlay {

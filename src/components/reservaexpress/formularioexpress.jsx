@@ -84,7 +84,7 @@ export default function formularioexpress() {
     juegos, areas, usuarios, clientes, reservas, secciones,
     descuentosvolumen, descuentos, cargando,
   } = useadmindatos()
-  const { crear_express, guardando } = usereservaexpress()
+  const { crear_express, guardando, compartir_whatsapp, compartiendo } = usereservaexpress()
 
   const [d, setd] = useState(vacio)
   const [campos, setcampos] = useState([])
@@ -317,8 +317,10 @@ export default function formularioexpress() {
     })
     if (r && r.ok) {
       setexito({
-        folio: r.folio, nombre: d.nombre, zona: zonaelegida ? zonaelegida.nombre : '',
-        juego, monto: r.monto, avisobloqueo: r.avisobloqueo,
+        folio: r.folio, reservaid: r.reservaid, nombre: d.nombre, tel: d.tel,
+        zona: zonaelegida ? zonaelegida.nombre : '', juego, monto: r.monto,
+        personas: r.personas, vendedora: d.vendedora,
+        avisobloqueo: r.avisobloqueo, avisoreserva: r.avisoreserva,
       })
     } else if (r && r.campos) {
       setcampos(r.campos)
@@ -737,16 +739,26 @@ export default function formularioexpress() {
           <div className="re-exito-card">
             <div className="re-exito-icono">✓</div>
             <h2>¡Reserva Momentánea creada!</h2>
-            <div className="re-exito-folio">{exito.folio}</div>
+            <div className="re-exito-folio">{exito.reservaid || exito.folio}</div>
             <div className="re-exito-detalle">
               <div><strong>Cliente:</strong> {exito.nombre}</div>
               <div><strong>Zona:</strong> {exito.zona}</div>
               {exito.juego && <div><strong>Juego:</strong> {fecha_juego(exito.juego)} · vs {exito.juego.rival}</div>}
               <div><strong>Monto:</strong> {money(exito.monto)}</div>
+              <div><strong>Estado:</strong> {exito.reservaid ? 'Reserva confirmada · pendiente de enganche' : 'Zona apartada (sin folio de reserva)'}</div>
             </div>
+            {exito.avisoreserva && (
+              <div className="re-exito-aviso">{exito.avisoreserva}</div>
+            )}
             {exito.avisobloqueo && (
               <div className="re-exito-aviso">{exito.avisobloqueo}</div>
             )}
+            <button
+              className="re-btn re-btn-whatsapp" disabled={compartiendo}
+              onClick={() => compartir_whatsapp(exito)}
+            >
+              {compartiendo ? 'Preparando ticket…' : '🟢 Enviar ticket por WhatsApp'}
+            </button>
             <button className="re-btn re-btn-primario" onClick={nuevaReserva}>
               ¡Listo!
             </button>
