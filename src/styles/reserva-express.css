@@ -149,6 +149,33 @@
   font-size: 20px; font-weight: 800; color: var(--naranja-dark); margin-top: 4px;
 }
 
+/* ── código de descuento: input + botón "Aplicar" ── */
+.pagina-reserva-express .re-btn-aplicar {
+  min-height: 50px; padding: 0 18px; border-radius: 12px; border: 1.5px solid var(--naranja);
+  background: #fff; color: var(--naranja-dark); font-weight: 700; font-size: 14px;
+  cursor: pointer; flex-shrink: 0; font-family: inherit;
+}
+.pagina-reserva-express .re-btn-aplicar:hover { background: #FFF0E8; }
+
+/* ── tarjeta de desglose financiero en tiempo real ── */
+.pagina-reserva-express .re-desglose {
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 14px;
+  padding: 14px 16px; font-size: 13px; color: var(--texto-suave); margin-top: 4px;
+}
+.pagina-reserva-express .re-desglose-fila {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 5px 0;
+}
+.pagina-reserva-express .re-desglose-verde { color: var(--verde); }
+.pagina-reserva-express .re-desglose-personas {
+  border-top: 1px dashed var(--borde); margin-top: 4px; padding-top: 8px;
+  color: var(--texto); font-weight: 700;
+}
+.pagina-reserva-express .re-desglose-total {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--borde);
+  font-size: 19px; font-weight: 800; color: var(--naranja-dark);
+}
+
 /* ── botón principal, fijo abajo para el pulgar ── */
 .pagina-reserva-express .re-cta-wrap {
   position: sticky; bottom: 0; background: linear-gradient(to top, var(--fondo) 60%, transparent);

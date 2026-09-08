@@ -99,7 +99,8 @@ export function descuento_volumen_aplicable(reglas, personas, juegoid, zonaid) {
 // Un cupon de MONTO FIJO se convierte a su % equivalente sobre el subtotal de
 // ESTE momento, para que $500 sigan siendo $500 si despues cambia el area o se
 // agregan personas. Congelar el % hacia que el descuento cambiara de valor en
-// silencio.
+// silencio. Uno de PORCENTAJE reemplaza el manual tal cual, mismo criterio de
+// "el cupon manda sobre lo tecleado a mano" que ya aplicaba al de monto fijo.
 export function calc_total_prospecto(d, ctx) {
   const area = Number(d.areamonto) || 0
   const consumo = Number(d.consumomonto) || 0
@@ -128,6 +129,8 @@ export function calc_total_prospecto(d, ctx) {
   if (cupon && cupon.tipo === 'fijo') {
     const pesos = Math.min(redondear_dinero(Number(cupon.valor) || 0), redondear_dinero(subtotal))
     manualpct = subtotal > 0 ? redondear_dinero((pesos / subtotal) * 100) : 0
+  } else if (cupon && cupon.tipo === 'porcentaje') {
+    manualpct = Number(cupon.valor) || 0
   }
   manualpct = Math.max(0, manualpct)
 

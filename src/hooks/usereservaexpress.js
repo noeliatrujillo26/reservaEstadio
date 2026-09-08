@@ -27,11 +27,10 @@
 //      Empresa *, Teléfono *, Email" — sin asterisco). Cambiar
 //      validar_prospecto() afectaria tambien al modal "Nuevo prospecto",
 //      donde el correo SI es obligatorio y asi debe seguir.
-//   2. crear() calcula el monto con calc_total_prospecto() (area + extras -
-//      descuentos, con el descuento por volumen aplicandose solo segun el
-//      conteo de personas). Aqui "Monto Total" es un numero que se teclea
-//      directo por telefono y debe guardarse TAL CUAL, sin que una regla de
-//      volumen lo recalcule en silencio.
+//   2. crear() no acepta un cupon de codigo ya resuelto (`d.cupon`) via sus
+//      parametros publicos — aqui SI se valida un codigo contra el catalogo
+//      YA CARGADO (ver validar_codigo_descuento en lib/catalogos.js) y se le
+//      pasa a calc_total_prospecto() tal como espera.
 //   3. Ademas de crear la tarjeta, este flujo BLOQUEA la zona en
 //      zona_juego_estado de inmediato — un paso que en el resto del panel
 //      solo ocurre al GENERAR LA RESERVA real (generar_reserva, mas
@@ -40,9 +39,13 @@
 //      platicando con el cliente.
 //
 // Por lo demas reutiliza las MISMAS piezas probadas que useprospectos.js:
-// nuevo_folio_prospecto (folio aleatorio verificado), es_error_columna/
-// subset_legacy/registrar_movimiento (de escritura.js) y buscar_cliente
-// (identidad nombre+telefono) para no duplicar una ficha ya existente.
+// nuevo_folio_prospecto (folio aleatorio verificado), calc_total_prospecto
+// (EL MISMO motor de precios que "Nuevo prospecto" — area/zona, consumo,
+// extra, adultos/niños extra, descuento manual y por volumen, y ahora
+// tambien un cupon de codigo resuelto por validar_codigo_descuento), es_
+// error_columna/subset_legacy/registrar_movimiento (de escritura.js) y
+// buscar_cliente (identidad nombre+telefono) para no duplicar una ficha ya
+// existente.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useCallback, useState } from 'react'
@@ -53,7 +56,7 @@ import { usetoast } from '../context/toastcontext'
 import { buscar_cliente, tel_norm } from '../lib/clientes'
 import { es_error_columna, registrar_movimiento, subset_legacy } from '../lib/escritura'
 import { estados_zona, texto_fallo_estado } from '../lib/mapaocupacion'
-import { nuevo_folio_prospecto } from '../lib/prospectos'
+import { calc_total_prospecto, nuevo_folio_prospecto } from '../lib/prospectos'
 import { email_valido } from '../lib/reservasadmin'
 import { redondear_dinero, mxn2 } from '../lib/dinero'
 import { hoy_hermosillo } from '../lib/fechas'
@@ -89,6 +92,14 @@ async function insertar_directo(tabla, payload, claveslegacy) {
     res = await sb.from(tabla).insert(subset_legacy(payload, claveslegacy)).select()
   }
   return interpretar(res, 'insert', tabla)
+}
+
+async function actualizar_directo(tabla, payload, id, claveslegacy) {
+  let res = await sb.from(tabla).update(payload).eq('id', id).select()
+  if (es_error_columna(res.error) && claveslegacy && claveslegacy.length) {
+    res = await sb.from(tabla).update(subset_legacy(payload, claveslegacy)).eq('id', id).select()
+  }
+  return interpretar(res, 'update', tabla)
 }
 
 // espejo de set_estado_zona() (lib/mapaocupacion.js) sin el motivo_bloqueo
@@ -128,7 +139,7 @@ async function bloquear_zona_directo(juegoid, zonaid, estado) {
 
 export function usereservaexpress() {
   const { usuario } = useadmin()
-  const { pipeline, clientes, recargar } = useadmindatos()
+  const { pipeline, clientes, areas, descuentosvolumen, recargar } = useadmindatos()
   const { mostrartoast } = usetoast()
   const [guardando, setguardando] = useState(false)
 
@@ -138,7 +149,13 @@ export function usereservaexpress() {
   const puede = !!usuario
 
   // datos = { nombre, tel, email, juegoid, zonaid, zona, tipocomida,
-  //           adultosextra, ninosextra, vendedora, monto, abonoinicial }
+  //           areamonto, minpersonas, consumomonto, extramonto,
+  //           adultoextraprecio, adultoextracant, ninoextraprecio,
+  //           ninoextracant, descuento, cupon: {codigo,tipo,valor}|null,
+  //           vendedora, notas, abonoinicial }
+  // El monto NO se pasa: se calcula aqui con calc_total_prospecto(), el
+  // MISMO motor que usa "Nuevo prospecto" — lo que ve el formulario en su
+  // tarjeta de desglose es EXACTAMENTE lo que se guarda.
   const crear_express = useCallback(
     async (datos) => {
       if (!usuario) {
@@ -155,7 +172,10 @@ export function usereservaexpress() {
       if (String(datos.email || '').trim() && !email_valido(datos.email)) faltan.push('email')
       if (!datos.juegoid) faltan.push('juego')
       if (!datos.zonaid) faltan.push('zona')
-      if (!(Number(datos.monto) > 0)) faltan.push('monto')
+
+      const calc = calc_total_prospecto(datos, { areas, descuentosvolumen })
+      if (!(calc.total > 0)) faltan.push('monto')
+
       if (faltan.length) {
         mostrartoast('⚠️ Revisa los campos marcados')
         return { ok: false, campos: faltan }
@@ -202,12 +222,15 @@ export function usereservaexpress() {
         const res = await insertar_directo('pipeline_prospectos', {
           id, folio, nombre: datos.nombre, email: datos.email || '',
           zona: datos.zona || '', zona_id: datos.zonaid, serie: '',
-          monto: redondear_dinero(Number(datos.monto) || 0), etapa: 'reserva_momentanea',
+          monto: calc.total, etapa: 'reserva_momentanea',
           badge: 'Reserva Exprés', notas,
           vendedora: datos.vendedora || '', juego: datos.juegoid, tel,
-          adultos: parseInt(datos.adultosextra, 10) || 0, ninos: parseInt(datos.ninosextra, 10) || 0,
-          descuento: 0, consumo_monto: 0, extra_monto: 0,
-          adulto_extra_precio: 0, nino_extra_precio: 0,
+          adultos: calc.adultocant, ninos: calc.ninocant,
+          descuento: Number(datos.descuento) || 0,
+          consumo_monto: Number(datos.consumomonto) || 0,
+          extra_monto: Number(datos.extramonto) || 0,
+          adulto_extra_precio: Number(datos.adultoextraprecio) || 0,
+          nino_extra_precio: Number(datos.ninoextraprecio) || 0,
           cliente_id: clienteid,
           tipo_comida: datos.tipocomida === 'discada' ? 'discada' : 'carne_asada',
           etapa_cambiada_en: cambiadaen,
@@ -224,6 +247,17 @@ export function usereservaexpress() {
           return { ok: false }
         }
 
+        // Los dos extras van en UPDATE aparte, igual que en useprospectos.js
+        // crear(): un fallo aqui no cuesta nada, la tarjeta ya quedo guardada.
+        if (calc.descuentototal > 0) {
+          const r = await actualizar_directo('pipeline_prospectos', { descuento_monto: calc.descuentototal }, id, null)
+          if (!r.ok) console.warn('descuento_monto no se guardó:', r.motivo)
+        }
+        if (datos.cupon && datos.cupon.codigo) {
+          const r = await actualizar_directo('pipeline_prospectos', { codigo_descuento: datos.cupon.codigo }, id, null)
+          if (!r.ok) console.warn('codigo_descuento no se guardó:', r.motivo)
+        }
+
         // 3. BLOQUEAR LA ZONA en vivo — el paso que distingue a esta
         // pantalla del alta normal de un prospecto. No-fatal para la
         // tarjeta (ya se guardó); si falla, se avisa para marcarla a mano.
@@ -235,13 +269,13 @@ export function usereservaexpress() {
           desc: 'Reserva Exprés · Reserva Momentánea creada · ' + datos.nombre +
             (avisobloqueo ? ' · ⚠️ zona NO bloqueada' : ' · zona bloqueada'),
           ref: folio,
-          monto: Number(datos.monto) || null,
+          monto: calc.total || null,
           usuario: usuario ? usuario.nombre : '—',
         })
 
         await recargar()
         if (avisobloqueo) mostrartoast(avisobloqueo, 9000)
-        return { ok: true, folio, avisobloqueo }
+        return { ok: true, folio, avisobloqueo, monto: calc.total }
       } catch (err) {
         console.error('crear reserva exprés:', err)
         mostrartoast('⚠️ No se pudo crear la reserva. Intenta de nuevo.')
@@ -250,7 +284,7 @@ export function usereservaexpress() {
         setguardando(false)
       }
     },
-    [usuario, guardando, pipeline, clientes, mostrartoast, recargar]
+    [usuario, guardando, pipeline, clientes, areas, descuentosvolumen, mostrartoast, recargar]
   )
 
   return { puede, crear_express, guardando }

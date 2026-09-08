@@ -132,6 +132,30 @@ export function estado_descuento(d) {
     : { badge: 'badge-yellow', texto: 'Vencido' }
 }
 
+// Valida un código tecleado a mano contra el catálogo YA CARGADO
+// (useadmindatos().descuentos) — mismas reglas que validarCupon() del
+// checkout público (api/_lib/descuentos.js): activo, vigente, con usos
+// disponibles y aplicable al juego elegido (sin juegos_aplicables = aplica a
+// todos). A diferencia del checkout esto es SOLO LOCAL, sin red — y a
+// propósito NO incrementa `usos`: ese contador solo se toca cuando se
+// confirma un pago real (api/stripe-webhook.js), nunca al aplicar el código.
+export function validar_codigo_descuento(descuentos, codigoraw, juegoid) {
+  const codigo = String(codigoraw || '').trim().toUpperCase()
+  if (!codigo) return { ok: false, mensaje: 'Ingresa un código.' }
+  const d = (descuentos || []).find((x) => String(x.codigo || '').toUpperCase() === codigo)
+  if (!d) return { ok: false, mensaje: 'Código no válido o ya expirado.' }
+  if (d.estado !== 'Activo') return { ok: false, mensaje: 'Este código ya no está activo.' }
+  if (!desc_vigente(d)) return { ok: false, mensaje: 'Este código ya venció.' }
+  if (d.usosmax > 0 && d.usos >= d.usosmax) {
+    return { ok: false, mensaje: 'Este código agotó sus usos disponibles.' }
+  }
+  const juegos = Array.isArray(d.juegosaplicables) ? d.juegosaplicables : []
+  if (juegos.length > 0 && juegoid && juegos.map(String).indexOf(String(juegoid)) < 0) {
+    return { ok: false, mensaje: 'Este código no aplica para el juego seleccionado.' }
+  }
+  return { ok: true, descuento: d }
+}
+
 export function usos_label(d) {
   return d.usosmax && d.usosmax > 0 ? d.usos + ' / ' + d.usosmax : d.usos + ' / ∞'
 }

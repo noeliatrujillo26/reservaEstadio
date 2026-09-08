@@ -24,6 +24,17 @@
 // crea la tarjeta en 'Reserva Momentánea' Y bloquea esa zona de inmediato —
 // ver la cabecera de ese hook para el porqué.
 //
+// DESGLOSE FINANCIERO: EL MISMO motor que "Nuevo prospecto"
+// (calc_total_prospecto, en lib/prospectos.js) — Área/Zona se toma del
+// catálogo de Precios para la zona elegida (precio_seccion/min_seccion,
+// igual que ese modal), y Consumo/Extra/Adultos extra/Niños extra/
+// Descuento son los mismos campos que ahi. El "Código de descuento" es
+// nuevo: valida contra el catálogo YA CARGADO (validar_codigo_descuento en
+// lib/catalogos.js, mismas reglas que el checkout público) y, si es válido,
+// su % o monto fijo SUSTITUYE al descuento manual — no se suman los dos.
+// Todo se recalcula EN VIVO con useMemo: la tarjeta de desglose muestra
+// exactamente lo que se va a guardar.
+//
 // SIN CANDADO DE PERMISOS POR ROL: los campos se habilitan de inmediato en
 // cuanto hay sesión (ReservaExpress.jsx ya exigió el login); no se repite
 // aquí ninguna validación de permiso — ver la cabecera de
@@ -35,16 +46,24 @@ import useadmindatos from '../../hooks/useadmindatos'
 import useadmin from '../../hooks/useadmin'
 import usereservaexpress from '../../hooks/usereservaexpress'
 import { catalogo_clientes, cliente_coincide } from '../../lib/clientes'
+import { validar_codigo_descuento } from '../../lib/catalogos'
 import { estado_vivo } from '../../lib/mapaocupacion'
+import { etiqueta_grupo } from '../../lib/pipeline'
+import { map_precio } from '../../lib/preciosadmin'
+import { calc_total_prospecto } from '../../lib/prospectos'
+import { min_seccion, precio_seccion } from '../../lib/reservasadmin'
 import { redondear_dinero, mxn2 } from '../../lib/dinero'
 
 const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2)
 
+// mismos nombres de campo que nuevoprospecto.jsx (adultoextracant, no
+// "adultosextra"): calc_total_prospecto los lee tal cual, sin traducir.
 const vacio = {
   nombre: '', tel: '', email: '',
   juegoid: '', zonaid: '', tipocomida: 'carne_asada',
-  adultosextra: '', ninosextra: '', vendedora: '',
-  monto: '', abonoinicial: '', notas: '',
+  adultoextracant: '', ninoextracant: '', vendedora: '',
+  consumomonto: '', extramonto: '', adultoextraprecio: '', ninoextraprecio: '',
+  descuento: '', abonoinicial: '', notas: '',
 }
 
 function fecha_juego(j) {
@@ -55,7 +74,10 @@ function fecha_juego(j) {
 
 export default function formularioexpress() {
   const { usuario, cerrar_sesion } = useadmin()
-  const { juegos, areas, areasestados, usuarios, clientes, reservas, cargando } = useadmindatos()
+  const {
+    juegos, areas, areasestados, usuarios, clientes, reservas, secciones,
+    descuentosvolumen, descuentos, cargando,
+  } = useadmindatos()
   const { crear_express, guardando } = usereservaexpress()
 
   const [d, setd] = useState(vacio)
@@ -69,6 +91,13 @@ export default function formularioexpress() {
   const [resaltado, setresaltado] = useState(0) // indice activo del desplegable
   const refcliente = useRef(null)
 
+  // código de descuento — mismo criterio que aplicar_promo() del checkout
+  // público (paso3pago.jsx), pero validado LOCAL contra el catálogo ya
+  // cargado (ver validar_codigo_descuento en lib/catalogos.js).
+  const [codigo, setcodigo] = useState('')
+  const [cupon, setcupon] = useState(null) // { codigo, tipo, valor } | null
+  const [mensajecupon, setmensajecupon] = useState(null) // { ok, texto } | null
+
   // cadena de "Enter avanza al siguiente campo" — Teléfono es el destino
   // tanto del buscador de cliente como del primer eslabon de la cadena.
   // "Notas" queda al final y sin manejador propio: ahi Enter sigue siendo
@@ -80,12 +109,18 @@ export default function formularioexpress() {
   const refadultos = useRef(null)
   const refninos = useRef(null)
   const refvendedora = useRef(null)
-  const refmonto = useRef(null)
+  const refconsumo = useRef(null)
+  const refextra = useRef(null)
+  const refprecioadulto = useRef(null)
+  const refprecioninos = useRef(null)
+  const refdescuento = useRef(null)
+  const refcodigo = useRef(null)
   const refabono = useRef(null)
   const refnotas = useRef(null)
   const ordenrefs = [
-    reftelefono, refemail, refjuego, refzona,
-    refadultos, refninos, refvendedora, refmonto, refabono, refnotas,
+    reftelefono, refemail, refjuego, refzona, refadultos, refninos, refvendedora,
+    refconsumo, refextra, refprecioadulto, refprecioninos, refdescuento,
+    refcodigo, refabono, refnotas,
   ]
 
   // enfoca el primer campo DESPUES de refactual que no esté deshabilitado
@@ -175,15 +210,61 @@ export default function formularioexpress() {
 
   const zonaelegida = zonaslibres.find((a) => a.id === d.zonaid) || null
 
+  // ── motor de precios — EL MISMO que "Nuevo prospecto" ──────────
+  // catálogo de Precios (map_precio) para resolver el "Monto Área" y el
+  // mínimo de personas que ya incluye la zona, exactamente como ahi.
+  const catalogo = useMemo(() => (secciones || []).map(map_precio), [secciones])
+  const areamonto = zonaelegida ? precio_seccion(zonaelegida, catalogo) || 0 : 0
+  const minpersonas = zonaelegida ? min_seccion(zonaelegida, catalogo, juego) : 0
+
+  const calc = useMemo(
+    () => calc_total_prospecto(
+      { ...d, areamonto, minpersonas, cupon },
+      { areas, descuentosvolumen }
+    ),
+    [d, areamonto, minpersonas, cupon, areas, descuentosvolumen]
+  )
+
+  // ── código de descuento ─────────────────────────────────────────
+  function aplicar_codigo() {
+    if (!codigo.trim()) return
+    const r = validar_codigo_descuento(descuentos, codigo, d.juegoid)
+    if (r.ok) {
+      setcupon({ codigo: r.descuento.codigo, tipo: r.descuento.tipo, valor: r.descuento.valor })
+      setmensajecupon({ ok: true, texto: 'Código "' + r.descuento.codigo + '" aplicado' })
+    } else {
+      setcupon(null)
+      setmensajecupon({ ok: false, texto: r.mensaje })
+    }
+  }
+
+  function quitar_codigo() {
+    setcupon(null)
+    setcodigo('')
+    setmensajecupon(null)
+  }
+
+  // si el juego cambia despues de aplicar un codigo restringido a otros
+  // juegos, se revalida y se avisa en vez de dejarlo aplicado en silencio.
+  useEffect(() => {
+    if (!cupon) return
+    const r = validar_codigo_descuento(descuentos, cupon.codigo, d.juegoid)
+    if (!r.ok) {
+      setcupon(null)
+      setmensajecupon({ ok: false, texto: 'El código dejó de aplicar: ' + r.mensaje })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d.juegoid])
+
   async function guardar() {
     setcampos([])
     const r = await crear_express({
-      ...d, zona: zonaelegida ? zonaelegida.nombre : '',
+      ...d, zona: zonaelegida ? zonaelegida.nombre : '', areamonto, minpersonas, cupon,
     })
     if (r && r.ok) {
       setexito({
         folio: r.folio, nombre: d.nombre, zona: zonaelegida ? zonaelegida.nombre : '',
-        juego, monto: d.monto, abonoinicial: d.abonoinicial, avisobloqueo: r.avisobloqueo,
+        juego, monto: r.monto, abonoinicial: d.abonoinicial, avisobloqueo: r.avisobloqueo,
       })
     } else if (r && r.campos) {
       setcampos(r.campos)
@@ -198,6 +279,7 @@ export default function formularioexpress() {
     setabrirdrop(false)
     setelegido(false)
     setresaltado(0)
+    quitar_codigo()
   }
 
   if (cargando) {
@@ -380,7 +462,7 @@ export default function formularioexpress() {
               <input
                 ref={refadultos}
                 className="re-input" type="number" min="0" step="1" inputMode="numeric"
-                value={d.adultosextra} onChange={(e) => set('adultosextra', e.target.value)}
+                value={d.adultoextracant} onChange={(e) => set('adultoextracant', e.target.value)}
                 onKeyDown={alenter_avanzar(refadultos)}
                 placeholder="0"
               />
@@ -390,7 +472,7 @@ export default function formularioexpress() {
               <input
                 ref={refninos}
                 className="re-input" type="number" min="0" step="1" inputMode="numeric"
-                value={d.ninosextra} onChange={(e) => set('ninosextra', e.target.value)}
+                value={d.ninoextracant} onChange={(e) => set('ninoextracant', e.target.value)}
                 onKeyDown={alenter_avanzar(refninos)}
                 placeholder="0"
               />
@@ -412,15 +494,69 @@ export default function formularioexpress() {
 
         <div className="re-seccion">
           <div className="re-seccion-titulo">💰 Financiero</div>
+
+          <div className="re-ayuda" style={{ marginBottom: '10px' }}>
+            Área/Zona tomada del catálogo de Precios: <strong>{money(areamonto)}</strong>
+            {minpersonas > 0 && ' · incluye ' + minpersonas + ' persona(s)'}
+            {!zonaelegida && ' · elige una zona para tomar la tarifa'}
+          </div>
+
           <div className="re-fila-2">
             <div className="re-campo">
-              <label>Monto Total ($) *</label>
+              <label>Consumo ($)</label>
               <input
-                ref={refmonto}
-                className={'re-input' + err('monto')} type="number" min="0" step="0.01" inputMode="decimal"
-                value={d.monto} onChange={(e) => set('monto', e.target.value)}
-                onKeyDown={alenter_avanzar(refmonto)}
+                ref={refconsumo}
+                className="re-input" type="number" min="0" step="0.01" inputMode="decimal"
+                value={d.consumomonto} onChange={(e) => set('consumomonto', e.target.value)}
+                onKeyDown={alenter_avanzar(refconsumo)}
                 placeholder="0.00"
+              />
+            </div>
+            <div className="re-campo">
+              <label>Extra ($)</label>
+              <input
+                ref={refextra}
+                className="re-input" type="number" min="0" step="0.01" inputMode="decimal"
+                value={d.extramonto} onChange={(e) => set('extramonto', e.target.value)}
+                onKeyDown={alenter_avanzar(refextra)}
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+
+          <div className="re-fila-2">
+            <div className="re-campo">
+              <label>Precio adulto extra ($)</label>
+              <input
+                ref={refprecioadulto}
+                className="re-input" type="number" min="0" step="0.01" inputMode="decimal"
+                value={d.adultoextraprecio} onChange={(e) => set('adultoextraprecio', e.target.value)}
+                onKeyDown={alenter_avanzar(refprecioadulto)}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="re-campo">
+              <label>Precio niño extra ($)</label>
+              <input
+                ref={refprecioninos}
+                className="re-input" type="number" min="0" step="0.01" inputMode="decimal"
+                value={d.ninoextraprecio} onChange={(e) => set('ninoextraprecio', e.target.value)}
+                onKeyDown={alenter_avanzar(refprecioninos)}
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+
+          <div className="re-fila-2">
+            <div className="re-campo">
+              <label>Descuento (%)</label>
+              <input
+                ref={refdescuento}
+                className="re-input" type="number" min="0" max="100" step="1" inputMode="numeric"
+                value={d.descuento} onChange={(e) => set('descuento', e.target.value)}
+                onKeyDown={alenter_avanzar(refdescuento)}
+                placeholder="0" disabled={!!cupon}
+                title={cupon ? 'Un código de descuento aplicado sustituye el % manual' : undefined}
               />
             </div>
             <div className="re-campo">
@@ -434,6 +570,45 @@ export default function formularioexpress() {
               />
             </div>
           </div>
+
+          <div className="re-campo">
+            <label>Código de descuento</label>
+            {!cupon ? (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  ref={refcodigo}
+                  className="re-input" style={{ textTransform: 'uppercase', flex: 1 }}
+                  value={codigo} onChange={(e) => setcodigo(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return
+                    e.preventDefault()
+                    aplicar_codigo()
+                    if (refabono.current) refabono.current.focus()
+                  }}
+                  placeholder="Ej. NARANJEROS10"
+                />
+                <button type="button" className="re-btn-aplicar" onClick={aplicar_codigo}>
+                  Aplicar
+                </button>
+              </div>
+            ) : (
+              <div className="re-cliente-elegido">
+                <div className="re-cliente-elegido-nombre">✓ {cupon.codigo} aplicado</div>
+                <button
+                  type="button" onClick={quitar_codigo}
+                  className="re-cliente-elegido-cambiar" aria-label="Quitar código"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            {mensajecupon && !cupon && (
+              <div className="re-ayuda" style={{ color: mensajecupon.ok ? 'var(--verde)' : 'var(--rojo)' }}>
+                {mensajecupon.texto}
+              </div>
+            )}
+          </div>
+
           <div className="re-campo">
             <label>Notas (opcional)</label>
             <textarea
@@ -442,12 +617,53 @@ export default function formularioexpress() {
               placeholder="Cualquier detalle acordado por teléfono…"
             />
           </div>
+
+          {/* ── Desglose financiero en tiempo real — mismo motor que
+              "Nuevo prospecto" (calc_total_prospecto), con el desglose
+              itemizado del detalle de Cotizaciones. */}
+          <div className="re-desglose">
+            <div className="re-desglose-fila"><span>Área / Zona</span><span>{money(areamonto)}</span></div>
+            {Number(d.consumomonto) > 0 && (
+              <div className="re-desglose-fila"><span>Consumo</span><span>{money(d.consumomonto)}</span></div>
+            )}
+            {Number(d.extramonto) > 0 && (
+              <div className="re-desglose-fila"><span>Extra</span><span>{money(d.extramonto)}</span></div>
+            )}
+            {calc.adultocant > 0 && (
+              <div className="re-desglose-fila">
+                <span>Adultos extra ({calc.adultocant} × {money(d.adultoextraprecio)})</span>
+                <span>{money((Number(d.adultoextraprecio) || 0) * calc.adultocant)}</span>
+              </div>
+            )}
+            {calc.ninocant > 0 && (
+              <div className="re-desglose-fila">
+                <span>Niños extra ({calc.ninocant} × {money(d.ninoextraprecio)})</span>
+                <span>{money((Number(d.ninoextraprecio) || 0) * calc.ninocant)}</span>
+              </div>
+            )}
+            <div className="re-desglose-fila"><span>Subtotal</span><span>{money(calc.subtotal)}</span></div>
+            {calc.volumenpct > 0 && (
+              <div className="re-desglose-fila re-desglose-verde">
+                <span>{etiqueta_grupo(calc.volumenpct, calc.espalco)}</span><span>automático</span>
+              </div>
+            )}
+            {calc.descuentototal > 0 && (
+              <div className="re-desglose-fila re-desglose-verde">
+                <span>Descuento total</span><span>−{money(calc.descuentototal)}</span>
+              </div>
+            )}
+            <div className="re-desglose-fila re-desglose-personas">
+              <span>Total de personas</span><span>{calc.personas}</span>
+            </div>
+            <div className="re-desglose-total">
+              <span>Precio final total</span><span>{money(calc.total)}</span>
+            </div>
+          </div>
         </div>
 
         <div className="re-resumen">
           <div><strong>{d.nombre || 'Cliente'}</strong> · {zonaelegida ? zonaelegida.nombre : 'Sin zona'}</div>
           <div>{juego ? fecha_juego(juego) + ' · vs ' + juego.rival : 'Sin juego seleccionado'}</div>
-          <div className="re-resumen-total">{money(d.monto)}</div>
           {Number(d.abonoinicial) > 0 && (
             <div>Abono inicial acordado: {money(d.abonoinicial)}</div>
           )}
