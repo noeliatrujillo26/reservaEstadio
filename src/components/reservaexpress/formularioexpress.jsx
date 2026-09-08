@@ -22,13 +22,17 @@
 // La zona/asador se deshabilita para las OCUPADAS del juego elegido — pero a
 // diferencia de reservaform.jsx/cotizform.jsx (que filtran contra el mapa
 // `areasestados` cacheado por admindatoscontext, cargado una sola vez al
-// abrir sesion) aqui se consulta EN VIVO con zonas_ocupadas_en_vivo()
+// abrir sesion) aqui se consulta EN VIVO con disponibilidad_zonas_en_vivo()
 // (lib/mapaocupacion.js) cada vez que se elige un juego — misma tabla y
 // filtro que usa el mapa publico para pintar el gris (zona_juego_estado por
 // juego_id), mas reservas activas y prospectos con zona ya asignada, que el
-// mapa publico deliberadamente no pinta. Al guardar, usereservaexpress crea
-// la tarjeta en 'Reserva Momentánea' Y bloquea esa zona de inmediato — ver la
-// cabecera de ese hook para el porqué.
+// mapa publico deliberadamente no pinta. Los PALCOS COMPARTIDOS (escompartida)
+// son la excepcion: no se venden enteros, se llenan por lugares de ADULTO
+// contra su capacidad_maxima — el selector los muestra habilitados con el
+// conteo real ("Palco Izq (3/8 adultos)") mientras quede cupo, y solo se
+// deshabilitan al llegar a capacidad. Al guardar, usereservaexpress crea la
+// tarjeta en 'Reserva Momentánea' Y genera la reserva formal de inmediato —
+// ver la cabecera de ese hook para el porqué.
 //
 // DESGLOSE FINANCIERO: EL MISMO motor que "Nuevo prospecto"
 // (calc_total_prospecto, en lib/prospectos.js) — Área/Zona se toma del
@@ -55,7 +59,7 @@ import usereservaexpress from '../../hooks/usereservaexpress'
 import { catalogo_clientes, cliente_coincide } from '../../lib/clientes'
 import { validar_codigo_descuento } from '../../lib/catalogos'
 import { categoria_sec } from '../../lib/dashboard'
-import { zonas_ocupadas_en_vivo } from '../../lib/mapaocupacion'
+import { disponibilidad_zonas_en_vivo } from '../../lib/mapaocupacion'
 import { map_precio } from '../../lib/preciosadmin'
 import { calc_total_prospecto } from '../../lib/prospectos'
 import { min_seccion, precio_extra_seccion, precio_nino_seccion, precio_seccion } from '../../lib/reservasadmin'
@@ -201,35 +205,49 @@ export default function formularioexpress() {
   // que el mapa ya pinta ocupada. Mientras se resuelve, el <select> se
   // deshabilita: mostrar el catalogo completo como "libre" un instante,
   // antes de que llegue la respuesta, seria peor que la demora.
-  const [zonasocupadas, setzonasocupadas] = useState(new Set())
+  const [zonasdisponibilidad, setzonasdisponibilidad] = useState({})
   const [cargandozonas, setcargandozonas] = useState(false)
 
   useEffect(() => {
     let vivo = true
-    if (!d.juegoid) { setzonasocupadas(new Set()); return }
+    if (!d.juegoid) { setzonasdisponibilidad({}); return }
     setcargandozonas(true)
-    zonas_ocupadas_en_vivo(sb, d.juegoid)
-      .then((set) => { if (vivo) setzonasocupadas(set) })
+    disponibilidad_zonas_en_vivo(sb, d.juegoid, areas)
+      .then((mapa) => { if (vivo) setzonasdisponibilidad(mapa) })
       .finally(() => { if (vivo) setcargandozonas(false) })
     return () => { vivo = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [d.juegoid])
 
   // TODAS las zonas del juego elegido, cada una con su libre/ocupada — SIN
   // filtrar: las ocupadas se muestran deshabilitadas en el <select> en vez de
-  // desaparecer, para que se note que el juego ya tiene zonas tomadas.
+  // desaparecer, para que se note que el juego ya tiene zonas tomadas. Un
+  // palco compartido con cupo se muestra habilitado con su conteo real
+  // ("Palco Izq (3/8 adultos)") en vez de solo libre/ocupada.
   const zonasconestado = useMemo(() => {
     if (!d.juegoid) return []
-    return (areas || []).map((a) => ({ area: a, libre: !zonasocupadas.has(String(a.id)) }))
-  }, [areas, zonasocupadas, d.juegoid])
+    return (areas || []).map((a) => {
+      const info = zonasdisponibilidad[String(a.id)]
+      const libre = !info || !info.ocupada
+      const etiqueta =
+        info && info.escompartida && !info.ocupada
+          ? a.nombre + ' (' + info.ocupados + '/' + info.capacidad + ' adultos)'
+          : a.nombre + (!libre ? ' (Ocupada)' : '')
+      return { area: a, libre, etiqueta, info }
+    })
+  }, [areas, zonasdisponibilidad, d.juegoid])
 
   const hayzonaslibres = zonasconestado.some((z) => z.libre)
 
   // si cambia el juego (o la zona elegida deja de estar libre — alguien mas
-  // la tomo mientras tanto), se limpia el valor seleccionado.
+  // la tomo mientras tanto, o un palco compartido llego a su capacidad), se
+  // limpia el valor seleccionado.
   useEffect(() => {
-    if (d.zonaid && d.juegoid && zonasocupadas.has(String(d.zonaid))) set('zonaid', '')
+    if (!d.zonaid || !d.juegoid) return
+    const info = zonasdisponibilidad[String(d.zonaid)]
+    if (info && info.ocupada) set('zonaid', '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [d.juegoid, zonasocupadas])
+  }, [d.juegoid, zonasdisponibilidad])
 
   const vendedoras = useMemo(
     () => (usuarios || []).filter((u) => u.rol === 'Vendedora' && u.estado === 'Activo').map((u) => u.nombre),
@@ -288,6 +306,16 @@ export default function formularioexpress() {
   // automático por volumen en una sola línea, como pide el desglose.
   const pctdescuento = calc.subtotal > 0 ? Math.round((calc.descuentototal / calc.subtotal) * 100) : 0
 
+  // Si la zona elegida es un palco compartido: ¿lo que se esta pidiendo
+  // (calc.totaladultos = el minimo que incluye la zona + los adultos extra —
+  // los MISMOS "lugares" que despues cuenta lugares_de_reserva()/
+  // ocupacion_palco() en lib/pipeline.js) cabe en lo que le queda de cupo?
+  const infozonaelegida = zonaelegida ? zonasdisponibilidad[String(zonaelegida.id)] : null
+  const excedeadultospalco = !!(
+    infozonaelegida && infozonaelegida.escompartida && infozonaelegida.libres != null &&
+    calc.totaladultos > infozonaelegida.libres
+  )
+
   // ── código de descuento ─────────────────────────────────────────
   function aplicar_codigo() {
     if (!codigo.trim()) return
@@ -322,12 +350,17 @@ export default function formularioexpress() {
   async function guardar() {
     setcampos([])
     // validacion preventiva LOCAL: si la zona elegida ya se ve ocupada en la
-    // ultima consulta en vivo (zonasocupadas), ni se intenta el guardado — se
-    // avisa aqui mismo. crear_express() vuelve a verificar en vivo contra
-    // Supabase por si se ocupo justo despues de que se cargo esta lista.
-    if (d.zonaid && d.juegoid && zonasocupadas.has(String(d.zonaid))) {
-      setcampos(['zona'])
-      return
+    // ultima consulta en vivo (zonasdisponibilidad), o es un palco compartido
+    // sin cupo para los adultos pedidos, ni se intenta el guardado — se avisa
+    // aqui mismo (el mensaje ya vive junto al selector, ver excedeadultospalco
+    // y "No hay zonas libres" arriba). crear_express() vuelve a verificar en
+    // vivo contra Supabase por si algo cambio justo despues de esta consulta.
+    if (d.zonaid && d.juegoid) {
+      const info = zonasdisponibilidad[String(d.zonaid)]
+      if (info && (info.escompartida ? excedeadultospalco : info.ocupada)) {
+        setcampos(['zona'])
+        return
+      }
     }
     const r = await crear_express({
       ...d, zona: zonaelegida ? zonaelegida.nombre : '', areamonto, minpersonas, cupon,
@@ -504,15 +537,21 @@ export default function formularioexpress() {
                     ? 'Verificando disponibilidad…'
                     : '— Selecciona una zona —'}
               </option>
-              {!cargandozonas && zonasconestado.map(({ area: a, libre }) => (
+              {!cargandozonas && zonasconestado.map(({ area: a, libre, etiqueta }) => (
                 <option key={a.id} value={a.id} disabled={!libre}>
-                  {a.nombre}{!libre ? ' (Ocupada)' : ''}
+                  {etiqueta}
                 </option>
               ))}
             </select>
             {d.juegoid && !cargandozonas && !hayzonaslibres && (
               <div className="re-ayuda" style={{ color: 'var(--rojo)' }}>
                 No hay zonas libres para este juego.
+              </div>
+            )}
+            {excedeadultospalco && (
+              <div className="re-ayuda" style={{ color: 'var(--rojo)' }}>
+                Este palco solo tiene {infozonaelegida.libres} lugar(es) de adulto disponible(s) para
+                este juego — estás pidiendo {calc.totaladultos}. Reduce la cantidad o elige otra zona.
               </div>
             )}
           </div>

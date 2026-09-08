@@ -60,7 +60,7 @@ import { buscar_cliente, tel_norm } from '../lib/clientes'
 import { mxn2 } from '../lib/dinero'
 import { es_error_columna, registrar_movimiento, subset_legacy } from '../lib/escritura'
 import { leer_mensajes } from '../lib/mensajes'
-import { estados_zona, texto_fallo_estado, zonas_ocupadas_en_vivo } from '../lib/mapaocupacion'
+import { disponibilidad_zonas_en_vivo, estados_zona, texto_fallo_estado } from '../lib/mapaocupacion'
 import { calc_total_prospecto, nuevo_folio_prospecto } from '../lib/prospectos'
 import { html_ticket_reserva, nombre_archivo_ticket } from '../lib/recibo'
 import { email_valido, etiqueta_juego, generar_folio_reserva } from '../lib/reservasadmin'
@@ -210,16 +210,31 @@ export function usereservaexpress() {
         // 1. VALIDACION PREVENTIVA: re-verificar la zona EN VIVO contra
         // Supabase, no contra el catálogo que trae el formulario — el
         // formulario pudo llevar minutos abierto mientras se habla por
-        // teléfono, y alguien más pudo ocuparla mientras tanto. Misma
-        // funcion que arma la lista del <select> en formularioexpress.jsx
-        // (zonas_ocupadas_en_vivo: zona_juego_estado + reservas activas +
-        // prospectos con zona asignada), para que el guardado nunca acepte
-        // algo que el propio selector ya habria mostrado como "(Ocupada)".
+        // teléfono, y alguien más pudo ocuparla (o casi llenar el palco)
+        // mientras tanto. Misma funcion que arma la lista del <select> en
+        // formularioexpress.jsx (disponibilidad_zonas_en_vivo: zona_juego_
+        // estado + reservas activas + prospectos con zona asignada para
+        // zonas exclusivas; suma de adultos contra capacidad_maxima para
+        // palcos compartidos), para que el guardado nunca acepte algo que el
+        // propio selector ya habria mostrado como "(Ocupada)" o rechazado
+        // por falta de cupo.
         try {
-          const ocupadas = await zonas_ocupadas_en_vivo(sb, datos.juegoid)
-          if (ocupadas.has(String(datos.zonaid))) {
-            mostrartoast('⛔ Esa zona ya fue ocupada por otra persona. Elige otra.', 8000)
-            return { ok: false, campos: ['zona'] }
+          const disponibilidad = await disponibilidad_zonas_en_vivo(sb, datos.juegoid, areas)
+          const info = disponibilidad[String(datos.zonaid)]
+          if (info) {
+            if (info.escompartida) {
+              if (info.libres != null && calc.totaladultos > info.libres) {
+                mostrartoast(
+                  '⛔ Ese palco ya no tiene lugares suficientes para ' + calc.totaladultos +
+                  ' adulto(s) — quedan ' + info.libres + ' disponible(s). Ajusta la cantidad o elige otra zona.',
+                  8000
+                )
+                return { ok: false, campos: ['zona'] }
+              }
+            } else if (info.ocupada) {
+              mostrartoast('⛔ Esa zona ya fue ocupada por otra persona. Elige otra.', 8000)
+              return { ok: false, campos: ['zona'] }
+            }
           }
         } catch (edisp) {
           console.error('Verificación de disponibilidad en vivo falló (Reserva Exprés):', edisp)

@@ -27,6 +27,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { actualizar_verificado, motivo_bloqueo, registrar_movimiento } from './escritura'
+import { ocupacion_palco } from './pipeline'
 
 export const estados_zona = ['libre', 'reservada', 'bloqueada']
 
@@ -65,30 +66,54 @@ export function puede_bloquearse(areasestados, juegoid, zonaid) {
 // que otra vendedora ya tiene comprometida, aunque el bloqueo manual en
 // zona_juego_estado todavia no se haya escrito (p. ej. si bloquear_zona_directo
 // fallo y solo quedo el aviso "zona NO bloqueada").
-export async function zonas_ocupadas_en_vivo(sb, juegoid) {
-  const ocupadas = new Set()
-  if (!juegoid) return ocupadas
+//
+// PALCOS COMPARTIDOS (escompartida): binario "hay una fila → ocupada" esta
+// MAL para estos — un palco no se vende entero, se llena por LUGARES, y varias
+// reservas conviven en la misma zona/juego hasta llenar su capacidad. Mismo
+// criterio que ocupacion_palco()/api/sitio.js: la ocupacion se SUMA de las
+// reservas activas (solo adultos — lugares_de_reserva ya descarta niños) contra
+// `area.capacidadmaxima` (capacidad_maxima de mapa_secciones, NUNCA un tope
+// fijo en código), y un bloqueo MANUAL en zona_juego_estado se respeta por
+// encima de la capacidad — el resto de estados guardados ahi ('reservada')
+// NO aplica a un palco: lo decide la suma, no la etiqueta.
+//
+// Devuelve un mapa { [zonaid]: { ocupada, escompartida, ocupados, capacidad,
+// libres } } — ocupados/capacidad/libres solo van poblados para palcos
+// compartidos; en una zona exclusiva son null (no aplica "cuántos caben").
+export async function disponibilidad_zonas_en_vivo(sb, juegoid, areas) {
+  const resultado = {}
+  if (!juegoid) return resultado
 
   const [rz, rr, rp] = await Promise.allSettled([
     sb.from('zona_juego_estado').select('zona_id, estado').eq('juego_id', juegoid),
-    sb.from('reservas').select('zona_id, estado').eq('juego_id', juegoid),
+    sb.from('reservas').select('zona_id, estado, personas, adultos, ninos').eq('juego_id', juegoid),
     sb.from('pipeline_prospectos').select('zona_id, etapa').eq('juego', juegoid),
   ])
 
+  const estadozona = {}
   if (rz.status === 'fulfilled' && !rz.value.error) {
     (rz.value.data || []).forEach((f) => {
-      if (f.zona_id != null && f.estado && f.estado !== 'libre') ocupadas.add(String(f.zona_id))
+      if (f.zona_id != null) estadozona[String(f.zona_id)] = f.estado
     })
   } else {
-    console.warn('zonas_ocupadas_en_vivo: no se pudo leer zona_juego_estado', rz.reason || rz.value?.error)
+    console.warn('disponibilidad_zonas_en_vivo: no se pudo leer zona_juego_estado', rz.reason || rz.value?.error)
   }
 
+  const reservasjuego = []
+  const reservasocupadas = new Set()
   if (rr.status === 'fulfilled' && !rr.value.error) {
     (rr.value.data || []).forEach((f) => {
-      if (f.zona_id != null && !/cancelad/i.test(f.estado || '')) ocupadas.add(String(f.zona_id))
+      if (f.zona_id == null) return
+      const zid = String(f.zona_id)
+      // shape que espera ocupacion_palco()/lugares_de_reserva() (lib/pipeline.js).
+      reservasjuego.push({
+        zonaid: zid, juegoid: String(juegoid), estado: f.estado,
+        personas: f.personas, adultos: f.adultos, ninos: f.ninos,
+      })
+      if (!/cancelad/i.test(f.estado || '')) reservasocupadas.add(zid)
     })
   } else {
-    console.warn('zonas_ocupadas_en_vivo: no se pudo leer reservas', rr.reason || rr.value?.error)
+    console.warn('disponibilidad_zonas_en_vivo: no se pudo leer reservas', rr.reason || rr.value?.error)
   }
 
   // Solo la "Reserva Momentanea" de /reserva-express llena zona_id de forma
@@ -96,16 +121,34 @@ export async function zonas_ocupadas_en_vivo(sb, juegoid) {
   // el nombre de zona en texto libre) — cuando existe, es una zona comprometida
   // aunque su bloqueo en zona_juego_estado haya fallado. 'descartado' es el
   // unico estado terminal que libera: una tarjeta cerrada o completada siguio
-  // siendo una venta real.
+  // siendo una venta real. Esto SOLO aplica a zonas exclusivas: un palco
+  // compartido se rige por su capacidad, nunca por "hay una tarjeta".
+  const prospectosocupados = new Set()
   if (rp.status === 'fulfilled' && !rp.value.error) {
     (rp.value.data || []).forEach((f) => {
-      if (f.zona_id != null && f.etapa !== 'descartado') ocupadas.add(String(f.zona_id))
+      if (f.zona_id != null && f.etapa !== 'descartado') prospectosocupados.add(String(f.zona_id))
     })
   } else {
-    console.warn('zonas_ocupadas_en_vivo: no se pudo leer pipeline_prospectos', rp.reason || rp.value?.error)
+    console.warn('disponibilidad_zonas_en_vivo: no se pudo leer pipeline_prospectos', rp.reason || rp.value?.error)
   }
 
-  return ocupadas
+  ;(areas || []).forEach((a) => {
+    const zid = String(a.id)
+    if (a.escompartida) {
+      const o = ocupacion_palco(a, juegoid, reservasjuego)
+      const bloqueada = String(estadozona[zid] || '').toLowerCase() === 'bloqueada'
+      resultado[zid] = {
+        ocupada: bloqueada || o.agotado, escompartida: true,
+        ocupados: o.ocupados, capacidad: o.capacidad, libres: o.libres,
+      }
+    } else {
+      const est = String(estadozona[zid] || '').toLowerCase()
+      const ocupada = (!!est && est !== 'libre') || reservasocupadas.has(zid) || prospectosocupados.has(zid)
+      resultado[zid] = { ocupada, escompartida: false, ocupados: null, capacidad: null, libres: null }
+    }
+  })
+
+  return resultado
 }
 
 // El upsert devuelve { ok, motivo, error }. NUNCA lanza.
