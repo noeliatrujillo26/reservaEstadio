@@ -150,6 +150,10 @@
 }
 
 /* ── código de descuento: input + botón "Aplicar" ── */
+.pagina-reserva-express .re-codigo-fila {
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.pagina-reserva-express .re-codigo-fila .re-input { flex: 1; min-width: 120px; }
 .pagina-reserva-express .re-btn-aplicar {
   min-height: 50px; padding: 0 18px; border-radius: 12px; border: 1.5px solid var(--naranja);
   background: #fff; color: var(--naranja-dark); font-weight: 700; font-size: 14px;

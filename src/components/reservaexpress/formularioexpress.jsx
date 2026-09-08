@@ -108,17 +108,17 @@ export default function formularioexpress() {
   const refjuego = useRef(null)
   const refzona = useRef(null)
   const refconsumo = useRef(null)
-  const refadultos = useRef(null)
-  const refninos = useRef(null)
   const refvendedora = useRef(null)
   const refextra = useRef(null)
+  const refadultos = useRef(null)
+  const refninos = useRef(null)
   const refdescuento = useRef(null)
   const refcodigo = useRef(null)
   const refabono = useRef(null)
   const refnotas = useRef(null)
   const ordenrefs = [
-    reftelefono, refemail, refjuego, refzona, refconsumo, refadultos, refninos,
-    refvendedora, refextra, refdescuento, refcodigo, refabono, refnotas,
+    reftelefono, refemail, refjuego, refzona, refconsumo, refvendedora,
+    refextra, refadultos, refninos, refdescuento, refcodigo, refabono, refnotas,
   ]
 
   // enfoca el primer campo DESPUES de refactual que no esté deshabilitado
@@ -132,8 +132,8 @@ export default function formularioexpress() {
   }
 
   // Enter en un campo de la cadena: nunca envia nada (no hay <form>), solo
-  // avanza. Se usa en Teléfono/Email/Juego/Zona/Consumo/Adultos/Niños/
-  // Vendedora/Extra/Descuento/Abono.
+  // avanza. Se usa en Teléfono/Email/Juego/Zona/Consumo/Vendedora/Extra/
+  // Adultos/Niños/Descuento/Abono.
   function alenter_avanzar(refactual) {
     return (e) => {
       if (e.key !== 'Enter') return
@@ -505,29 +505,6 @@ export default function formularioexpress() {
             </div>
           </div>
 
-          <div className="re-fila-2">
-            <div className="re-campo">
-              <label>Adultos extra</label>
-              <input
-                ref={refadultos}
-                className="re-input" type="number" min="0" step="1" inputMode="numeric"
-                value={d.adultoextracant} onChange={(e) => set('adultoextracant', e.target.value)}
-                onKeyDown={alenter_avanzar(refadultos)}
-                placeholder="0"
-              />
-            </div>
-            <div className="re-campo">
-              <label>Niños extra</label>
-              <input
-                ref={refninos}
-                className="re-input" type="number" min="0" step="1" inputMode="numeric"
-                value={d.ninoextracant} onChange={(e) => set('ninoextracant', e.target.value)}
-                onKeyDown={alenter_avanzar(refninos)}
-                placeholder="0"
-              />
-            </div>
-          </div>
-
           <div className="re-campo">
             <label>Vendedora</label>
             <select
@@ -555,22 +532,40 @@ export default function formularioexpress() {
             />
           </div>
 
-          {/* Precio adulto/niño extra: SOLO LECTURA — la tarifa oficial de la
-              zona (ver el useEffect de precioadultobase/precioninobase). El
-              vendedor solo teclea cuántos en "Adultos extra"/"Niños extra". */}
+          {/* Personas extra: precio (SOLO LECTURA, tarifa oficial de la zona
+              — ver el useEffect de precioadultobase/precioninobase) junto a
+              su cantidad, en la MISMA fila — mismo maquetado que "Nuevo
+              prospecto" (Precio adulto extra + Adultos extra, y su par de
+              niño). El vendedor solo teclea cuántos. */}
           <div className="re-fila-2">
             <div className="re-campo">
               <label>Precio adulto extra ($)</label>
-              <input
-                className="re-input" type="number"
-                value={d.adultoextraprecio} disabled
-              />
+              <input className="re-input" type="number" value={d.adultoextraprecio} disabled />
             </div>
             <div className="re-campo">
-              <label>Precio niño extra ($)</label>
+              <label>Adultos extra</label>
               <input
-                className="re-input" type="number"
-                value={d.ninoextraprecio} disabled
+                ref={refadultos}
+                className="re-input" type="number" min="0" step="1" inputMode="numeric"
+                value={d.adultoextracant} onChange={(e) => set('adultoextracant', e.target.value)}
+                onKeyDown={alenter_avanzar(refadultos)}
+                placeholder="0"
+              />
+            </div>
+          </div>
+          <div className="re-fila-2">
+            <div className="re-campo">
+              <label>Precio niño extra ($)</label>
+              <input className="re-input" type="number" value={d.ninoextraprecio} disabled />
+            </div>
+            <div className="re-campo">
+              <label>Niños extra</label>
+              <input
+                ref={refninos}
+                className="re-input" type="number" min="0" step="1" inputMode="numeric"
+                value={d.ninoextracant} onChange={(e) => set('ninoextracant', e.target.value)}
+                onKeyDown={alenter_avanzar(refninos)}
+                placeholder="0"
               />
             </div>
           </div>
@@ -580,6 +575,7 @@ export default function formularioexpress() {
             </div>
           )}
 
+          {/* Descuento (%) y Código de descuento, en la misma fila. */}
           <div className="re-fila-2">
             <div className="re-campo">
               <label>Descuento (%)</label>
@@ -593,53 +589,53 @@ export default function formularioexpress() {
               />
             </div>
             <div className="re-campo">
-              <label>Abono Inicial ($)</label>
-              <input
-                ref={refabono}
-                className="re-input" type="number" min="0" step="0.01" inputMode="decimal"
-                value={d.abonoinicial} onChange={(e) => set('abonoinicial', e.target.value)}
-                onKeyDown={alenter_avanzar(refabono)}
-                placeholder="0.00"
-              />
+              <label>Código de descuento</label>
+              {!cupon ? (
+                <div className="re-codigo-fila">
+                  <input
+                    ref={refcodigo}
+                    className="re-input" style={{ textTransform: 'uppercase' }}
+                    value={codigo} onChange={(e) => setcodigo(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return
+                      e.preventDefault()
+                      aplicar_codigo()
+                      if (refabono.current) refabono.current.focus()
+                    }}
+                    placeholder="Ej. NARANJEROS10"
+                  />
+                  <button type="button" className="re-btn-aplicar" onClick={aplicar_codigo}>
+                    Aplicar
+                  </button>
+                </div>
+              ) : (
+                <div className="re-cliente-elegido">
+                  <div className="re-cliente-elegido-nombre">✓ {cupon.codigo} aplicado</div>
+                  <button
+                    type="button" onClick={quitar_codigo}
+                    className="re-cliente-elegido-cambiar" aria-label="Quitar código"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
             </div>
           </div>
+          {mensajecupon && !cupon && (
+            <div className="re-ayuda" style={{ marginTop: '-6px', marginBottom: '14px', color: mensajecupon.ok ? 'var(--verde)' : 'var(--rojo)' }}>
+              {mensajecupon.texto}
+            </div>
+          )}
 
           <div className="re-campo">
-            <label>Código de descuento</label>
-            {!cupon ? (
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  ref={refcodigo}
-                  className="re-input" style={{ textTransform: 'uppercase', flex: 1 }}
-                  value={codigo} onChange={(e) => setcodigo(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter') return
-                    e.preventDefault()
-                    aplicar_codigo()
-                    if (refabono.current) refabono.current.focus()
-                  }}
-                  placeholder="Ej. NARANJEROS10"
-                />
-                <button type="button" className="re-btn-aplicar" onClick={aplicar_codigo}>
-                  Aplicar
-                </button>
-              </div>
-            ) : (
-              <div className="re-cliente-elegido">
-                <div className="re-cliente-elegido-nombre">✓ {cupon.codigo} aplicado</div>
-                <button
-                  type="button" onClick={quitar_codigo}
-                  className="re-cliente-elegido-cambiar" aria-label="Quitar código"
-                >
-                  ×
-                </button>
-              </div>
-            )}
-            {mensajecupon && !cupon && (
-              <div className="re-ayuda" style={{ color: mensajecupon.ok ? 'var(--verde)' : 'var(--rojo)' }}>
-                {mensajecupon.texto}
-              </div>
-            )}
+            <label>Abono Inicial ($)</label>
+            <input
+              ref={refabono}
+              className="re-input" type="number" min="0" step="0.01" inputMode="decimal"
+              value={d.abonoinicial} onChange={(e) => set('abonoinicial', e.target.value)}
+              onKeyDown={alenter_avanzar(refabono)}
+              placeholder="0.00"
+            />
           </div>
 
           <div className="re-campo">
