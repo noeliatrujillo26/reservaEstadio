@@ -99,27 +99,26 @@ export default function formularioexpress() {
 
   // cadena de "Enter avanza al siguiente campo" — Teléfono es el destino
   // tanto del buscador de cliente como del primer eslabon de la cadena.
-  // "Notas" queda al final y sin manejador propio: ahi Enter sigue siendo
-  // un salto de línea normal.
+  // "Monto Área" y "Precio adulto/niño extra" son de SOLO LECTURA y no
+  // llevan ref: un campo deshabilitado no puede recibir foco, asi que jamas
+  // entrarian en esta cadena de todos modos. "Notas" queda al final y sin
+  // manejador propio: ahi Enter sigue siendo un salto de línea normal.
   const reftelefono = useRef(null)
   const refemail = useRef(null)
   const refjuego = useRef(null)
   const refzona = useRef(null)
+  const refconsumo = useRef(null)
   const refadultos = useRef(null)
   const refninos = useRef(null)
   const refvendedora = useRef(null)
-  const refconsumo = useRef(null)
   const refextra = useRef(null)
-  const refprecioadulto = useRef(null)
-  const refprecioninos = useRef(null)
   const refdescuento = useRef(null)
   const refcodigo = useRef(null)
   const refabono = useRef(null)
   const refnotas = useRef(null)
   const ordenrefs = [
-    reftelefono, refemail, refjuego, refzona, refadultos, refninos, refvendedora,
-    refconsumo, refextra, refprecioadulto, refprecioninos, refdescuento,
-    refcodigo, refabono, refnotas,
+    reftelefono, refemail, refjuego, refzona, refconsumo, refadultos, refninos,
+    refvendedora, refextra, refdescuento, refcodigo, refabono, refnotas,
   ]
 
   // enfoca el primer campo DESPUES de refactual que no esté deshabilitado
@@ -133,8 +132,8 @@ export default function formularioexpress() {
   }
 
   // Enter en un campo de la cadena: nunca envia nada (no hay <form>), solo
-  // avanza. Se usa en Teléfono/Email/Juego/Zona/Adultos/Niños/Vendedora/
-  // Monto/Abono.
+  // avanza. Se usa en Teléfono/Email/Juego/Zona/Consumo/Adultos/Niños/
+  // Vendedora/Extra/Descuento/Abono.
   function alenter_avanzar(refactual) {
     return (e) => {
       if (e.key !== 'Enter') return
@@ -456,6 +455,38 @@ export default function formularioexpress() {
             )}
           </div>
 
+          {/* Monto Área: de solo lectura, cargado del catálogo de Precios en
+              cuanto se elige la zona — mismo maquetado que "Nuevo prospecto"
+              (Monto Área junto a Consumo), pero como campo real en vez de
+              texto suelto. */}
+          <div className="re-fila-2">
+            <div className="re-campo">
+              <label>Monto Área ($)</label>
+              <input className="re-input" type="number" value={areamonto} disabled />
+            </div>
+            <div className="re-campo">
+              <label>Monto Consumo ($)</label>
+              <input
+                ref={refconsumo}
+                className="re-input" type="number" min="0" step="0.01" inputMode="decimal"
+                value={d.consumomonto} onChange={(e) => set('consumomonto', e.target.value)}
+                onKeyDown={alenter_avanzar(refconsumo)}
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+          {zonaelegida ? (
+            minpersonas > 0 && (
+              <div className="re-ayuda" style={{ marginTop: '-6px', marginBottom: '14px' }}>
+                Incluye {minpersonas} persona(s) en el precio de la zona.
+              </div>
+            )
+          ) : (
+            <div className="re-ayuda" style={{ marginTop: '-6px', marginBottom: '14px' }}>
+              Elige una zona para tomar la tarifa del catálogo.
+            </div>
+          )}
+
           <div className="re-campo">
             <label>Tipo de comida</label>
             <div className="re-segmento">
@@ -513,60 +544,39 @@ export default function formularioexpress() {
         <div className="re-seccion">
           <div className="re-seccion-titulo">💰 Financiero</div>
 
-          <div className="re-ayuda" style={{ marginBottom: '10px' }}>
-            Área/Zona tomada del catálogo de Precios: <strong>{money(areamonto)}</strong>
-            {minpersonas > 0 && ' · incluye ' + minpersonas + ' persona(s)'}
-            {!zonaelegida && ' · elige una zona para tomar la tarifa'}
+          <div className="re-campo">
+            <label>Extra ($)</label>
+            <input
+              ref={refextra}
+              className="re-input" type="number" min="0" step="0.01" inputMode="decimal"
+              value={d.extramonto} onChange={(e) => set('extramonto', e.target.value)}
+              onKeyDown={alenter_avanzar(refextra)}
+              placeholder="0.00"
+            />
           </div>
 
-          <div className="re-fila-2">
-            <div className="re-campo">
-              <label>Consumo ($)</label>
-              <input
-                ref={refconsumo}
-                className="re-input" type="number" min="0" step="0.01" inputMode="decimal"
-                value={d.consumomonto} onChange={(e) => set('consumomonto', e.target.value)}
-                onKeyDown={alenter_avanzar(refconsumo)}
-                placeholder="0.00"
-              />
-            </div>
-            <div className="re-campo">
-              <label>Extra ($)</label>
-              <input
-                ref={refextra}
-                className="re-input" type="number" min="0" step="0.01" inputMode="decimal"
-                value={d.extramonto} onChange={(e) => set('extramonto', e.target.value)}
-                onKeyDown={alenter_avanzar(refextra)}
-                placeholder="0.00"
-              />
-            </div>
-          </div>
-
+          {/* Precio adulto/niño extra: SOLO LECTURA — la tarifa oficial de la
+              zona (ver el useEffect de precioadultobase/precioninobase). El
+              vendedor solo teclea cuántos en "Adultos extra"/"Niños extra". */}
           <div className="re-fila-2">
             <div className="re-campo">
               <label>Precio adulto extra ($)</label>
               <input
-                ref={refprecioadulto}
-                className="re-input" type="number" min="0" step="0.01" inputMode="decimal"
-                value={d.adultoextraprecio} onChange={(e) => set('adultoextraprecio', e.target.value)}
-                onKeyDown={alenter_avanzar(refprecioadulto)}
-                placeholder="0.00"
+                className="re-input" type="number"
+                value={d.adultoextraprecio} disabled
               />
             </div>
             <div className="re-campo">
               <label>Precio niño extra ($)</label>
               <input
-                ref={refprecioninos}
-                className="re-input" type="number" min="0" step="0.01" inputMode="decimal"
-                value={d.ninoextraprecio} onChange={(e) => set('ninoextraprecio', e.target.value)}
-                onKeyDown={alenter_avanzar(refprecioninos)}
-                placeholder="0.00"
+                className="re-input" type="number"
+                value={d.ninoextraprecio} disabled
               />
             </div>
           </div>
           {zonaelegida && (
             <div className="re-ayuda" style={{ marginTop: '-6px', marginBottom: '14px' }}>
-              Prellenados con la tarifa de {zonaelegida.nombre} — solo agrega cuántos adultos/niños extra.
+              Tarifa oficial de {zonaelegida.nombre} — solo agrega cuántos adultos/niños extra.
             </div>
           )}
 
@@ -722,7 +732,7 @@ export default function formularioexpress() {
             <button className="re-btn re-btn-primario" onClick={nuevaReserva} style={{ marginBottom: '10px' }}>
               + Crear otra reserva
             </button>
-            <a href="/admin" className="re-btn re-btn-secundario" style={{ display: 'block', textAlign: 'center', textDecoration: 'none', lineHeight: '54px' }}>
+            <a href="/admin" className="re-btn re-btn-secundario" style={{ textDecoration: 'none' }}>
               Ir al Pipeline Comercial
             </a>
           </div>

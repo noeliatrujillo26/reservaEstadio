@@ -176,13 +176,15 @@
   font-size: 19px; font-weight: 800; color: var(--naranja-dark);
 }
 
-/* ── botón principal, fijo abajo para el pulgar ── */
+/* ── botón principal ── */
 .pagina-reserva-express .re-cta-wrap {
   position: sticky; bottom: 0; background: linear-gradient(to top, var(--fondo) 60%, transparent);
   padding: 14px 16px 18px;
 }
 .pagina-reserva-express .re-btn {
-  width: 100%; min-height: 54px; border-radius: 14px; border: none; font-size: 16px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; padding: 15px 20px; border-radius: 14px; border: none;
+  font-size: 16px; font-weight: 800; line-height: 1.2; text-align: center;
   cursor: pointer; font-family: inherit;
 }
 .pagina-reserva-express .re-btn-primario { background: var(--naranja); color: #fff; box-shadow: 0 8px 24px rgba(224,92,26,.35); }
@@ -217,14 +219,14 @@
 }
 
 /* < 768px (celular): el botón queda fijo al pie, ancho completo — ya cubierto
-   por .re-cta-wrap/.re-btn arriba. >= 768px (escritorio): dentro del mismo
-   ancho que el formulario (560px), centrado y con su propio máximo — deja de
-   fingir que la pantalla completa es "el siguiente paso". */
+   por .re-cta-wrap/.re-btn arriba. >= 768px (escritorio): deja de flotar
+   fijo al pie y pasa a vivir DENTRO del flujo normal del formulario, con el
+   mismo ancho que el resto de sus campos (560px) — el botón ocupa el 100%
+   de ESE contenedor, no un ancho menor centrado como una píldora suelta. */
 @media (min-width: 768px) {
   .pagina-reserva-express .re-form { padding-top: 26px; }
   .pagina-reserva-express .re-cta-wrap {
-    position: static; background: none; padding: 10px 16px 40px;
-    max-width: 560px; margin: 0 auto; display: flex; justify-content: center;
+    position: static; background: none; padding: 12px 16px 40px;
+    max-width: 560px; margin: 0 auto;
   }
-  .pagina-reserva-express .re-cta-wrap .re-btn-primario { width: 100%; max-width: 320px; }
 }
