@@ -293,23 +293,39 @@ function fila_catalogo(area, catalogo) {
 const precio_respaldo = { Terraza: 8000, Palco: 12000, Platea: 7000, 'Jardín': 6000, General: 5500 }
 const min_respaldo = { Terraza: 20, Palco: 20, Platea: 15, 'Jardín': 10, General: 10 }
 
-export function precio_seccion(area, catalogo) {
+// Defaults de negocio para Discada cuando la zona no trae su propia tarifa
+// configurada (precio_discada/precio_extra_discada en mapa_secciones) — los
+// MISMOS numeros que ya usa fila_precio() (lib/preciosadmin.js) para pintar
+// la tabla de solo-lectura "Precios" del admin, ahora tambien como el valor
+// real con el que se cobra, no solo el que se muestra.
+const discada_base_respaldo = 7500
+const discada_extra_respaldo = 500
+
+export function precio_seccion(area, catalogo, tipocomida) {
   const fila = fila_catalogo(area, catalogo)
+  if (tipocomida === 'discada') {
+    return (fila && fila.preciodiscada != null) ? fila.preciodiscada : discada_base_respaldo
+  }
   if (fila) return fila.precio
   return precio_respaldo[categoria_sec(area && area.nombre)] || null
 }
 
-// Tarifa BASE (DOM-MIE, carne asada) de persona extra que ya trae
-// configurada la zona en el catalogo de Precios — mismo nivel de detalle que
-// precio_seccion (sin variante JUE-SAB ni discada): sirve para PRELLENAR el
-// campo, que el vendedor puede seguir editando si el trato pactado es otro.
-export function precio_extra_seccion(area, catalogo) {
+// Tarifa BASE (DOM-MIE) de persona extra que ya trae configurada la zona en
+// el catalogo de Precios — sirve para PRELLENAR el campo, que el vendedor
+// puede seguir editando si el trato pactado es otro. `tipocomida === 'discada'`
+// cambia a la columna precio_extra_discada (con el mismo respaldo de negocio
+// que precio_seccion cuando la zona no la tiene configurada).
+export function precio_extra_seccion(area, catalogo, tipocomida) {
   const fila = fila_catalogo(area, catalogo)
+  if (tipocomida === 'discada') {
+    return (fila && fila.precioextradiscada != null) ? fila.precioextradiscada : discada_extra_respaldo
+  }
   return (fila && fila.precioextra != null) ? fila.precioextra : 0
 }
 
-export function precio_nino_seccion(area, catalogo) {
+export function precio_nino_seccion(area, catalogo, tipocomida) {
   const fila = fila_catalogo(area, catalogo)
+  if (tipocomida === 'discada' && fila && fila.precioninodiscada != null) return fila.precioninodiscada
   return (fila && fila.precionino != null) ? fila.precionino : 0
 }
 
@@ -321,4 +337,17 @@ export function min_seccion(area, catalogo, juego) {
   const fila = fila_catalogo(area, catalogo)
   if (fila) return finde && fila.min2 != null ? fila.min2 || 1 : fila.min || 1
   return min_respaldo[categoria_sec(area && area.nombre)] || 1
+}
+
+// ¿Se ofrece Discada para este juego? Regla de negocio: SOLO domingo a
+// miercoles — mapa_secciones ni siquiera tiene una columna precio_discada2
+// para jueves-sabado, asi que jueves/viernes/sabado no hay tarifa que cobrar.
+// Mismo corte de dia (getDay >= 4 = jueves..sabado) que usa min_seccion() para
+// su variante min2, sin depender de esa funcion para no acoplar dos reglas
+// distintas (personas incluidas vs. disponibilidad de un platillo) a un solo
+// cambio. Sin juego elegido aun no se restringe de mas: se deja disponible
+// hasta que se sepa la fecha real.
+export function discada_disponible(juego) {
+  if (!juego || !juego.fecha) return true
+  return new Date(juego.fecha + 'T12:00').getDay() < 4
 }

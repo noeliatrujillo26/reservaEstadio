@@ -62,7 +62,9 @@ import { categoria_sec } from '../../lib/dashboard'
 import { disponibilidad_zonas_en_vivo } from '../../lib/mapaocupacion'
 import { map_precio } from '../../lib/preciosadmin'
 import { calc_total_prospecto } from '../../lib/prospectos'
-import { min_seccion, precio_extra_seccion, precio_nino_seccion, precio_seccion } from '../../lib/reservasadmin'
+import {
+  discada_disponible, min_seccion, precio_extra_seccion, precio_nino_seccion, precio_seccion,
+} from '../../lib/reservasadmin'
 import { redondear_dinero, mxn2 } from '../../lib/dinero'
 
 const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2)
@@ -262,29 +264,46 @@ export default function formularioexpress() {
   // dashboard) para clasificar una zona por su nombre.
   const escategoriapalco = zonaelegida ? categoria_sec(zonaelegida.nombre) === 'Palco' : false
 
-  // al elegir una zona: si es Palco se limpia el tipo de comida (no aplica),
-  // y si se vuelve a una zona con comida se restaura el default — sin pisar
-  // una eleccion valida ya hecha en una zona con comida.
+  // Discada SOLO domingo a miercoles (discada_disponible, lib/reservasadmin.js
+  // — mismo corte de dia que ya usa min_seccion() para su variante JUE-SAB).
+  // Si el juego elegido cae jueves/viernes/sabado, la opcion se oculta.
+  const discadadisponible = discada_disponible(juego)
+
+  // tipo de comida: si la zona es Palco se limpia (no aplica); si estaba en
+  // discada y el juego elegido ya no la ofrece se fuerza carne asada; y al
+  // volver a una zona con comida sin nada elegido se restaura el default —
+  // las tres reglas juntas en un solo efecto para que nunca compitan entre si
+  // por el mismo campo en el mismo render.
   useEffect(() => {
     if (!zonaelegida) return
-    if (escategoriapalco && d.tipocomida) set('tipocomida', '')
-    else if (!escategoriapalco && !d.tipocomida) set('tipocomida', 'carne_asada')
+    if (escategoriapalco) {
+      if (d.tipocomida) set('tipocomida', '')
+    } else if (!discadadisponible && d.tipocomida === 'discada') {
+      set('tipocomida', 'carne_asada')
+    } else if (!d.tipocomida) {
+      set('tipocomida', 'carne_asada')
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zonaelegida, escategoriapalco])
+  }, [zonaelegida, escategoriapalco, discadadisponible])
 
   // ── motor de precios — EL MISMO que "Nuevo prospecto" ──────────
   // catálogo de Precios (map_precio) para resolver el "Monto Área" y el
-  // mínimo de personas que ya incluye la zona, exactamente como ahi.
+  // mínimo de personas que ya incluye la zona, exactamente como ahi — mas
+  // d.tipocomida: carne asada y discada son columnas DISTINTAS del catalogo
+  // (precio/precio_extra/precio_nino vs. precio_discada/_extra_discada/
+  // _nino_discada), asi que el mismo cambio de boton que decide QUE se sirve
+  // tambien decide CUANTO cuesta, sin pisar el resto de campos financieros.
   const catalogo = useMemo(() => (secciones || []).map(map_precio), [secciones])
-  const areamonto = zonaelegida ? precio_seccion(zonaelegida, catalogo) || 0 : 0
+  const areamonto = zonaelegida ? precio_seccion(zonaelegida, catalogo, d.tipocomida) || 0 : 0
   const minpersonas = zonaelegida ? min_seccion(zonaelegida, catalogo, juego) : 0
-  const precioadultobase = zonaelegida ? precio_extra_seccion(zonaelegida, catalogo) : 0
-  const precioninobase = zonaelegida ? precio_nino_seccion(zonaelegida, catalogo) : 0
+  const precioadultobase = zonaelegida ? precio_extra_seccion(zonaelegida, catalogo, d.tipocomida) : 0
+  const precioninobase = zonaelegida ? precio_nino_seccion(zonaelegida, catalogo, d.tipocomida) : 0
 
   // "Precio adulto/niño extra" se PRELLENAN con la tarifa de la zona en
   // cuanto se elige — el vendedor solo teclea cuántos, no cuánto. Atados a
-  // d.zonaid (no al precio en si) para no pisar un ajuste manual en cada
-  // render; cambiar de zona SI refresca el precio, igual que "Área/Zona".
+  // d.zonaid/d.tipocomida (no al precio en si) para no pisar un ajuste manual
+  // en cada render; cambiar de zona O de tipo de comida SI refresca el
+  // precio, igual que "Área/Zona".
   useEffect(() => {
     if (!zonaelegida) return
     setd((x) => ({
@@ -293,7 +312,7 @@ export default function formularioexpress() {
       ninoextraprecio: precioninobase > 0 ? String(precioninobase) : x.ninoextraprecio,
     }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [d.zonaid])
+  }, [d.zonaid, d.tipocomida])
 
   const calc = useMemo(
     () => calc_total_prospecto(
@@ -598,13 +617,20 @@ export default function formularioexpress() {
                 >
                   🥩 Carne asada
                 </button>
-                <button
-                  type="button" className={d.tipocomida === 'discada' ? 'activo' : ''}
-                  onClick={() => set('tipocomida', 'discada')}
-                >
-                  🌮 Discada
-                </button>
+                {discadadisponible && (
+                  <button
+                    type="button" className={d.tipocomida === 'discada' ? 'activo' : ''}
+                    onClick={() => set('tipocomida', 'discada')}
+                  >
+                    🌮 Discada
+                  </button>
+                )}
               </div>
+              {d.juegoid && !discadadisponible && (
+                <div className="re-ayuda">
+                  Discada solo se ofrece de domingo a miércoles — este juego no aplica.
+                </div>
+              )}
             </div>
           )}
 
