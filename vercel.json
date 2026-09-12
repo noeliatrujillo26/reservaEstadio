@@ -3,6 +3,7 @@
   "rewrites": [
     { "source": "/reserva-express", "destination": "/index.html" },
     { "source": "/reserva-express/assets/:path*", "destination": "/assets/:path*" },
+    { "source": "/reserva-express/:file(favicon\\.png|favicon-h\\.png|logo-naranjeros\\.png|mapa-estadio\\.png|NuevoMapa\\.png)", "destination": "/:file" },
     { "source": "/reserva-express/:path*", "destination": "/index.html" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
