@@ -38,3 +38,6 @@ pruebas/out-cascadas
 # correo, telefono) -- jamas al repo.
 scripts/out-limpieza
 scripts/candidatos-limpieza-*.json
+
+.vercel
+.env*

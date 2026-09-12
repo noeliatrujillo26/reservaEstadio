@@ -47,7 +47,7 @@ function PantallaAcceso() {
     <div className="re-acceso">
       <div className="re-acceso-card">
         <a href="/" className="re-logo-link" aria-label="Ir a la página principal" title="Ir a la página principal">
-          <img src="/logo-naranjeros.png" alt="Naranjeros" className="re-logo" />
+          <img src={import.meta.env.BASE_URL + 'logo-naranjeros.png'} alt="Naranjeros" className="re-logo" />
         </a>
         <h1>Reserva Express</h1>
         <p className="re-sub">Inicia sesión con tu cuenta de administrador para crear una reserva momentánea.</p>

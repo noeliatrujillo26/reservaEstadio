@@ -1,6 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
+    { "source": "/reserva-express", "destination": "/index.html" },
+    { "source": "/reserva-express/assets/:path*", "destination": "/assets/:path*" },
+    { "source": "/reserva-express/:path*", "destination": "/index.html" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

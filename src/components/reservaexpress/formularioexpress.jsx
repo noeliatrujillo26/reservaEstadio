@@ -415,7 +415,7 @@ export default function formularioexpress() {
     <>
       <div className="re-topbar">
         <a href="/" className="re-logo-link" aria-label="Ir a la página principal" title="Ir a la página principal">
-          <img src="/logo-naranjeros.png" alt="Naranjeros" />
+          <img src={import.meta.env.BASE_URL + 'logo-naranjeros.png'} alt="Naranjeros" />
         </a>
         <div className="re-topbar-titulo">Reserva Express</div>
         <div className="re-topbar-usuario">
