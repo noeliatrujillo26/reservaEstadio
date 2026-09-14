@@ -322,8 +322,12 @@ export default function formularioexpress() {
     [d, areamonto, minpersonas, cupon, areas, descuentosvolumen]
   )
   // % EFECTIVO mostrado en la tarjeta: junta el manual/código Y el
-  // automático por volumen en una sola línea, como pide el desglose.
-  const pctdescuento = calc.subtotal > 0 ? Math.round((calc.descuentototal / calc.subtotal) * 100) : 0
+  // automático por volumen en una sola línea, como pide el desglose. Sobre
+  // areabase (zona + personas extra) — la MISMA base que calc_total_prospecto
+  // usa para calcular el descuento en pesos — y no sobre calc.subtotal
+  // (que incluye Consumo/Extra): con Consumo grande, ese % salía diluido y
+  // ya no coincidía con el que se tecleó a mano.
+  const pctdescuento = calc.areabase > 0 ? Math.round((calc.descuentototal / calc.areabase) * 100) : 0
 
   // Si la zona elegida es un palco compartido: ¿lo que se esta pidiendo
   // (calc.totaladultos = el minimo que incluye la zona + los adultos extra —

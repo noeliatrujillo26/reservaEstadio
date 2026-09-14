@@ -1166,12 +1166,14 @@ function _descuentoVolumenAplicable(personas, juegoId, zonaId) {
 }
 
 // calcPipTotal() (js/modules/pipeline.js), con los valores del formulario
-// como argumentos. Reescrita 05 sep 2026: el manual y el de grupo se
-// convierten a PESOS por separado (antes se sumaban los dos porcentajes y se
-// aplicaban de una vez sobre el subtotal) — la propia v1 documenta que el
-// resultado es el mismo "salvo por algun centavo de redondeo", y en un PALCO
-// COMPARTIDO la base del descuento de grupo es solo paquete + adultos extra
-// (_baseDescuentoGrupo), nunca el subtotal completo.
+// como argumentos. Actualizada 14 sep 2026 para seguir la REGLA GLOBAL del
+// 11 sep 2026 (ya vigente en la v1 real, ver la cabecera de calcPipTotal):
+// el manual, el cupón fijo y el de grupo se calculan SIEMPRE sobre areaBase
+// (área + personas extra, vía _baseDescontable) — nunca sobre el subtotal
+// completo, que además trae Consumo y Extra. Esos dos jamás llevan
+// descuento y se suman íntegros al total. En un PALCO COMPARTIDO la base
+// del grupo además excluye niños (_baseDescuentoGrupo: solo paquete +
+// adultos extra).
 function _calcPipTotalV1(f, cuponFijo, juegoId, zonaId, esPalco) {
   const area = parseFloat(f.area || 0) || 0
   const consumo = parseFloat(f.consumo || 0) || 0
@@ -1186,21 +1188,23 @@ function _calcPipTotalV1(f, cuponFijo, juegoId, zonaId, esPalco) {
   const adultosExtra = adultoPrecio * adultoCant
   const ninosExtra = ninoPrecio * ninoCant
   const subtotal = area + consumo + extra + adultosExtra + ninosExtra
+  const noDescontable = consumo + extra
+  const areaBase = area + adultosExtra + ninosExtra
   const totalAdultos = minimo + adultoCant
   const personas = totalAdultos + ninoCant
 
   const rg = _descuentoVolumenAplicable(esPalco ? totalAdultos : personas, juegoId, zonaId)
   const volPct = rg ? (Number(rg.porcentaje) || 0) : 0
   if (cuponFijo) {
-    const pesosCupon = Math.min(redondearDinero(cuponFijo.valor), redondearDinero(subtotal))
-    desc = subtotal > 0 ? redondearDinero(pesosCupon * 100 / subtotal) : 0
+    const pesosCupon = Math.min(redondearDinero(cuponFijo.valor), redondearDinero(areaBase))
+    desc = areaBase > 0 ? redondearDinero(pesosCupon * 100 / areaBase) : 0
   }
-  const montoDesc = redondearDinero(subtotal * desc / 100)
-  const baseGrupo = esPalco ? (area + adultosExtra) : subtotal
+  const montoDesc = redondearDinero(areaBase * desc / 100)
+  const baseGrupo = esPalco ? (area + adultosExtra) : areaBase
   let montoVol = redondearDinero(baseGrupo * volPct / 100)
-  montoVol = desc >= 100 ? 0 : Math.min(montoVol, Math.max(0, redondearDinero(subtotal - montoDesc)))
+  montoVol = desc >= 100 ? 0 : Math.min(montoVol, Math.max(0, redondearDinero(areaBase - montoDesc)))
   const descuentoTotal = redondearDinero(montoDesc + montoVol)
-  const total = Math.max(0, redondearDinero(subtotal - montoDesc - montoVol))
+  const total = redondearDinero(noDescontable + Math.max(0, redondearDinero(areaBase - montoDesc - montoVol)))
   return { subtotal: redondearDinero(subtotal), total, descuentoTotal, volumenPct: volPct,
     personas, adultoCant, ninoCant, totalAdultos, espalco: !!esPalco }
 }
@@ -1484,15 +1488,18 @@ for (let i = 0; i < 8000; i++) {
   )
   afirmar('calc_total_prospecto en un palco: grupo se calcula sobre paquete+adultos extra',
     cPalco.espalco === true && cPalco.subtotal === 15000 && cPalco.descuentototal === 2000)
-  // La MISMA zona pero SIN marcarla compartida usa el subtotal completo.
+  // La MISMA zona pero SIN marcarla compartida: 20% de grupo sobre areaBase
+  // (área $9,000 + adultos extra $1,000 = $10,000 → $2,000) — NUNCA sobre el
+  // subtotal de $15,000 con Consumo/Extra (eso daría $3,000, el bug real
+  // corregido el 14 sep 2026: antes SÍ se calculaba así fuera de un palco).
   const cExclusiva = v2.calc_total_prospecto(
     { areamonto: 9000, consumomonto: 4000, extramonto: 1000, adultoextraprecio: 500,
       adultoextracant: 2, minpersonas: 20, zonaid: 'sec-1' },
     { descuentosvolumen: [{ minpersonas: 1, porcentaje: 20, activo: true }],
       areas: [{ id: 'sec-1', escompartida: false }] }
   )
-  afirmar('calc_total_prospecto fuera de un palco: grupo sobre el subtotal completo',
-    cExclusiva.espalco === false && cExclusiva.descuentototal === 3000)
+  afirmar('calc_total_prospecto fuera de un palco: grupo sobre areaBase, NUNCA sobre Consumo/Extra',
+    cExclusiva.espalco === false && cExclusiva.areabase === 10000 && cExclusiva.descuentototal === 2000)
 
   afirmar('etiqueta de grupo aclara la base cuando es palco',
     v2.etiqueta_grupo(20, true).indexOf('paquete + adultos extra') >= 0)

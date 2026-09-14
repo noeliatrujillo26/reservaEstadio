@@ -90,17 +90,26 @@ export function descuento_volumen_aplicable(reglas, personas, juegoid, zonaid) {
 // subtotal completo (ver base_descuento_grupo en pipeline.js). `ctx.areas`
 // es necesario para resolver esto por zonaid; sin el, se asume zona normal.
 //
-// El manual va sobre el subtotal SIEMPRE; el de grupo sobre su base propia.
+// El manual va sobre el AREABASE (zona + personas extra) SIEMPRE; el de grupo
+// sobre su base propia. Ni uno ni otro toca jamas Consumo ni Extra (regla de
+// la casa, espejo de la v1 — js/modules/pipeline.js _pdRecalcMonto/
+// _pdDerivarMontoBase, 11 sep 2026): esos dos se suman INTEGROS al total
+// final, nunca se descuentan. Antes ambos se calculaban sobre el `subtotal`
+// completo (area+consumo+extra+personas extra), asi que un Consumo/Extra
+// grande terminaba absorbiendo parte del % — un bug real, no una decision.
+//
 // No se suman los porcentajes —pueden tener bases distintas—: cada uno se
 // convierte a pesos por separado y el de grupo jamas excede lo que queda
 // despues del manual (100% de manual anula el de grupo del todo). Sin ese
 // tope, un manual del 80% mas un grupo del 30% daba un total NEGATIVO.
 //
-// Un cupon de MONTO FIJO se convierte a su % equivalente sobre el subtotal de
-// ESTE momento, para que $500 sigan siendo $500 si despues cambia el area o se
-// agregan personas. Congelar el % hacia que el descuento cambiara de valor en
-// silencio. Uno de PORCENTAJE reemplaza el manual tal cual, mismo criterio de
-// "el cupon manda sobre lo tecleado a mano" que ya aplicaba al de monto fijo.
+// Un cupon de MONTO FIJO se convierte a su % equivalente sobre el AREABASE de
+// ESTE momento (nunca sobre el subtotal con Consumo/Extra: un cupon de $500
+// no debe poder "gastarse" contra el Consumo), para que $500 sigan siendo
+// $500 si despues cambia el area o se agregan personas. Congelar el %
+// haria que el descuento cambiara de valor en silencio. Uno de PORCENTAJE
+// reemplaza el manual tal cual, mismo criterio de "el cupon manda sobre lo
+// tecleado a mano" que ya aplicaba al de monto fijo.
 export function calc_total_prospecto(d, ctx) {
   const area = Number(d.areamonto) || 0
   const consumo = Number(d.consumomonto) || 0
@@ -112,7 +121,11 @@ export function calc_total_prospecto(d, ctx) {
   const minimo = parseInt(d.minpersonas, 10) || 0
 
   const adultosextramonto = adultoprecio * adultocant
-  const subtotal = area + consumo + extra + adultosextramonto + ninoprecio * ninocant
+  const ninosextramonto = ninoprecio * ninocant
+  // Base DESCONTABLE: SOLO lo que cuesta ocupar la zona (area + personas
+  // extra, adultos Y ninos). Consumo y Extra viven fuera de esta base.
+  const areabase = area + adultosextramonto + ninosextramonto
+  const subtotal = areabase + consumo + extra
   const totaladultos = minimo + adultocant
   const personas = totaladultos + ninocant
 
@@ -127,21 +140,26 @@ export function calc_total_prospecto(d, ctx) {
   let manualpct = Number(d.descuento) || 0
   const cupon = d.cupon || null
   if (cupon && cupon.tipo === 'fijo') {
-    const pesos = Math.min(redondear_dinero(Number(cupon.valor) || 0), redondear_dinero(subtotal))
-    manualpct = subtotal > 0 ? redondear_dinero((pesos / subtotal) * 100) : 0
+    const pesos = Math.min(redondear_dinero(Number(cupon.valor) || 0), redondear_dinero(areabase))
+    manualpct = areabase > 0 ? redondear_dinero((pesos / areabase) * 100) : 0
   } else if (cupon && cupon.tipo === 'porcentaje') {
     manualpct = Number(cupon.valor) || 0
   }
   manualpct = Math.max(0, manualpct)
 
-  const montomanual = redondear_dinero((subtotal * manualpct) / 100)
-  const basegrupo = base_descuento_grupo(espalco, area, adultosextramonto, subtotal)
+  const montomanual = redondear_dinero((areabase * manualpct) / 100)
+  const basegrupo = base_descuento_grupo(espalco, area, adultosextramonto, areabase)
   let montogrupo = redondear_dinero((basegrupo * volumenpct) / 100)
-  montogrupo = manualpct >= 100 ? 0 : Math.min(montogrupo, Math.max(0, subtotal - montomanual))
+  montogrupo = manualpct >= 100 ? 0 : Math.min(montogrupo, Math.max(0, areabase - montomanual))
   const descuentototal = redondear_dinero(montomanual + montogrupo)
-  const total = Math.max(0, redondear_dinero(subtotal - descuentototal))
+  // El piso de $0 se aplica SOLO a la porción del área (un manual > 100%,
+  // capturado a mano, no debe poder "pedir prestado" del Consumo/Extra para
+  // completar el descuento) — Consumo y Extra se suman SIEMPRE íntegros,
+  // nunca se ven afectados por el tope. Espejo exacto de calcPipTotal (v1).
+  const total = redondear_dinero(consumo + extra + Math.max(0, redondear_dinero(areabase - descuentototal)))
 
   return {
+    areabase: redondear_dinero(areabase),
     subtotal: redondear_dinero(subtotal),
     total,
     descuentototal,
