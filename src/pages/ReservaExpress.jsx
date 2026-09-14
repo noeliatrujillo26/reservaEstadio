@@ -14,12 +14,16 @@
 //   fuera       → login (propio, no el de escritorio — ver adminlogin.jsx)
 //   dentro      → el formulario, ya con AdminDatosProvider montado
 //
-// AUTORIZACION: solo `estado === 'dentro'` (sesión de administrador activa)
-// — a proposito NO se repite aqui ningun candado de permiso por rol o de la
-// bandera VITE_ESCRITURA_ADMIN. Cualquier cuenta que pueda iniciar sesión en
-// el panel queda habilitada para este módulo móvil; ver la cabecera de
-// usereservaexpress.js para el detalle de por qué sus escrituras tampoco
-// repiten ese candado.
+// AUTORIZACION (14 sep 2026): sesión de administrador activa Y el permiso
+// `reserva_express` en su perfil (tabla `usuarios`, columna `permisos` —
+// mismo objeto {modulo: 'ver'|'editar'} del panel v1, otorgado desde
+// Usuarios → Editar usuario → Herramientas → Reserva Express). El rol
+// Administrador siempre pasa: es quien reparte los demás permisos, y las
+// cuentas Administrador creadas antes de que existiera esta bandera no
+// deben quedar fuera solo porque su `permisos` guardado nunca la incluyó.
+// Sin ninguno de los dos: mensaje explícito y CIERRE de sesión — a
+// diferencia de /admin, aquí SÍ hay un candado de permiso porque el acceso
+// a esta app móvil ahora es explícitamente opt-in por cuenta.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useEffect, useState } from 'react'
@@ -30,6 +34,12 @@ import ToastProvider from '../context/toastcontext'
 import Toast from '../components/ui/toast'
 import FormularioExpress from '../components/reservaexpress/formularioexpress'
 import '../styles/reserva-express.css'
+
+function tiene_acceso_reserva_express(usuario) {
+  if (!usuario) return false
+  if (usuario.rol === 'Administrador') return true
+  return !!(usuario.permisos && usuario.permisos.reserva_express)
+}
 
 function PantallaAcceso() {
   const { iniciar_sesion, error } = useadmin()
@@ -78,12 +88,51 @@ function PantallaAcceso() {
   )
 }
 
+// Se muestra cuando una sesión válida NO trae el permiso `reserva_express`
+// (ni es Administrador). La sesión de Supabase ya se cerró para cuando esto
+// se pinta (ver el useEffect de abajo) — "Volver a intentar" recarga la
+// página entera, así que un cambio de cuenta arranca con React limpio.
+function PantallaSinPermiso() {
+  return (
+    <div className="re-acceso">
+      <div className="re-acceso-card">
+        <a href="/" className="re-logo-link" aria-label="Ir a la página principal" title="Ir a la página principal">
+          <img src={import.meta.env.BASE_URL + 'logo-naranjeros.png'} alt="Naranjeros" className="re-logo" />
+        </a>
+        <h1>Reserva Express</h1>
+        <div className="re-error">
+          No tienes permisos para acceder a Reserva Express. Pídele a un administrador que te lo otorgue desde
+          Usuarios → Editar usuario → Herramientas.
+        </div>
+        <button className="re-btn re-btn-primario" style={{ marginTop: '16px' }} onClick={() => window.location.reload()}>
+          Volver a intentar
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function pantalla() {
-  const { estado } = useadmin()
+  const { estado, usuario, cerrar_sesion } = useadmin()
+  // Sticky a propósito: cerrar_sesion() abajo hace que `estado` vuelva a
+  // 'fuera', y sin esta bandera aparte el render caería al `if (estado ===
+  // 'fuera')` de más abajo y mostraría el login de nuevo en vez del mensaje.
+  const [sinpermiso, setsinpermiso] = useState(false)
 
   useEffect(() => {
     document.title = 'Reserva Express — Naranjeros Admin'
   }, [])
+
+  useEffect(() => {
+    if (estado === 'dentro' && !tiene_acceso_reserva_express(usuario)) {
+      setsinpermiso(true)
+      cerrar_sesion()
+    }
+  }, [estado, usuario, cerrar_sesion])
+
+  if (sinpermiso) {
+    return <PantallaSinPermiso />
+  }
 
   if (estado === 'verificando') {
     return <div className="re-cargando">Verificando sesión…</div>
