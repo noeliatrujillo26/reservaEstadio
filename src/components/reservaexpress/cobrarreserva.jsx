@@ -32,26 +32,20 @@ import usecobrosescritura from '../../hooks/usecobrosescritura'
 import { buscar_cliente, catalogo_clientes } from '../../lib/clientes'
 import { buscar_reservas, resumen_reserva } from '../../lib/cobrarreserva'
 import { folio_visible } from '../../lib/reservasadmin'
-import { saldo_favor_de } from '../../lib/cascadas'
+import { saldo_favor_de, toca_saldo_favor } from '../../lib/cascadas'
 import { mxn2 } from '../../lib/dinero'
 import { hoy_hermosillo } from '../../lib/fechas'
 
 const money = (n) => '$' + (Number(n) || 0).toLocaleString('es-MX', mxn2)
 
-// formas de pago fijas + el catálogo real de métodos activos (mismo criterio
-// que nuevocobro.jsx), con "Saldo a favor" siempre al final: es una
-// redención, no un método del catálogo de `metodos_pago`.
-function formas_de_pago(metodos) {
-  const activos = (metodos || [])
-    .filter((m) => String(m.estado || 'Activo') !== 'Inactivo')
-    .map((m) => m.nombre)
-  const base = activos.length ? activos : ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA']
-  return base.concat(['SALDO A FAVOR'])
-}
+// Catálogo FIJO homologado con el del Pipeline (25 sep 2026, a pedido
+// explícito) — a propósito ya NO sale del catálogo real de `metodos_pago`:
+// estas cuatro, en este orden, siempre.
+const FORMAS_PAGO = ['TRANSFERENCIA', 'EFECTIVO', 'TARJETA', 'SALDO A FAVOR']
 
 export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
   const { usuario, cerrar_sesion } = useadmin()
-  const { clientes, reservas, cobros, metodos, cargando } = useadmindatos()
+  const { clientes, reservas, cobros, cargando } = useadmindatos()
   const { registrar, guardando } = usecobrosescritura()
 
   const [busqueda, setbusqueda] = useState('')
@@ -60,11 +54,14 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
   const [monto, setmonto] = useState('')
   const [forma, setforma] = useState('')
   const [referencia, setreferencia] = useState('')
+  const [requierefactura, setrequierefactura] = useState(false)
+  const [archivo, setarchivo] = useState(null)
   const [saldofavor, setsaldofavor] = useState(null)
   const [errorcampo, seterrorcampo] = useState(null)
   const [exito, setexito] = useState(null)
   const refbusqueda = useRef(null)
   const refmonto = useRef(null)
+  const refarchivo = useRef(null)
 
   const catalogo = useMemo(() => catalogo_clientes({ clientes, reservas }), [clientes, reservas])
   const cliente = useMemo(() => {
@@ -75,19 +72,23 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
 
   const resultados = useMemo(() => buscar_reservas(reservas, busqueda), [reservas, busqueda])
   const resumen = useMemo(() => resumen_reserva(reserva, cobros), [reserva, cobros])
-  const formas = useMemo(() => formas_de_pago(metodos), [metodos])
 
   const montonum = parseFloat(monto) || 0
   const esredencion = forma === 'SALDO A FAVOR'
   const saldoinsuficiente = esredencion && saldofavor != null && montonum > saldofavor + 0.009
+  // Comprobante obligatorio salvo Saldo a favor — mismo criterio que
+  // nuevocobro.jsx (toca_saldo_favor): ese dinero ya se respaldó al abonarlo.
+  const comprobanteobligatorio = !toca_saldo_favor('ABONO', forma)
 
   function elegir(r) {
     setreserva(r)
     setbusqueda('')
     setabrirdrop(false)
     setmonto('')
-    setforma(formas[0] || '')
+    setforma(FORMAS_PAGO[0])
     setreferencia('')
+    setrequierefactura(false)
+    setarchivo(null)
     seterrorcampo(null)
     setsaldofavor(null)
     const ficha = buscar_cliente(catalogo, { nombre: r.cliente, email: r.email, tel: r.tel })
@@ -102,6 +103,8 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
     setbusqueda('')
     setmonto('')
     setreferencia('')
+    setrequierefactura(false)
+    setarchivo(null)
     seterrorcampo(null)
     setsaldofavor(null)
     setTimeout(() => { if (refbusqueda.current) refbusqueda.current.focus() }, 80)
@@ -117,12 +120,9 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
       forma,
       referencia,
       fecha: hoy_hermosillo(),
-      requierefactura: false,
-      archivo: null,
-      // Ninguna forma de esta pestaña pide comprobante aparte: el pago se
-      // capturó en vivo por teléfono/en sitio, y "Saldo a favor" ya se
-      // respaldó cuando se abonó.
-      comprobanteobligatorio: false,
+      requierefactura,
+      archivo,
+      comprobanteobligatorio,
     })
     if (r && r.ok) {
       setexito({
@@ -201,9 +201,9 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
                           className="re-dropdown-item"
                           onMouseDown={() => elegir(r)}
                         >
-                          <div className="re-dropdown-nombre">{folio_visible(r)} · {r.cliente || 'Sin nombre'}</div>
+                          <div className="re-dropdown-nombre">{r.cliente || 'Sin nombre'}</div>
                           <div className="re-dropdown-sub">
-                            {(r.zona || 'Sin zona') + (r.tel ? ' · ' + r.tel : '')}
+                            {folio_visible(r) + ' · ' + (r.zona || 'Sin zona') + (r.tel ? ' · ' + r.tel : '')}
                           </div>
                         </div>
                       ))
@@ -218,9 +218,9 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
             ) : (
               <div className="re-cliente-elegido">
                 <div style={{ minWidth: 0 }}>
-                  <div className="re-cliente-elegido-nombre">{folio_visible(reserva)} · {reserva.cliente || '—'}</div>
+                  <div className="re-cliente-elegido-nombre">{reserva.cliente || '—'}</div>
                   <div style={{ fontSize: '11.5px', color: 'var(--texto-tenue)', marginTop: '2px' }}>
-                    {(reserva.zona || 'Sin zona') + (reserva.tel ? ' · ' + reserva.tel : '')}
+                    {folio_visible(reserva) + ' · ' + (reserva.zona || 'Sin zona') + (reserva.tel ? ' · ' + reserva.tel : '')}
                   </div>
                 </div>
                 <button type="button" className="re-cliente-elegido-cambiar" onClick={cambiar} aria-label="Cambiar reserva">
@@ -286,8 +286,8 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
                   className={'re-select' + (errorcampo === 'forma' ? ' re-error' : '')}
                   value={forma} onChange={(e) => setforma(e.target.value)}
                 >
-                  {formas.map((f) => (
-                    <option key={f} value={f}>{f === 'SALDO A FAVOR' ? 'Saldo a favor (redención)' : f}</option>
+                  {FORMAS_PAGO.map((f) => (
+                    <option key={f} value={f}>{f}</option>
                   ))}
                 </select>
                 {esredencion && saldoinsuficiente && (
@@ -309,6 +309,42 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
                   value={referencia} onChange={(e) => setreferencia(e.target.value)}
                 />
               </div>
+
+              {/* Comprobante — mismo criterio que nuevocobro.jsx (Pipeline):
+                  obligatorio salvo pago con Saldo a favor, que ya se respaldó
+                  al abonarlo. Se sube al mismo storage ('cobros') y el enlace
+                  viaja en `cobros.evidencia`, igual que en el Pipeline. */}
+              <div className="re-campo">
+                <label>
+                  {'Comprobante' + (comprobanteobligatorio ? ' *' : ' (opcional)')}
+                </label>
+                <label
+                  htmlFor="re-cobrar-archivo"
+                  className={'re-upload' + (errorcampo === 'comprobante' && !archivo ? ' re-error' : '')}
+                >
+                  {archivo ? '📎 ' + archivo.name : '📤 Clic para cargar comprobante (imagen o PDF)'}
+                </label>
+                <input
+                  ref={refarchivo}
+                  id="re-cobrar-archivo"
+                  type="file" accept="image/*,application/pdf"
+                  style={{ display: 'none' }}
+                  onChange={(e) => setarchivo(e.target.files && e.target.files[0] ? e.target.files[0] : null)}
+                />
+                <div className="re-ayuda">
+                  {comprobanteobligatorio
+                    ? 'Obligatorio: adjunta el respaldo del pago (transferencia, voucher, ficha o foto del recibo).'
+                    : 'Opcional con Saldo a favor: el dinero ya se respaldó al abonarlo.'}
+                </div>
+              </div>
+
+              <label className="re-checkbox">
+                <input
+                  type="checkbox"
+                  checked={requierefactura} onChange={(e) => setrequierefactura(e.target.checked)}
+                />
+                Requiere factura
+              </label>
             </div>
           </>
         )}
