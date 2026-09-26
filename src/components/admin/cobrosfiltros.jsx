@@ -100,6 +100,19 @@ export default function cobrosfiltros({ filtros, setfiltros, opciones, mostrados
           <option value="cancelado">Solo cancelados</option>
         </select>
 
+        {/* Origen del cobro (25 sep 2026, migracion-auditoria-cobros.sql):
+            desde dónde se registró — el celular de /reserva-express o el
+            panel de escritorio. */}
+        <select
+          className="input" id="filtro-origen-cobro" title="Origen del cobro"
+          style={{ flex: '1 1 170px', minWidth: '160px' }}
+          value={filtros.origen} onChange={(e) => set('origen')(e.target.value)}
+        >
+          <option value="">Todos los orígenes</option>
+          <option value="RESERVA_EXPRESS_MOBILE">📱 Reserva Express</option>
+          <option value="PIPELINE_ADMIN">🖥️ Pipeline</option>
+        </select>
+
         <input
           type="date" className="input" id="filtro-fecha"
           style={{ flex: '1 1 150px', minWidth: '150px' }}

@@ -91,6 +91,13 @@ function map_cobro(c) {
     facturaxml: c.factura_xml || '',
     // hora exacta del pago (migracion-cobros-hora.sql). NULL en historicas.
     createdat: c.created_at || null,
+    // Auditoría (migracion-auditoria-cobros.sql, 25 sep 2026): quién lo
+    // registró, desde dónde y qué tipo de movimiento fue. NULL/'' en
+    // cobros previos a la migración o a esta fecha.
+    creadoporid: c.creado_por_id || null,
+    creadoporemail: c.creado_por_email || '',
+    origen: c.origen || '',
+    tipomovimiento: c.tipo_movimiento || '',
   }
 }
 

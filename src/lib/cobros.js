@@ -132,9 +132,15 @@ export function filtrar_cobros(cobros, f) {
     const match_fecha = !f.fecha || c.fecha === f.fecha
     const match_estado =
       !f.estado || (f.estado === 'cancelado' ? cobro_cancelado(c) : !cobro_cancelado(c))
+    // Origen (25 sep 2026, migracion-auditoria-cobros.sql): un cobro sin la
+    // columna llena (historico, de antes de esta migración/función) se trata
+    // como PIPELINE_ADMIN — mismo default que usecobrosescritura.js aplica al
+    // registrar, ya que todos los cobros anteriores a Reserva Express se
+    // capturaron desde el panel de escritorio.
+    const match_origen = !f.origen || (c.origen || 'PIPELINE_ADMIN') === f.origen
     return (
       match_busq && match_mes && match_concepto && match_forma &&
-      match_recibio && match_factura && match_fecha && match_estado
+      match_recibio && match_factura && match_fecha && match_estado && match_origen
     )
   })
 }
@@ -193,6 +199,39 @@ export function kpis_cobros(subset, reservas) {
     })
   }
   return kpis
+}
+
+// ── desglose por forma de pago (25 sep 2026, filtros por Origen) ──
+// Las MISMAS cuatro formas del catálogo fijo de "Registrar Cobro"
+// (TRANSFERENCIA/EFECTIVO/TARJETA/SALDO A FAVOR) — misma agrupación que ya
+// hace arqueo_por_forma (lib/reportes.js) para el Corte de caja, aquí sobre
+// el subconjunto YA filtrado del Registro de Cobros (incluye Origen, Mes,
+// Concepto, etc.): cambiar cualquier filtro recalcula estas cinco cifras
+// solas, sin tocar nada aparte. Único criterio de "dinero real": fuera los
+// cancelados y el crédito (cuenta por cobrar, no caja) — igual que
+// kpis_cobros.
+export function desglose_por_forma(subset) {
+  const dinero = (subset || []).filter((c) => !cobro_cancelado(c) && !es_cobro_credito(c))
+  const total = dinero.reduce((s, c) => s + (Number(c.monto) || 0), 0)
+  const de = (clave) => dinero
+    .filter((c) => forma_pago_clave(forma_de(c)) === forma_pago_clave(clave))
+    .reduce((s, c) => s + (Number(c.monto) || 0), 0)
+  return {
+    total,
+    efectivo: de('EFECTIVO'),
+    transferencia: de('TRANSFERENCIA'),
+    tarjeta: de('TARJETA'),
+    saldofavor: de('SALDO A FAVOR'),
+  }
+}
+
+// Etiqueta legible del origen — para el badge sutil de la tabla y el
+// desplegable de filtro. Historicos sin la columna llena caen en
+// PIPELINE_ADMIN, mismo default que match_origen (filtrar_cobros) y que
+// usecobrosescritura.js al registrar.
+export function origen_legible(c) {
+  const o = (c && c.origen) || 'PIPELINE_ADMIN'
+  return o === 'RESERVA_EXPRESS_MOBILE' ? 'Reserva Express' : 'Pipeline'
 }
 
 // ── resumen por zona ────────────────────────────────────────────

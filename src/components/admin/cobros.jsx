@@ -24,8 +24,8 @@ import { abrir_recibo_cobro } from '../../lib/recibo'
 import { mensaje_reporte_dia, url_whatsapp_reporte } from '../../lib/reportedia'
 import { hoy_hermosillo } from '../../lib/fechas'
 import {
-  cobro_cancelado, estado_cobro, filtrar_cobros, kpis_cobros, meses_label,
-  ordenar_cobros, requiere_factura, resumen_por_vendedora, resumen_por_zona,
+  cobro_cancelado, desglose_por_forma, estado_cobro, filtrar_cobros, kpis_cobros, meses_label,
+  ordenar_cobros, origen_legible, requiere_factura, resumen_por_vendedora, resumen_por_zona,
   colores_vendedora, folio_reserva, formato_fecha,
 } from '../../lib/cobros'
 import { redondear_dinero, mxn2 } from '../../lib/dinero'
@@ -34,7 +34,7 @@ const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2
 
 const filtros_vacios = {
   busqueda: '', mes: [], concepto: [], forma: [], recibio: [], factura: [],
-  fecha: '', estado: '',
+  fecha: '', estado: '', origen: '',
 }
 
 const columnas = [
@@ -123,6 +123,9 @@ export default function cobros() {
   const visibles = useMemo(() => ordenar_cobros(filtrados, orden.col, orden.dir), [filtrados, orden])
   // los KPIs reflejan LO FILTRADO en vivo, igual que la v1.
   const kpis = useMemo(() => kpis_cobros(filtrados, reservas), [filtrados, reservas])
+  // Desglose por forma de pago (25 sep 2026): sobre `filtrados`, así que el
+  // filtro de Origen (y cualquier otro filtro activo) lo recalcula solo.
+  const desglose = useMemo(() => desglose_por_forma(filtrados), [filtrados])
   const resumen = useMemo(() => resumen_por_zona(todos), [todos])
   const vendedoras = useMemo(() => resumen_por_vendedora(todos), [todos])
 
@@ -170,6 +173,31 @@ export default function cobros() {
           ))}
         </div>
 
+        {/* ── Ingresos por forma de pago (25 sep 2026) — reacciona a TODOS
+            los filtros activos, incluido el nuevo filtro de Origen. ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '12px', marginBottom: '20px' }}>
+          <div className="stat-card" style={{ padding: '14px 16px', borderLeft: '3px solid var(--naranja)' }}>
+            <div className="stat-card-label">Ingresos Totales</div>
+            <div className="stat-card-value" style={{ fontSize: '20px', color: 'var(--naranja)' }}>{money(desglose.total)}</div>
+          </div>
+          <div className="stat-card" style={{ padding: '14px 16px', borderLeft: '3px solid #16A34A' }}>
+            <div className="stat-card-label">Efectivo</div>
+            <div className="stat-card-value" style={{ fontSize: '20px' }}>{money(desglose.efectivo)}</div>
+          </div>
+          <div className="stat-card" style={{ padding: '14px 16px', borderLeft: '3px solid var(--azul)' }}>
+            <div className="stat-card-label">Transferencia</div>
+            <div className="stat-card-value" style={{ fontSize: '20px' }}>{money(desglose.transferencia)}</div>
+          </div>
+          <div className="stat-card" style={{ padding: '14px 16px', borderLeft: '3px solid var(--morado)' }}>
+            <div className="stat-card-label">Tarjeta</div>
+            <div className="stat-card-value" style={{ fontSize: '20px' }}>{money(desglose.tarjeta)}</div>
+          </div>
+          <div className="stat-card" style={{ padding: '14px 16px', borderLeft: '3px solid var(--amarillo)' }}>
+            <div className="stat-card-label">Saldo a Favor</div>
+            <div className="stat-card-value" style={{ fontSize: '20px' }}>{money(desglose.saldofavor)}</div>
+          </div>
+        </div>
+
         {/* ── pestañas ── */}
         <div className="tab-bar" style={{ marginBottom: 0 }}>
           <button className={'tab-btn' + (pestana === 'tabla' ? ' active' : '')} onClick={() => setpestana('tabla')}>
@@ -206,6 +234,7 @@ export default function cobros() {
                         </span>
                       </th>
                     ))}
+                    <th style={{ whiteSpace: 'nowrap' }}>Origen</th>
                     <th style={{ whiteSpace: 'nowrap' }}>Folio Reserva</th>
                     <th style={{ whiteSpace: 'nowrap' }}>Recibo</th>
                     <th style={{ whiteSpace: 'nowrap' }}>Acciones</th>
@@ -236,6 +265,15 @@ export default function cobros() {
                         <td>{c.formapago}</td>
                         <td style={{ fontWeight: 700 }}>{money(c.monto)}</td>
                         <td>{c.recibio || '—'}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <span
+                            className={'badge ' + (c.origen === 'RESERVA_EXPRESS_MOBILE' ? 'badge-blue' : 'badge-gray')}
+                            style={{ fontSize: '9.5px', fontWeight: 700 }}
+                            title="Desde dónde se registró este cobro"
+                          >
+                            {c.origen === 'RESERVA_EXPRESS_MOBILE' ? '📱 ' : '🖥️ '}{origen_legible(c)}
+                          </span>
+                        </td>
                         <td>{c.folio || '—'}</td>
                         <td>
                           {puede_editar && !cancelado ? (
