@@ -301,31 +301,44 @@ const min_respaldo = { Terraza: 20, Palco: 20, Platea: 15, 'Jardín': 10, Genera
 const discada_base_respaldo = 7500
 const discada_extra_respaldo = 500
 
-export function precio_seccion(area, catalogo, tipocomida) {
+// `juego` (opcional, 4to parametro): jueves/viernes/sabado usan la columna
+// alterna JUE-SAB (precio2/precioextra2/precionino2) cuando la zona la trae
+// configurada — la MISMA regla de dia que ya aplica min_seccion() aqui abajo.
+// Sin juego (o entre semana) se sigue usando la columna base DOM-MIE, igual
+// que antes. La Discada es EXCLUSIVA de DOM-MIE (discada_disponible()) y no
+// tiene columna alterna, asi que su rama ignora el dia.
+function es_finde(juego) {
+  return !!(juego && juego.fecha && new Date(juego.fecha + 'T12:00').getDay() >= 4)
+}
+
+export function precio_seccion(area, catalogo, tipocomida, juego) {
   const fila = fila_catalogo(area, catalogo)
   if (tipocomida === 'discada') {
     return (fila && fila.preciodiscada != null) ? fila.preciodiscada : discada_base_respaldo
   }
-  if (fila) return fila.precio
+  if (fila) return es_finde(juego) && fila.precio2 != null ? fila.precio2 : fila.precio
   return precio_respaldo[categoria_sec(area && area.nombre)] || null
 }
 
-// Tarifa BASE (DOM-MIE) de persona extra que ya trae configurada la zona en
-// el catalogo de Precios — sirve para PRELLENAR el campo, que el vendedor
-// puede seguir editando si el trato pactado es otro. `tipocomida === 'discada'`
-// cambia a la columna precio_extra_discada (con el mismo respaldo de negocio
-// que precio_seccion cuando la zona no la tiene configurada).
-export function precio_extra_seccion(area, catalogo, tipocomida) {
+// Tarifa de persona extra que ya trae configurada la zona en el catalogo de
+// Precios — sirve para PRELLENAR el campo, que el vendedor puede seguir
+// editando si el trato pactado es otro. `tipocomida === 'discada'` cambia a
+// la columna precio_extra_discada (con el mismo respaldo de negocio que
+// precio_seccion cuando la zona no la tiene configurada); `juego` en fin de
+// semana cambia a precio_extra2 cuando la zona la trae configurada.
+export function precio_extra_seccion(area, catalogo, tipocomida, juego) {
   const fila = fila_catalogo(area, catalogo)
   if (tipocomida === 'discada') {
     return (fila && fila.precioextradiscada != null) ? fila.precioextradiscada : discada_extra_respaldo
   }
+  if (es_finde(juego) && fila && fila.precioextra2 != null) return fila.precioextra2
   return (fila && fila.precioextra != null) ? fila.precioextra : 0
 }
 
-export function precio_nino_seccion(area, catalogo, tipocomida) {
+export function precio_nino_seccion(area, catalogo, tipocomida, juego) {
   const fila = fila_catalogo(area, catalogo)
   if (tipocomida === 'discada' && fila && fila.precioninodiscada != null) return fila.precioninodiscada
+  if (es_finde(juego) && fila && fila.precionino2 != null) return fila.precionino2
   return (fila && fila.precionino != null) ? fila.precionino : 0
 }
 

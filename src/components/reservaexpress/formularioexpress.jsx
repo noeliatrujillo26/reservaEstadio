@@ -36,9 +36,14 @@
 //
 // DESGLOSE FINANCIERO: EL MISMO motor que "Nuevo prospecto"
 // (calc_total_prospecto, en lib/prospectos.js) — Área/Zona se toma del
-// catálogo de Precios para la zona elegida (precio_seccion/min_seccion,
-// igual que ese modal), y Consumo/Extra/Adultos extra/Niños extra/
-// Descuento son los mismos campos que ahi. El "Código de descuento" es
+// catálogo de Precios para la zona elegida (precio_seccion/min_seccion),
+// y Consumo/Extra/Adultos extra/Niños extra/Descuento son los mismos
+// campos que ahi. A diferencia de "Nuevo prospecto" (que solo usa la
+// tarifa DOM-MIÉ), aquí precio_seccion/precio_extra_seccion/
+// precio_nino_seccion SÍ reciben `juego`: jueves-sábado toma la columna
+// alterna JUE-SÁB del catálogo (precio2/precioextra2/precionino2) — la
+// MISMA regla de día que ya usa min_seccion y que usa la web pública. El
+// "Código de descuento" es
 // nuevo: valida contra el catálogo YA CARGADO (validar_codigo_descuento en
 // lib/catalogos.js, mismas reglas que el checkout público) y, si es válido,
 // su % o monto fijo SUSTITUYE al descuento manual — no se suman los dos.
@@ -294,16 +299,17 @@ export default function formularioexpress() {
   // _nino_discada), asi que el mismo cambio de boton que decide QUE se sirve
   // tambien decide CUANTO cuesta, sin pisar el resto de campos financieros.
   const catalogo = useMemo(() => (secciones || []).map(map_precio), [secciones])
-  const areamonto = zonaelegida ? precio_seccion(zonaelegida, catalogo, d.tipocomida) || 0 : 0
+  const areamonto = zonaelegida ? precio_seccion(zonaelegida, catalogo, d.tipocomida, juego) || 0 : 0
   const minpersonas = zonaelegida ? min_seccion(zonaelegida, catalogo, juego) : 0
-  const precioadultobase = zonaelegida ? precio_extra_seccion(zonaelegida, catalogo, d.tipocomida) : 0
-  const precioninobase = zonaelegida ? precio_nino_seccion(zonaelegida, catalogo, d.tipocomida) : 0
+  const precioadultobase = zonaelegida ? precio_extra_seccion(zonaelegida, catalogo, d.tipocomida, juego) : 0
+  const precioninobase = zonaelegida ? precio_nino_seccion(zonaelegida, catalogo, d.tipocomida, juego) : 0
 
   // "Precio adulto/niño extra" se PRELLENAN con la tarifa de la zona en
   // cuanto se elige — el vendedor solo teclea cuántos, no cuánto. Atados a
-  // d.zonaid/d.tipocomida (no al precio en si) para no pisar un ajuste manual
-  // en cada render; cambiar de zona O de tipo de comida SI refresca el
-  // precio, igual que "Área/Zona".
+  // d.zonaid/d.tipocomida/d.juegoid (no al precio en si) para no pisar un
+  // ajuste manual en cada render; cambiar de zona, de tipo de comida O DE
+  // JUEGO (jueves-sábado usa otra tarifa) SI refresca el precio, igual que
+  // "Área/Zona".
   useEffect(() => {
     if (!zonaelegida) return
     setd((x) => ({
@@ -312,7 +318,7 @@ export default function formularioexpress() {
       ninoextraprecio: precioninobase > 0 ? String(precioninobase) : x.ninoextraprecio,
     }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [d.zonaid, d.tipocomida])
+  }, [d.zonaid, d.tipocomida, d.juegoid])
 
   const calc = useMemo(
     () => calc_total_prospecto(
