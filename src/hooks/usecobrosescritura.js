@@ -199,9 +199,16 @@ export function usecobrosescritura() {
 
   // ── REGISTRAR ────────────────────────────────────────────────
   // datos = { cliente, reservaid, concepto, monto, forma, fecha,
-  //           requierefactura, archivo, comprobanteobligatorio }
-  // Devuelve { ok } o { ok:false, campo } para que el formulario enfoque el
-  // campo que falta, igual que la v1.
+  //           requierefactura, archivo, comprobanteobligatorio,
+  //           referencia, origen }
+  // `origen` (25 sep 2026, auditoría): 'RESERVA_EXPRESS_MOBILE' o
+  // 'PIPELINE_ADMIN' — quien llama lo declara; por defecto 'PIPELINE_ADMIN'
+  // porque el único llamador que aún no lo pasa es el Registro de Cobros del
+  // panel (cobros.jsx → nuevocobro.jsx).
+  // Devuelve { ok, cobro, avisos } o { ok:false, campo } para que el
+  // formulario enfoque el campo que falta, igual que la v1. `cobro` es la
+  // fila tal como quedó en la base (id, folio, monto, evidencia…) — para que
+  // quien llama pueda generar un recibo/comprobante SIN volver a consultar.
   const registrar = useCallback(
     async (datos) => {
       const bloqueo = motivo_bloqueo(usuario, 'cobros')
@@ -338,6 +345,14 @@ export function usecobrosescritura() {
               : 'Registro de Cobros · captura manual') +
             (String(datos.referencia || '').trim() ? ' · ' + String(datos.referencia).trim() : ''),
           evidencia,
+          // ── Auditoría (25 sep 2026, migracion-auditoria-cobros.sql) ──────
+          // NO van en claves_legacy_cobro a propósito: si la migración no ha
+          // corrido, insertar_verificado() reintenta sin estas columnas y el
+          // cobro se guarda igual (solo sin trazabilidad hasta que se corra).
+          creado_por_id: usuario && usuario.id != null ? String(usuario.id) : null,
+          creado_por_email: usuario ? usuario.email || null : null,
+          origen: String(datos.origen || 'PIPELINE_ADMIN').toUpperCase(),
+          tipo_movimiento: esredencion ? 'REDENCION_SALDO_A_FAVOR' : 'ABONO_DIRECTO',
         }
 
         const res = await insertar_verificado(sb, usuario, 'cobros', payload, claves_legacy_cobro)
@@ -449,7 +464,7 @@ export function usecobrosescritura() {
         })
         await recargar()
         if (avisos.length) mostrartoast(avisos.join(' · '), 9000)
-        return { ok: true, avisos }
+        return { ok: true, avisos, cobro: guardado }
       } catch (err) {
         console.error('registrar cobro:', err)
         mostrartoast('⚠️ No se pudo registrar el cobro. Intenta de nuevo.')

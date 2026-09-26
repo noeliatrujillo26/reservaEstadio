@@ -123,6 +123,9 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
       requierefactura,
       archivo,
       comprobanteobligatorio,
+      // Auditoría (25 sep 2026): esta pestaña vive en el celular, fuera del
+      // panel de escritorio — usecobrosescritura.js lo guarda en cobros.origen.
+      origen: 'RESERVA_EXPRESS_MOBILE',
     })
     if (r && r.ok) {
       setexito({
