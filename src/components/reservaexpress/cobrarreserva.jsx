@@ -29,11 +29,11 @@ import { sb } from '../../supabaseclient'
 import useadmin from '../../hooks/useadmin'
 import useadmindatos from '../../hooks/useadmindatos'
 import usecobrosescritura from '../../hooks/usecobrosescritura'
-import { buscar_cliente, catalogo_clientes } from '../../lib/clientes'
+import { buscar_cliente, catalogo_clientes, tel_norm } from '../../lib/clientes'
 import { buscar_reservas, resumen_reserva } from '../../lib/cobrarreserva'
 import { folio_visible } from '../../lib/reservasadmin'
 import { saldo_favor_de, toca_saldo_favor } from '../../lib/cascadas'
-import { mxn2 } from '../../lib/dinero'
+import { mxn2, redondear_dinero } from '../../lib/dinero'
 import { hoy_hermosillo } from '../../lib/fechas'
 
 const money = (n) => '$' + (Number(n) || 0).toLocaleString('es-MX', mxn2)
@@ -112,10 +112,11 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
 
   async function guardar() {
     seterrorcampo(null)
+    const concepto = 'ABONO'
     const r = await registrar({
       cliente,
       reservaid: reserva ? reserva.id : '',
-      concepto: 'ABONO',
+      concepto,
       monto,
       forma,
       referencia,
@@ -128,13 +129,64 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
       origen: 'RESERVA_EXPRESS_MOBILE',
     })
     if (r && r.ok) {
+      // El resumen de ANTES del cobro (`resumen`) sigue siendo el correcto
+      // punto de partida: React todavía no re-renderizó con los datos que
+      // recargar() (dentro de registrar()) acaba de traer, así que sumar el
+      // monto recién pagado a mano da la cifra "hasta la fecha" exacta sin
+      // esperar un segundo render.
+      const totalpagado = redondear_dinero(resumen.abonado + montonum)
+      const restante = Math.max(0, redondear_dinero(resumen.restante - montonum))
       setexito({
-        folio: folio_visible(reserva), cliente: cliente.nombre, monto: montonum,
-        forma, restante: Math.max(0, resumen.restante - montonum),
+        folio: folio_visible(reserva),
+        cliente: cliente.nombre,
+        tel: reserva.tel || cliente.tel || '',
+        zona: reserva.zona || '',
+        juego: reserva.juego || '',
+        concepto,
+        monto: montonum,
+        forma,
+        fechahora: new Date().toLocaleString('es-MX', {
+          timeZone: 'America/Hermosillo', dateStyle: 'long', timeStyle: 'short',
+        }),
+        totalreserva: resumen.totalbruto,
+        totalpagado,
+        restante,
+        // r.cobro es la fila REAL insertada (usecobrosescritura.js la
+        // devuelve desde el 25 sep 2026) — su `evidencia` es el enlace ya
+        // subido al storage, no el nombre del archivo local.
+        evidencia: (r.cobro && r.cobro.evidencia) || '',
       })
     } else if (r && r.campo) {
       seterrorcampo(r.campo)
     }
+  }
+
+  // Plantilla EXACTA de confirmación de pago (25 sep 2026) — igual en
+  // contenido y estructura a la del Pipeline, para que el cliente reciba el
+  // mismo mensaje sin importar desde qué pantalla se registró su pago.
+  // [URL_Reserva]: el portal público de autoservicio (mismo criterio que
+  // api/recordatorios.js en asadores-panel-master: SITE_URL + '/mis-reservas'
+  // a secas — el cliente entra con SU folio y correo, no un enlace mágico).
+  function mensaje_whatsapp(e) {
+    const urlreserva = window.location.origin + '/mis-reservas'
+    return '¡Hola *' + e.cliente + '*! 👋\n' +
+      'Confirmamos la recepción de tu pago. Aquí está el detalle de tu comprobante:\n\n' +
+      '📌 *Folio:* ' + e.folio + '\n' +
+      '💵 *Monto Abonado:* ' + money(e.monto) + '\n' +
+      '💳 *Método de Pago:* ' + e.forma + '\n' +
+      '📊 *Total Reserva:* ' + money(e.totalreserva) + '\n' +
+      '✅ *Total Pagado:* ' + money(e.totalpagado) + '\n' +
+      '🔴 *Restante por Liquidar:* ' + money(e.restante) + '\n\n' +
+      'Gracias por tu pago. Ver detalle de tu reserva aquí: ' + urlreserva
+  }
+
+  function enviar_whatsapp() {
+    if (!exito) return
+    const numerowa = tel_norm(exito.tel)
+    const numero = numerowa.length === 10 ? '52' + numerowa : ''
+    if (!numero) { seterrorcampo('whatsapp'); return }
+    const url = 'https://wa.me/' + numero + '?text=' + encodeURIComponent(mensaje_whatsapp(exito))
+    window.open(url, '_blank')
   }
 
   function nuevocobro() {
@@ -376,15 +428,46 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
           <div className="re-exito-card">
             <div className="re-exito-icono">✓</div>
             <h2>¡Cobro registrado!</h2>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--naranja-dark)' }}>
+              NARANJEROS DE HERMOSILLO{exito.juego ? ' · ' + exito.juego : ''}
+            </div>
             <div className="re-exito-folio">{exito.folio}</div>
             <div className="re-exito-detalle">
               <div><strong>Cliente:</strong> {exito.cliente}</div>
-              <div><strong>Monto:</strong> {money(exito.monto)}</div>
+              {exito.tel && <div><strong>Teléfono:</strong> {exito.tel}</div>}
+              {exito.zona && <div><strong>Zona:</strong> {exito.zona}</div>}
+              <div style={{ borderTop: '1px dashed var(--borde)', margin: '8px 0', paddingTop: '8px' }}>
+                <strong>Pago registrado</strong>
+              </div>
+              <div><strong>Concepto:</strong> {exito.concepto}</div>
+              <div><strong>Monto cobrado:</strong> {money(exito.monto)}</div>
               <div><strong>Forma de pago:</strong> {exito.forma}</div>
+              <div><strong>Fecha y hora:</strong> {exito.fechahora}</div>
+              {exito.evidencia && (
+                <div>
+                  <strong>Comprobante:</strong>{' '}
+                  <a href={exito.evidencia} target="_blank" rel="noreferrer" style={{ color: 'var(--naranja-dark)', fontWeight: 700 }}>
+                    Ver adjunto
+                  </a>
+                </div>
+              )}
+              <div style={{ borderTop: '1px dashed var(--borde)', margin: '8px 0', paddingTop: '8px' }}>
+                <strong>Resumen financiero</strong>
+              </div>
+              <div><strong>Total reserva:</strong> {money(exito.totalreserva)}</div>
+              <div><strong>Total pagado:</strong> {money(exito.totalpagado)}</div>
               <div><strong>Restante:</strong> {exito.restante <= 0 ? '✅ Liquidada' : money(exito.restante)}</div>
             </div>
-            <button className="re-btn re-btn-primario" onClick={nuevocobro}>
-              ¡Listo!
+            <button className="re-btn re-btn-whatsapp" onClick={enviar_whatsapp}>
+              📲 Enviar Comprobante por WhatsApp
+            </button>
+            {errorcampo === 'whatsapp' && (
+              <div className="re-ayuda" style={{ color: 'var(--rojo)', marginBottom: '10px' }}>
+                ⚠️ Este cliente no tiene un teléfono a 10 dígitos registrado.
+              </div>
+            )}
+            <button className="re-btn re-btn-secundario" onClick={nuevocobro}>
+              Registrar Nuevo Cobro
             </button>
           </div>
         </div>
