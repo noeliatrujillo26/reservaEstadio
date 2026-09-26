@@ -30,18 +30,29 @@ export function folio_visible(reserva) {
   return /^\d+$/.test(id) ? 'RES-' + id : id
 }
 
-// NOTA: la v1 amplia este conjunto con los folios del prospecto vinculado del
-// Pipeline (abonos previos a generar la reserva). Ese modulo aun no se migra,
-// asi que aqui solo entra el folio propio; al migrar Pipeline se completa.
-function folios_de_reserva(reserva) {
-  return new Set([String(reserva.id)])
+// Folios que cuentan como "de esta reserva": el propio, mas el de CUALQUIER
+// tarjeta del Pipeline que la tenga en su reservaids — abonos cobrados
+// mientras la reserva todavia era solo una tarjeta (reserva_momentanea) se
+// guardan con el folio DEL PROSPECTO, no con el de la reserva que nace
+// despues. Identico a _foliosDeReserva() de asadores-panel-master
+// (js/20-editor-mapa.js). `pipeline` es opcional (Reserva Express y el resto
+// del panel ya lo traen de useadmindatos(); sin el, se degrada al folio
+// propio nada mas — nunca revienta).
+function folios_de_reserva(reserva, pipeline) {
+  const folios = new Set([String(reserva.id)])
+  ;(pipeline || []).forEach((p) => {
+    if ((p.reservaids || []).map(String).includes(String(reserva.id)) && p.folio) {
+      folios.add(String(p.folio))
+    }
+  })
+  return folios
 }
 
 // "Abonado" = DINERO REAL: los cobros a credito son cuenta por cobrar
 // (credito_de_reserva) y jamas se muestran como dinero recibido.
-export function abonado_de_reserva(reserva, cobros) {
+export function abonado_de_reserva(reserva, cobros, pipeline) {
   if (!reserva) return 0
-  const folios = folios_de_reserva(reserva)
+  const folios = folios_de_reserva(reserva, pipeline)
   const suma = cobros
     .filter((c) => !cobro_cancelado(c) && !es_cobro_credito(c) && folios.has(String(c.folio)))
     .reduce((s, c) => s + (Number(c.monto) || 0), 0)
@@ -50,9 +61,9 @@ export function abonado_de_reserva(reserva, cobros) {
 
 // monto comprometido a CREDITO (activo): mismo universo de folios, solo los
 // cobros a credito no cancelados.
-export function credito_de_reserva(reserva, cobros) {
+export function credito_de_reserva(reserva, cobros, pipeline) {
   if (!reserva) return 0
-  const folios = folios_de_reserva(reserva)
+  const folios = folios_de_reserva(reserva, pipeline)
   return cobros
     .filter((c) => !cobro_cancelado(c) && es_cobro_credito(c) && folios.has(String(c.folio)))
     .reduce((s, c) => s + (Number(c.monto) || 0), 0)
@@ -95,9 +106,9 @@ export function comision_de_cobro(c) {
 // Comision REAL ya incurrida sobre esta reserva: mismo universo de folios y
 // mismo filtro de "dinero real" que abonado_de_reserva (sin credito, sin
 // cancelados).
-export function comision_de_reserva(reserva, cobros) {
+export function comision_de_reserva(reserva, cobros, pipeline) {
   if (!reserva) return 0
-  const folios = folios_de_reserva(reserva)
+  const folios = folios_de_reserva(reserva, pipeline)
   return (cobros || [])
     .filter((c) => !cobro_cancelado(c) && !es_cobro_credito(c) && folios.has(String(c.folio)))
     .reduce((s, c) => s + comision_de_cobro(c), 0)
@@ -113,9 +124,9 @@ function monto_bruto_cobro(c) {
 // incluida): identico a getAbonadoResBruto() de asadores-panel-master. Para
 // MOSTRAR cuanto proceso de verdad la pasarela — nunca para el saldo/estado
 // de pago "activo" de la reserva, que sigue en monto base (abonado_de_reserva).
-export function abonado_reserva_bruto(reserva, cobros) {
+export function abonado_reserva_bruto(reserva, cobros, pipeline) {
   if (!reserva) return 0
-  const folios = folios_de_reserva(reserva)
+  const folios = folios_de_reserva(reserva, pipeline)
   const cobrosres = (cobros || [])
     .filter((c) => !cobro_cancelado(c) && !es_cobro_credito(c) && folios.has(String(c.folio)))
   const sumaneta = cobrosres.reduce((s, c) => s + (Number(c.monto) || 0), 0)
@@ -142,11 +153,11 @@ export function origen_reserva(reserva) {
 // origen web — con todo pagado, comSaldo cae a 0 y el resultado coincide con
 // el abonado bruto. NUNCA usar esto para el saldo/estado de pago "activo" de
 // una reserva (reserva_liquidada), que sigue comparando contra el neto puro.
-export function monto_total_reserva_bruto(reserva, cobros) {
+export function monto_total_reserva_bruto(reserva, cobros, pipeline) {
   if (!reserva) return 0
   const neto = Math.max(0, (Number(reserva.monto) || 0) - (Number(reserva.descuentomonto) || 0))
-  const compagada = comision_de_reserva(reserva, cobros)
-  const pagadobase = abonado_de_reserva(reserva, cobros)
+  const compagada = comision_de_reserva(reserva, cobros, pipeline)
+  const pagadobase = abonado_de_reserva(reserva, cobros, pipeline)
   const comsaldo = origen_reserva(reserva) === 'web'
     ? redondear_dinero(Math.max(0, neto - pagadobase) * PCT_PROYECCION_COMISION)
     : 0

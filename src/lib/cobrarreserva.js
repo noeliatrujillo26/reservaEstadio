@@ -56,17 +56,19 @@ export function buscar_reservas(reservas, q) {
 // Resumen financiero de UNA reserva, en la doctrina de arriba: mismos
 // helpers y misma cuenta que el recibo de v1 (js/modules/cobros.js) —
 // restante = total − abonado, SIN restar el credito (el credito se muestra
-// aparte, informativo, igual que alla).
-export function resumen_reserva(reserva, cobros) {
+// aparte, informativo, igual que alla). `pipeline` (opcional): abonos
+// cobrados mientras la reserva aun era una tarjeta del Pipeline cuentan
+// tambien — ver folios_de_reserva() en reservasadmin.js.
+export function resumen_reserva(reserva, cobros, pipeline) {
   if (!reserva) {
     return { totalbruto: 0, descuento: 0, neto: 0, total: 0, abonado: 0, credito: 0, restante: 0, liquidada: false }
   }
   const totalbruto = Number(reserva.monto) || 0
   const descuento = Number(reserva.descuentomonto) || 0
   const neto = Math.max(0, redondear_dinero(totalbruto - descuento))
-  const credito = redondear_dinero(credito_de_reserva(reserva, cobros))
-  const total = redondear_dinero(monto_total_reserva_bruto(reserva, cobros))
-  const abonado = redondear_dinero(abonado_reserva_bruto(reserva, cobros))
+  const credito = redondear_dinero(credito_de_reserva(reserva, cobros, pipeline))
+  const total = redondear_dinero(monto_total_reserva_bruto(reserva, cobros, pipeline))
+  const abonado = redondear_dinero(abonado_reserva_bruto(reserva, cobros, pipeline))
   const restante = Math.max(0, redondear_dinero(total - abonado))
   return { totalbruto, descuento, neto, total, abonado, credito, restante, liquidada: total > 0 && restante <= 0 }
 }

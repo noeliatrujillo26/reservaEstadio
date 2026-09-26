@@ -45,7 +45,7 @@ const FORMAS_PAGO = ['TRANSFERENCIA', 'EFECTIVO', 'TARJETA', 'SALDO A FAVOR']
 
 export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
   const { usuario, cerrar_sesion } = useadmin()
-  const { clientes, reservas, cobros, cargando } = useadmindatos()
+  const { clientes, reservas, cobros, pipeline, cargando } = useadmindatos()
   const { registrar, guardando } = usecobrosescritura()
 
   const [busqueda, setbusqueda] = useState('')
@@ -71,7 +71,7 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
   }, [reserva, catalogo])
 
   const resultados = useMemo(() => buscar_reservas(reservas, busqueda), [reservas, busqueda])
-  const resumen = useMemo(() => resumen_reserva(reserva, cobros), [reserva, cobros])
+  const resumen = useMemo(() => resumen_reserva(reserva, cobros, pipeline), [reserva, cobros, pipeline])
 
   const montonum = parseFloat(monto) || 0
   const esredencion = forma === 'SALDO A FAVOR'
