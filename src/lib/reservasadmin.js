@@ -58,6 +58,28 @@ export function credito_de_reserva(reserva, cobros) {
     .reduce((s, c) => s + (Number(c.monto) || 0), 0)
 }
 
+// Comision REAL de Stripe ya cobrada en ESTE cobro. No hay columna propia
+// (cobros no la guarda): stripe-webhook.js la deja como texto libre dentro de
+// notas — 'cobrado $721.00 (comisión $21.00)' — mismo criterio de "parsear la
+// nota" que ya usa ts_de_cobro() en lib/cobros.js para la hora historica.
+export function comision_de_cobro(c) {
+  const m = String((c && c.notas) || '').match(/comisi[oó]n \$([0-9][0-9.,]*)/i)
+  return m ? Number(m[1].replace(/,/g, '')) || 0 : 0
+}
+
+// Comision REAL ya incurrida sobre esta reserva: mismo universo de folios y
+// mismo filtro de "dinero real" que abonado_de_reserva (sin credito, sin
+// cancelados). A propósito NUNCA se proyecta sobre el saldo pendiente —solo
+// se sabe la comision de lo que YA se cobro— para que el Restante no cambie
+// por una comision que todavia no ocurre.
+export function comision_de_reserva(reserva, cobros) {
+  if (!reserva) return 0
+  const folios = folios_de_reserva(reserva)
+  return (cobros || [])
+    .filter((c) => !cobro_cancelado(c) && !es_cobro_credito(c) && folios.has(String(c.folio)))
+    .reduce((s, c) => s + comision_de_cobro(c), 0)
+}
+
 // liquidada por marca de estado O por monto (cubre reservas pagadas 100% en
 // linea cuya marca quedo vieja).
 export function reserva_liquidada(r) {

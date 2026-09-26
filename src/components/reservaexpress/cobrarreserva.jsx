@@ -148,7 +148,7 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
         fechahora: new Date().toLocaleString('es-MX', {
           timeZone: 'America/Hermosillo', dateStyle: 'long', timeStyle: 'short',
         }),
-        totalreserva: resumen.totalbruto,
+        totalreserva: resumen.total,
         totalpagado,
         restante,
         // r.cobro es la fila REAL insertada (usecobrosescritura.js la
@@ -293,7 +293,7 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
               <div className="re-resumen-grid">
                 <div className="re-resumen-caja">
                   <div className="re-resumen-caja-label">Total reserva</div>
-                  <div className="re-resumen-caja-valor">{money(resumen.totalbruto)}</div>
+                  <div className="re-resumen-caja-valor">{money(resumen.total)}</div>
                 </div>
                 <div className="re-resumen-caja">
                   <div className="re-resumen-caja-label">Pagado</div>

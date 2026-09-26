@@ -20,13 +20,18 @@ export default function vistareserva() {
   const due = r.porpagar
   const pct = r.total > 0 ? Math.min(100, Math.round((r.pagado / r.total) * 100)) : 0
 
-  const estado_pago_label = r.cubiertaconcredito
-    ? 'Cubierta con crédito'
-    : r.estadopago === 'pagado'
-      ? 'Pago completo'
-      : r.estadopago === 'parcial'
-        ? 'Pago parcial'
-        : 'Pendiente de pago'
+  // la cancelacion manda sobre cualquier lectura de pago: una reserva
+  // cancelada con abonos ya hechos NO es "Pago parcial", es "Reserva
+  // Cancelada" — el estado de pago solo aplica a reservas activas.
+  const estado_pago_label = r.estado !== 'activa'
+    ? 'Reserva Cancelada'
+    : r.cubiertaconcredito
+      ? 'Cubierta con crédito'
+      : r.estadopago === 'pagado'
+        ? 'Pago completo'
+        : r.estadopago === 'parcial'
+          ? 'Pago parcial'
+          : 'Pendiente de pago'
 
   // el mensaje de whatsapp lleva el folio para que soporte lo ubique al instante.
   const wa_help =

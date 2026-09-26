@@ -377,6 +377,17 @@ export function usereservaexpress() {
           usuario: usuario ? usuario.nombre : '—',
         })
 
+        // 6. CORREO DE CONFIRMACIÓN al cliente (Reserva Momentánea). No-fatal
+        // y sin esperar: si el cliente no dejó correo, o el envío falla, la
+        // reserva ya quedó creada — igual que compartir_whatsapp() de abajo.
+        if (reservaid && datos.email) {
+          fetch('/api/send-reservation-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ folio: reservaid, email: datos.email }),
+          }).catch((e) => console.error('Correo de confirmación (Reserva Exprés) no se pudo enviar:', e))
+        }
+
         await recargar()
         // el toast tiene UNA sola ranura: si hay dos avisos, el segundo
         // pisaria al primero antes de que se alcance a leer — se juntan en
