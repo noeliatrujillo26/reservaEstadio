@@ -33,6 +33,7 @@ import AdminDatosProvider from '../context/admindatoscontext'
 import ToastProvider from '../context/toastcontext'
 import Toast from '../components/ui/toast'
 import FormularioExpress from '../components/reservaexpress/formularioexpress'
+import CobrarReserva from '../components/reservaexpress/cobrarreserva'
 import '../styles/reserva-express.css'
 
 function tiene_acceso_reserva_express(usuario) {
@@ -118,6 +119,12 @@ function pantalla() {
   // 'fuera', y sin esta bandera aparte el render caería al `if (estado ===
   // 'fuera')` de más abajo y mostraría el login de nuevo en vez del mensaje.
   const [sinpermiso, setsinpermiso] = useState(false)
+  // Pestañas superiores (25 sep 2026): 'nueva' (alta de Reserva Momentánea,
+  // el flujo original) o 'cobrar' (abonar/liquidar una reserva existente).
+  // Viven aquí, un nivel arriba, para que las DOS pantallas compartan el
+  // MISMO AdminDatosProvider — cambiar de pestaña no pierde ni recarga los
+  // datos ya cargados de la sesión.
+  const [tab, settab] = useState('nueva')
 
   useEffect(() => {
     document.title = 'Reserva Express — Naranjeros Admin'
@@ -144,7 +151,9 @@ function pantalla() {
 
   return (
     <AdminDatosProvider>
-      <FormularioExpress />
+      {tab === 'nueva'
+        ? <FormularioExpress tab={tab} ontab={settab} />
+        : <CobrarReserva tab={tab} ontab={settab} />}
       <Toast />
     </AdminDatosProvider>
   )

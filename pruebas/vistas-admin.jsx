@@ -42,6 +42,7 @@ import ReservaForm from '../src/components/admin/reservaform'
 import CotizForm from '../src/components/admin/cotizform'
 import ClienteForm from '../src/components/admin/clienteform'
 import FormularioExpress from '../src/components/reservaexpress/formularioexpress'
+import CobrarReserva from '../src/components/reservaexpress/cobrarreserva'
 import UsuarioForm from '../src/components/admin/usuarioform'
 import { perms_default } from '../src/lib/permisos'
 import NuevoProspecto from '../src/components/admin/nuevoprospecto'
@@ -136,7 +137,7 @@ export const vistas={dashboard:Dashboard,cobros:Cobros,seccionesreservadas:Reser
  evidenciapdf:EvidenciaPdf,evidenciasinliga:EvidenciaSinLiga,
  reservanueva:ReservaNueva,reservaeditar:ReservaEditar,
  cotiznueva:CotizNueva,cotizeditar:CotizEditar,clientenuevo:ClienteNuevo,clienteeditar:ClienteEditar,
- reservaexpress:FormularioExpress,
+ reservaexpress:FormularioExpress,cobrarreserva:CobrarReserva,
  usuarionuevo:UsuarioNuevo,usuarioeditar:UsuarioEditar,
  confirmsimple:ConfirmSimple,confirmseguro:ConfirmSeguro,confirmseguro2:ConfirmSeguroSinMotivo,
  prospectonuevo:ProspectoNuevo,prospectodetalle:ProspectoDetalle,

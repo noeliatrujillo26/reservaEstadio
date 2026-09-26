@@ -90,7 +90,7 @@ function fecha_juego(j) {
   })
 }
 
-export default function formularioexpress() {
+export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
   const { usuario, cerrar_sesion } = useadmin()
   const {
     juegos, areas, usuarios, clientes, reservas, secciones,
@@ -435,6 +435,23 @@ export default function formularioexpress() {
         </div>
         <button className="re-salir" onClick={cerrar_sesion} title="Cerrar sesión" aria-label="Cerrar sesión">⏻</button>
       </div>
+
+      {ontab && (
+        <div className="re-tabs">
+          <button
+            type="button" className={'re-tab' + (tab === 'nueva' ? ' activo' : '')}
+            onClick={() => ontab('nueva')}
+          >
+            Nueva Reserva
+          </button>
+          <button
+            type="button" className={'re-tab' + (tab === 'cobrar' ? ' activo' : '')}
+            onClick={() => ontab('cobrar')}
+          >
+            Cobrar a Reserva
+          </button>
+        </div>
+      )}
 
       <div className="re-form">
         <div className="re-seccion">

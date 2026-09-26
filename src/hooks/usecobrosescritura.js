@@ -252,9 +252,45 @@ export function usecobrosescritura() {
           ? null
           : (reservas || []).find((x) => String(x.id) === String(datos.reservaid)) || null
 
+      // ── REDENCIÓN de Saldo a Favor (25 sep 2026) ────────────────
+      // Caso espejo de esabonosaldo: aqui la FORMA de pago (no el concepto)
+      // es "SALDO A FAVOR" y SÍ hay una reserva — el cliente gasta lo que ya
+      // tenía guardado para pagar ESTA reserva. A diferencia del abono
+      // (dinero que entra, se cuenta DESPUÉS de guardar el cobro), la
+      // redención es la fuente misma del pago: se valida y se descuenta
+      // ANTES del insert, para que jamás quede un cobro "pagado con saldo"
+      // sin saldo real detrás.
+      const esredencion =
+        String(forma).toUpperCase().trim() === 'SALDO A FAVOR' && !esabonosaldo && !!reserva
+      if (esredencion && cliente.id == null) {
+        mostrartoast(
+          '⚠️ Para pagar con saldo a favor, el cliente debe estar dado de alta en el catálogo.', 8000
+        )
+        return { ok: false, campo: 'cliente' }
+      }
+
       setguardando(true)
       const avisos = []
       try {
+        // La redención se aplica AQUÍ, antes de nada más: si el saldo no
+        // alcanza, se aborta sin subir comprobante ni tocar `cobros`.
+        let saldonuevo = null
+        if (esredencion) {
+          const mov = await mover_saldo_favor(sb, usuario, cliente.id, -redondear_dinero(monto))
+          if (!mov.ok) {
+            mostrartoast(
+              mov.motivo === 'insuficiente'
+                ? '⚠️ Saldo a favor insuficiente' +
+                  (mov.saldo != null ? ' (disponible: ' + money(mov.saldo) + ')' : '') + '.'
+                : mov.motivo === 'sin-columna'
+                  ? '⚠️ Falta la columna `saldo_favor` en clientes: corre migracion-saldo-favor.sql.'
+                  : '⚠️ No se pudo aplicar el saldo a favor. Intenta de nuevo.',
+              8000
+            )
+            return { ok: false, campo: 'monto' } // finally() de abajo apaga `guardando`
+          }
+          saldonuevo = mov.saldo
+        }
         // Comprobante: si la subida falla NO se aborta el cobro — el dinero ya
         // se recibio, y perder el registro por un archivo seria peor. Se avisa.
         let evidencia = ''
@@ -293,15 +329,34 @@ export function usecobrosescritura() {
           // El folio es el ID de la RESERVA: asi el portal Mis Reservas lo suma
           // a su historial y el expediente del cliente lo atribuye por folio.
           folio: reserva ? String(reserva.id) : '',
-          notas: esabonosaldo
+          // referencia (opcional): texto libre del formulario que llama —
+          // "Cobrar a Reserva" la usa para folio de voucher/confirmación.
+          notas: (esabonosaldo
             ? 'Abono a Saldo a Favor · Registro de Cobros'
-            : 'Registro de Cobros · captura manual',
+            : esredencion
+              ? 'Pago con Saldo a Favor · Registro de Cobros'
+              : 'Registro de Cobros · captura manual') +
+            (String(datos.referencia || '').trim() ? ' · ' + String(datos.referencia).trim() : ''),
           evidencia,
         }
 
         const res = await insertar_verificado(sb, usuario, 'cobros', payload, claves_legacy_cobro)
         if (!res.ok) {
           console.error('Error exacto de Supabase al guardar el cobro:', res.error)
+          // El insert falló DESPUÉS de haber descontado el saldo (esredencion):
+          // hay que devolverlo, o el cliente pierde saldo sin ningún cobro que
+          // lo respalde.
+          if (esredencion) {
+            const revert = await mover_saldo_favor(sb, usuario, cliente.id, redondear_dinero(monto))
+            if (!revert.ok) {
+              console.error('No se pudo revertir el saldo a favor tras un insert fallido:', revert)
+              mostrartoast(
+                '⚠️ El pago no se guardó Y el saldo a favor no se pudo devolver automáticamente. ' +
+                'Corrígelo a mano antes de reintentar.', 10000
+              )
+              return { ok: false }
+            }
+          }
           mostrartoast(
             res.motivo === 'sin_filas'
               ? '⚠️ La base no aceptó el cobro (0 filas). Revisa las políticas RLS de `cobros`.'
@@ -313,11 +368,12 @@ export function usecobrosescritura() {
         }
         const guardado = (res.datos && res.datos[0]) || null
 
-        // ── El saldo del cliente ─────────────────────────────────
+        // ── El saldo del cliente (ABONO) ──────────────────────────
         // Va DESPUES del insert: si el cobro no se guardo, el saldo no debe
         // moverse. Y si el saldo falla, el cobro ya quedo registrado — se
         // avisa para corregirlo a mano, en vez de perder el rastro del dinero.
-        let saldonuevo = null
+        // (La REDENCIÓN ya se aplicó ANTES del insert, más arriba — saldonuevo
+        // ya trae su resultado.)
         if (esabonosaldo) {
           const mov = await mover_saldo_favor(sb, usuario, cliente.id, redondear_dinero(monto))
           if (mov.ok) saldonuevo = mov.saldo
@@ -373,7 +429,9 @@ export function usecobrosescritura() {
             ? '✅ Abono a Saldo a Favor · ' + money(redondear_dinero(monto)) +
               (saldonuevo != null ? ' · Nuevo saldo disponible: ' + money(saldonuevo) : '')
             : '✅ Cobro registrado · ' + concepto + ' ' + money(redondear_dinero(monto)) +
-              (reserva ? ' · ' + reserva.id : '') + (liquidada ? ' · 💚 Reserva LIQUIDADA' : ''),
+              (reserva ? ' · ' + reserva.id : '') +
+              (esredencion && saldonuevo != null ? ' · Saldo a favor restante: ' + money(saldonuevo) : '') +
+              (liquidada ? ' · 💚 Reserva LIQUIDADA' : ''),
           esabonosaldo ? 8000 : undefined
         )
         registrar_movimiento(sb, {
@@ -381,7 +439,10 @@ export function usecobrosescritura() {
           desc: esabonosaldo
             ? 'Abono a Saldo a Favor · ' + cliente.nombre +
               (saldonuevo != null ? ' · Nuevo saldo disponible: ' + money(saldonuevo) : '')
-            : 'Cobro manual registrado · ' + cliente.nombre + ' (' + concepto + ')',
+            : esredencion
+              ? 'Pago con Saldo a Favor · ' + cliente.nombre +
+                (saldonuevo != null ? ' · Saldo restante: ' + money(saldonuevo) : '')
+              : 'Cobro manual registrado · ' + cliente.nombre + ' (' + concepto + ')',
           ref: reserva ? String(reserva.id) : cliente.nombre || '—',
           monto: redondear_dinero(monto),
           usuario: usuario ? usuario.nombre : '—',
