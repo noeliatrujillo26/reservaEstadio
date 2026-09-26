@@ -58,26 +58,99 @@ export function credito_de_reserva(reserva, cobros) {
     .reduce((s, c) => s + (Number(c.monto) || 0), 0)
 }
 
-// Comision REAL de Stripe ya cobrada en ESTE cobro. No hay columna propia
-// (cobros no la guarda): stripe-webhook.js la deja como texto libre dentro de
-// notas — 'cobrado $721.00 (comisión $21.00)' — mismo criterio de "parsear la
-// nota" que ya usa ts_de_cobro() en lib/cobros.js para la hora historica.
+// ¿Cobro EN LINEA (Stripe)? Mismo criterio que _esCobroEnLinea() de
+// asadores-panel-master: la forma de pago dice STRIPE o "en línea" — aqui
+// stripe-webhook.js siempre guarda 'TARJETA_STRIPE'.
+export function es_cobro_en_linea(c) {
+  const f = String((c && c.formapago) || '').toUpperCase()
+  return f.indexOf('STRIPE') >= 0 || f.indexOf('LINEA') >= 0 || f.indexOf('LÍNEA') >= 0
+}
+
+// Proyeccion de comision de Stripe SOLO para el saldo de reservas de origen
+// web: 3%, el MISMO APP_CONFIG.COMISION_PCT vigente en
+// asadores-panel-master/js/00-config.js (nota ahi: "antes 7%") — DISTINTO del
+// 0.07 de src/lib/config.js, que es el cargo real que el checkout suma al
+// PRIMER abono. Este es solo un estimado de lo que Stripe descontara SI el
+// resto tambien se paga en linea.
+const PCT_PROYECCION_COMISION = 0.03
+
+// Comision REAL de Stripe ya cobrada en ESTE cobro: identico a
+// _comisionCobro() de asadores-panel-master (js/modules/utils.js). No hay
+// columna propia (cobros no la guarda): stripe-webhook.js deja el bruto real
+// como texto libre en notas ('... cobrado $721.00 (comisión $21.00) ...') —
+// comision = bruto − monto (neto), exacto. Sin ese dato, para un cobro en
+// linea sin nota reconocible, se aproxima con el % de proyeccion — mismo
+// respaldo que la v1 para filas viejas sin rastro de la pasarela.
 export function comision_de_cobro(c) {
-  const m = String((c && c.notas) || '').match(/comisi[oó]n \$([0-9][0-9.,]*)/i)
-  return m ? Number(m[1].replace(/,/g, '')) || 0 : 0
+  if (!c) return 0
+  const m = String(c.notas || '').match(/cobrado \$([0-9][0-9.,]*)/i)
+  if (m) {
+    const bruto = Number(m[1].replace(/,/g, '')) || 0
+    return Math.max(0, redondear_dinero(bruto - (Number(c.monto) || 0)))
+  }
+  if (!es_cobro_en_linea(c)) return 0
+  return redondear_dinero((Number(c.monto) || 0) * PCT_PROYECCION_COMISION)
 }
 
 // Comision REAL ya incurrida sobre esta reserva: mismo universo de folios y
 // mismo filtro de "dinero real" que abonado_de_reserva (sin credito, sin
-// cancelados). A propósito NUNCA se proyecta sobre el saldo pendiente —solo
-// se sabe la comision de lo que YA se cobro— para que el Restante no cambie
-// por una comision que todavia no ocurre.
+// cancelados).
 export function comision_de_reserva(reserva, cobros) {
   if (!reserva) return 0
   const folios = folios_de_reserva(reserva)
   return (cobros || [])
     .filter((c) => !cobro_cancelado(c) && !es_cobro_credito(c) && folios.has(String(c.folio)))
     .reduce((s, c) => s + comision_de_cobro(c), 0)
+}
+
+// Monto BRUTO de un cobro (base + su comision): identico a
+// _montoBrutoCobro() de asadores-panel-master.
+function monto_bruto_cobro(c) {
+  return redondear_dinero((Number(c && c.monto) || 0) + comision_de_cobro(c))
+}
+
+// Igual que abonado_de_reserva, pero BRUTO (con la comision de Stripe
+// incluida): identico a getAbonadoResBruto() de asadores-panel-master. Para
+// MOSTRAR cuanto proceso de verdad la pasarela — nunca para el saldo/estado
+// de pago "activo" de la reserva, que sigue en monto base (abonado_de_reserva).
+export function abonado_reserva_bruto(reserva, cobros) {
+  if (!reserva) return 0
+  const folios = folios_de_reserva(reserva)
+  const cobrosres = (cobros || [])
+    .filter((c) => !cobro_cancelado(c) && !es_cobro_credito(c) && folios.has(String(c.folio)))
+  const sumaneta = cobrosres.reduce((s, c) => s + (Number(c.monto) || 0), 0)
+  const sumabruta = cobrosres.reduce((s, c) => s + monto_bruto_cobro(c), 0)
+  const pagadoreal = Number(reserva.montopagado) || 0
+  return redondear_dinero(sumabruta + Math.max(0, pagadoreal - sumaneta))
+}
+
+// Origen de la reserva por el prefijo de su folio: identico al criterio de
+// respaldo de origenReserva() en asadores-panel-master (js/modules/utils.js)
+// cuando no hay id de Stripe a la mano — aqui NUNCA lo hay, reservas no trae
+// stripe_checkout_id mapeado al cliente.
+export function origen_reserva(reserva) {
+  const id = String((reserva && reserva.id) || '').toUpperCase()
+  if (id.indexOf('NRJ-ADM-') === 0) return 'admin'
+  return id.indexOf('NRJ-') === 0 ? 'web' : 'admin'
+}
+
+// Total BRUTO de la reserva: identico a getMontoTotalResBruto() de
+// asadores-panel-master (js/20-editor-mapa.js) — es la MISMA formula que usa
+// el "Historial de Pagos" del Pipeline (via obtenerMontoTotalReserva) para el
+// TOTAL RESERVA. neto + la comision YA incurrida en lo cobrado + una
+// PROYECCION de comision (3%) sobre lo que falta, SOLO si la reserva es de
+// origen web — con todo pagado, comSaldo cae a 0 y el resultado coincide con
+// el abonado bruto. NUNCA usar esto para el saldo/estado de pago "activo" de
+// una reserva (reserva_liquidada), que sigue comparando contra el neto puro.
+export function monto_total_reserva_bruto(reserva, cobros) {
+  if (!reserva) return 0
+  const neto = Math.max(0, (Number(reserva.monto) || 0) - (Number(reserva.descuentomonto) || 0))
+  const compagada = comision_de_reserva(reserva, cobros)
+  const pagadobase = abonado_de_reserva(reserva, cobros)
+  const comsaldo = origen_reserva(reserva) === 'web'
+    ? redondear_dinero(Math.max(0, neto - pagadobase) * PCT_PROYECCION_COMISION)
+    : 0
+  return redondear_dinero(neto + compagada + comsaldo)
 }
 
 // liquidada por marca de estado O por monto (cubre reservas pagadas 100% en

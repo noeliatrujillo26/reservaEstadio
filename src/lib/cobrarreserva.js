@@ -7,26 +7,22 @@
 // nuevocobro.jsx (que primero elige cliente y luego su reserva) — aquí el
 // caso de uso típico es "tengo el folio o el teléfono en la mano, cóbrale".
 //
-// DOCTRINA (25 sep 2026, decidida a propósito): "bruto" aquí es SOLO
-// reserva.monto (el precio de lista, antes de descuento_monto) — la MISMA
-// noción que ya usa reservas.js (total_bruto) y nuevocobro.jsx (neto = monto
-// − descuento). NO es la comisión de Stripe proyectada de la v1
-// (asadores-panel-master/getMontoTotalResBruto): ese patrón quedó
-// documentado en reservas.js como el problema que esta migración corrigió
-// ("el total dependía de cuánto se hubiera pagado y jamás bajaba"). El
-// Abonado y el Restante se calculan sobre el NETO, igual que en todo el
-// resto del panel — nunca sobre el bruto, que solo es informativo.
-//
-// CORRECCIÓN (26 sep 2026): "Total reserva"/"Pagado"/"Restante" (los que se
-// PINTAN) deben coincidir centavo a centavo con el Pipeline cuando hubo pago
-// en línea: `total` = neto + comisión de Stripe YA cobrada (nunca proyectada
-// sobre lo que falta — ver comision_de_reserva en reservasadmin.js), y
-// `abonado` sube esa misma comisión porque es dinero que de verdad entró. El
-// Restante sale igual (neto − abonado neto): la comisión se cancela sola.
-// `totalbruto`/`neto` se conservan tal cual para quien los siga usando.
+// DOCTRINA (26 sep 2026, corregida — reemplaza la del 25 sep): "Total
+// reserva"/"Pagado"/"Restante" (los que se PINTAN) deben coincidir centavo a
+// centavo con el Pipeline de asadores-panel-master, que es lo que Dirección
+// compara. Eso significa usar la MISMA formula que getMontoTotalResBruto() /
+// getAbonadoResBruto() de esa v1 (ahora portada a reservasadmin.js): el Total
+// SI incluye una proyeccion de comision de Stripe sobre el saldo pendiente en
+// reservas de origen web — no solo la comision ya incurrida. Es exactamente
+// el patron "comisión proyectada" que reservas.js documenta como el bug del
+// PORTAL del cliente (el total nunca bajaba); aqui NO es ese bug: es la regla
+// de negocio vigente del Pipeline de v1, y Dirección pidió replicarla tal
+// cual para que ámbas pantallas cuadren.
 // ═══════════════════════════════════════════════════════════════════
 
-import { abonado_de_reserva, credito_de_reserva, comision_de_reserva, folio_visible } from './reservasadmin'
+import {
+  abonado_reserva_bruto, credito_de_reserva, monto_total_reserva_bruto, folio_visible,
+} from './reservasadmin'
 import { redondear_dinero } from './dinero'
 
 function tel_digitos(t) {
@@ -57,19 +53,20 @@ export function buscar_reservas(reservas, q) {
     .slice(0, 25) // tope razonable para un buscador en vivo, mismo criterio que los demás del panel.
 }
 
-// Resumen financiero de UNA reserva, en la doctrina de arriba.
+// Resumen financiero de UNA reserva, en la doctrina de arriba: mismos
+// helpers y misma cuenta que el recibo de v1 (js/modules/cobros.js) —
+// restante = total − abonado, SIN restar el credito (el credito se muestra
+// aparte, informativo, igual que alla).
 export function resumen_reserva(reserva, cobros) {
   if (!reserva) {
-    return { totalbruto: 0, descuento: 0, neto: 0, comision: 0, total: 0, abonado: 0, credito: 0, restante: 0, liquidada: false }
+    return { totalbruto: 0, descuento: 0, neto: 0, total: 0, abonado: 0, credito: 0, restante: 0, liquidada: false }
   }
   const totalbruto = Number(reserva.monto) || 0
   const descuento = Number(reserva.descuentomonto) || 0
   const neto = Math.max(0, redondear_dinero(totalbruto - descuento))
-  const abonadoneto = redondear_dinero(abonado_de_reserva(reserva, cobros))
   const credito = redondear_dinero(credito_de_reserva(reserva, cobros))
-  const comision = redondear_dinero(comision_de_reserva(reserva, cobros))
-  const total = redondear_dinero(neto + comision)
-  const abonado = redondear_dinero(abonadoneto + comision)
-  const restante = Math.max(0, redondear_dinero(total - abonado - credito))
-  return { totalbruto, descuento, neto, comision, total, abonado, credito, restante, liquidada: total > 0 && restante <= 0 }
+  const total = redondear_dinero(monto_total_reserva_bruto(reserva, cobros))
+  const abonado = redondear_dinero(abonado_reserva_bruto(reserva, cobros))
+  const restante = Math.max(0, redondear_dinero(total - abonado))
+  return { totalbruto, descuento, neto, total, abonado, credito, restante, liquidada: total > 0 && restante <= 0 }
 }
