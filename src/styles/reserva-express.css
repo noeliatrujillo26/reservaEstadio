@@ -208,6 +208,31 @@
   font-size: 19px; font-weight: 800; color: var(--naranja-dark);
 }
 
+/* ── grid de 3 cajitas (Total reserva / Pagado / Restante) — mismo
+   maquetado que el Historial de Pagos del Pipeline: una fila de cajas
+   iguales que se acomodan solas en pantallas angostas. ── */
+.pagina-reserva-express .re-resumen-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 4px;
+}
+.pagina-reserva-express .re-resumen-caja {
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px;
+  padding: 10px 6px; text-align: center; min-width: 0;
+}
+.pagina-reserva-express .re-resumen-caja-label {
+  font-size: 10px; color: var(--texto-tenue); text-transform: uppercase;
+  letter-spacing: 0.4px; margin-bottom: 3px; white-space: nowrap;
+}
+.pagina-reserva-express .re-resumen-caja-valor {
+  font-size: 15px; font-weight: 800; color: var(--texto);
+  overflow-wrap: break-word;
+}
+.pagina-reserva-express .re-resumen-caja-valor.verde { color: var(--verde); }
+.pagina-reserva-express .re-resumen-caja-valor.rojo { color: var(--rojo); }
+@media (max-width: 380px) {
+  .pagina-reserva-express .re-resumen-caja { padding: 8px 4px; }
+  .pagina-reserva-express .re-resumen-caja-valor { font-size: 13px; }
+}
+
 /* ── botón principal ── */
 .pagina-reserva-express .re-cta-wrap {
   position: sticky; bottom: 0; background: linear-gradient(to top, var(--fondo) 60%, transparent);

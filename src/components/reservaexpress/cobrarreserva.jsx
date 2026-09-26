@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════
-// cobrarreserva.jsx — pestaña "Cobrar a Reserva" de /reserva-express.
+// cobrarreserva.jsx — pestaña "Registrar Cobro" de /reserva-express.
 //
 // Sin equivalente en la v1: pantalla nueva, pensada para un celular en plena
 // llamada. A diferencia de nuevocobro.jsx (elige CLIENTE y luego, aparte, su
@@ -170,7 +170,7 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
             type="button" className={'re-tab' + (tab === 'cobrar' ? ' activo' : '')}
             onClick={() => ontab('cobrar')}
           >
-            Cobrar a Reserva
+            Registrar Cobro
           </button>
         </div>
       )}
@@ -234,23 +234,30 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
         {reserva && (
           <>
             <div className="re-seccion">
-              <div className="re-seccion-titulo">💰 Resumen (doctrina bruto)</div>
-              <div className="re-desglose">
-                <div className="re-desglose-fila"><span>Monto Total Bruto</span><span>{money(resumen.totalbruto)}</span></div>
-                {resumen.descuento > 0 && (
-                  <div className="re-desglose-fila re-desglose-descuento"><span>Descuento</span><span>−{money(resumen.descuento)}</span></div>
-                )}
-                <div className="re-desglose-fila"><span>Abonado</span><span>{money(resumen.abonado)}</span></div>
-                {resumen.credito > 0 && (
-                  <div className="re-desglose-fila"><span>💳 A crédito</span><span>{money(resumen.credito)}</span></div>
-                )}
-                <div className="re-desglose-total">
-                  <span>{resumen.liquidada ? '✅ Liquidada' : 'Restante por Liquidar'}</span>
-                  <span>{money(resumen.restante)}</span>
+              <div className="re-seccion-titulo">💰 Resumen</div>
+              <div className="re-resumen-grid">
+                <div className="re-resumen-caja">
+                  <div className="re-resumen-caja-label">Total reserva</div>
+                  <div className="re-resumen-caja-valor">{money(resumen.totalbruto)}</div>
+                </div>
+                <div className="re-resumen-caja">
+                  <div className="re-resumen-caja-label">Pagado</div>
+                  <div className="re-resumen-caja-valor verde">{money(resumen.abonado)}</div>
+                </div>
+                <div className="re-resumen-caja">
+                  <div className="re-resumen-caja-label">Restante</div>
+                  <div className="re-resumen-caja-valor rojo">
+                    {resumen.liquidada ? '✅' : money(resumen.restante)}
+                  </div>
                 </div>
               </div>
+              {resumen.credito > 0 && (
+                <div className="re-ayuda" style={{ marginTop: '6px' }}>
+                  💳 {money(resumen.credito)} a crédito (compromiso de pago, no dinero cobrado).
+                </div>
+              )}
               {saldofavor != null && saldofavor > 0 && (
-                <div className="re-ayuda" style={{ marginTop: '8px' }}>
+                <div className="re-ayuda" style={{ marginTop: '4px' }}>
                   💰 Este cliente tiene {money(saldofavor)} de saldo a favor disponible.
                 </div>
               )}
