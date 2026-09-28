@@ -43,6 +43,7 @@ import CotizForm from '../src/components/admin/cotizform'
 import ClienteForm from '../src/components/admin/clienteform'
 import FormularioExpress from '../src/components/reservaexpress/formularioexpress'
 import CobrarReserva from '../src/components/reservaexpress/cobrarreserva'
+import MiniMapa from '../src/components/reservaexpress/minimapaexpress'
 import UsuarioForm from '../src/components/admin/usuarioform'
 import { perms_default } from '../src/lib/permisos'
 import NuevoProspecto from '../src/components/admin/nuevoprospecto'
@@ -124,6 +125,15 @@ const ClienteDetalleAbierto = () => {
   const tarjetas = [valor.pipeline[0]]
   return <ClienteDetalle cliente={expediente} pagos={pagos} consumos={consumos} tarjetas={tarjetas} oncerrar={()=>{}} />
 }
+// Mini mapa de Reserva Express: geometria de mapa_secciones (x/y/r en %) +
+// libre/ocupada por zona. Dos casos: todas (pin verde + pin gris, con el
+// verde seleccionado) y solo disponibles (el gris ni se dibuja).
+const seccionesMapa=[{id:'sec-1',num:'1',nombre:'Terraza Derecha 1',x:30,y:40,r:4.5},
+ {id:'sec-2',num:'2',nombre:'Palco All-Inc 2',x:60,y:55,r:5}]
+const zonasMapa=[{area:{id:'sec-1',nombre:'Terraza Derecha 1'},libre:true},
+ {area:{id:'sec-2',nombre:'Palco All-Inc 2'},libre:false}]
+const MiniMapaTodas = () => <MiniMapa secciones={seccionesMapa} zonas={zonasMapa} mostrarsololibres={false} zonaid="sec-1" onelegir={()=>{}} />
+const MiniMapaLibres = () => <MiniMapa secciones={seccionesMapa} zonas={zonasMapa} mostrarsololibres zonaid="" onelegir={()=>{}} />
 const ClienteDetalleVacio = () => {
   const expediente = { id: 2, nombre: 'Sin Historial', email: '—', tel: '—', empresa: '',
     creditoautorizado: false, saldofavor: 0, creditototal: 0, reservas: [], totalpagado: 0, saldototal: 0 }
@@ -137,7 +147,7 @@ export const vistas={dashboard:Dashboard,cobros:Cobros,seccionesreservadas:Reser
  evidenciapdf:EvidenciaPdf,evidenciasinliga:EvidenciaSinLiga,
  reservanueva:ReservaNueva,reservaeditar:ReservaEditar,
  cotiznueva:CotizNueva,cotizeditar:CotizEditar,clientenuevo:ClienteNuevo,clienteeditar:ClienteEditar,
- reservaexpress:FormularioExpress,cobrarreserva:CobrarReserva,
+ reservaexpress:FormularioExpress,cobrarreserva:CobrarReserva,minimapatodas:MiniMapaTodas,minimapalibres:MiniMapaLibres,
  usuarionuevo:UsuarioNuevo,usuarioeditar:UsuarioEditar,
  confirmsimple:ConfirmSimple,confirmseguro:ConfirmSeguro,confirmseguro2:ConfirmSeguroSinMotivo,
  prospectonuevo:ProspectoNuevo,prospectodetalle:ProspectoDetalle,
