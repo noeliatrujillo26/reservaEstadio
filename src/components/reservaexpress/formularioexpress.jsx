@@ -228,14 +228,14 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
 
   // TODAS las zonas del juego elegido, cada una con su libre/ocupada — SIN
   // filtrar: las ocupadas se muestran deshabilitadas en el <select> en vez de
-  // desaparecer, para que se note que el juego ya tiene zonas tomadas. Un
-  // palco compartido con cupo se muestra habilitado con su conteo real
-  // ("Palco Izq 🟢 5 libres") en vez de solo libre/ocupada.
+  // desaparecer, para que se note que el juego ya tiene zonas tomadas.
   //
-  // `libres` = lugares que de verdad quedan: en un palco compartido, los
-  // adultos que faltan para el tope (info.libres, ya calculado por
-  // disponibilidad_zonas_en_vivo); en una zona exclusiva libre, su
-  // capacidad completa (a.cap) — libre ahi es todo o nada. Ocupada = 0.
+  // Texto de la opcion (27 sep 2026, simplificado a pedido — antes traia
+  // "🟢 N libres"/"🔴 Ocupada" en cada renglon y confundia): libre → el
+  // nombre limpio, sin nada mas; ocupada → "Nombre (Ocupada)", gris y
+  // deshabilitada. El conteo total de libres SOLO vive en el badge de arriba
+  // (totalzonaslibres) — `libres` se conserva aqui unicamente para sumarlo
+  // ahi, ya no se imprime por zona.
   const zonasconestado = useMemo(() => {
     if (!d.juegoid) return []
     return (areas || []).map((a) => {
@@ -244,7 +244,7 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
       const libres = info && info.escompartida
         ? (libre ? (Number(info.libres) || 0) : 0)
         : (libre ? (Number(a.cap) || 0) : 0)
-      const etiqueta = a.nombre + ' ' + (libre ? '🟢 ' + libres + ' libre' + (libres === 1 ? '' : 's') : '🔴 Ocupada')
+      const etiqueta = a.nombre + (libre ? '' : ' (Ocupada)')
       return { area: a, libre, libres, etiqueta, info }
     })
   }, [areas, zonasdisponibilidad, d.juegoid])
@@ -591,7 +591,7 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
                     color: hayzonaslibres ? 'var(--verde, #16a34a)' : 'var(--rojo)',
                   }}
                 >
-                  {hayzonaslibres ? '🟢 ' + totalzonaslibres + ' libre' + (totalzonaslibres === 1 ? '' : 's') : '🔴 sin libres'}
+                  {totalzonaslibres + ' disponible' + (totalzonaslibres === 1 ? '' : 's')}
                 </span>
               )}
             </label>
@@ -639,7 +639,7 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
                     : '— Selecciona una zona —'}
               </option>
               {!cargandozonas && zonasmostradas.map(({ area: a, libre, etiqueta }) => (
-                <option key={a.id} value={a.id} disabled={!libre}>
+                <option key={a.id} value={a.id} disabled={!libre} style={!libre ? { color: 'var(--texto-tenue)' } : undefined}>
                   {etiqueta}
                 </option>
               ))}
