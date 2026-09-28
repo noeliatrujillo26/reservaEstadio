@@ -20,20 +20,24 @@
 
 import { useEffect, useState } from 'react'
 
-// La imagen vive en public/ y se sirve DENTRO de la ruta de la app (vite
-// base '/reserva-express/'): mismo criterio que el logo del topbar. Un path
-// desde la raiz ('/NuevoMapa.png') solo resuelve en el alias de Vercel — en
-// reservaestadio.com, que llega proxied por /reserva-express/*, daba 404.
-const MAPA_SRC = import.meta.env.BASE_URL + 'NuevoMapa.png'
+// EL MISMO mapa ilustrado que la vista publica de zonas (panel-inicio.html
+// de asadores-panel-master, MAPA_ESTADIO_SRC): mapa_estadio.webp 1737x1877.
+// Los x/y/r de mapa_secciones estan medidos sobre ESE encuadre; NuevoMapa.png
+// (1311x1199, encuadre viejo) dejaba los pines corridos. La copia vive en
+// public/ y se sirve DENTRO de la ruta de la app (vite base
+// '/reserva-express/', ver la regla de vercel.json): mismo criterio que el
+// logo del topbar — un path desde la raiz solo resuelve en el alias de
+// Vercel y en reservaestadio.com (proxied por /reserva-express/*) da 404.
+const MAPA_SRC = import.meta.env.BASE_URL + 'mapa_estadio.webp?v=1737x1877'
 
 const VERDE = '#16A34A'
 const GRIS = '#9AA3B4'
 const NARANJA = '#E05C1A'
 
-// dimensiones reales de public/NuevoMapa.png (1311x1199); solo sirven para
-// que el frame tenga la proporcion correcta ANTES de que cargue la imagen —
-// al cargar se leen las naturales, por si el archivo cambia.
-const RESPALDO = { w: 1311, h: 1199 }
+// dimensiones reales de public/mapa_estadio.webp (1737x1877); solo sirven
+// para que el frame tenga la proporcion correcta ANTES de que cargue la
+// imagen — al cargar se leen las naturales, por si el archivo cambia.
+const RESPALDO = { w: 1737, h: 1877 }
 
 // mapa_secciones.r es el DIAMETRO del pin en % del ancho de la imagen — asi
 // lo pinta zonasoverlay.jsx del sitio publico (width = r% del ancho). Tomarlo
