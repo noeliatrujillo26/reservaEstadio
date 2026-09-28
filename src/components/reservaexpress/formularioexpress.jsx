@@ -66,7 +66,6 @@ import { validar_codigo_descuento } from '../../lib/catalogos'
 import { categoria_sec } from '../../lib/dashboard'
 import { disponibilidad_zonas_en_vivo } from '../../lib/mapaocupacion'
 import { map_precio } from '../../lib/preciosadmin'
-import MiniMapa from './minimapaexpress'
 import { calc_total_prospecto } from '../../lib/prospectos'
 import {
   discada_disponible, min_seccion, precio_extra_seccion, precio_nino_seccion, precio_seccion,
@@ -655,19 +654,6 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
                 Este palco solo tiene {infozonaelegida.libres} lugar(es) de adulto disponible(s) para
                 este juego — estás pidiendo {calc.totaladultos}. Reduce la cantidad o elige otra zona.
               </div>
-            )}
-            {/* Mini mapa (27 sep 2026): la misma disponibilidad del select,
-                dibujada sobre el estadio y ligada en los dos sentidos —
-                tocar un pin verde elige la zona; elegir en el select resalta
-                el pin. Sigue el mismo filtro que el select. */}
-            {d.juegoid && !cargandozonas && zonasconestado.length > 0 && (
-              <MiniMapa
-                secciones={secciones}
-                zonas={zonasconestado}
-                mostrarsololibres={!mostrartodaslaszonas}
-                zonaid={d.zonaid}
-                onelegir={(id) => set('zonaid', id)}
-              />
             )}
           </div>
 
