@@ -541,7 +541,7 @@ async function crearSesion(req, res) {
       return;
     }
     const rSeccion = await sb.from('mapa_secciones')
-      .select('id, nombre, precio, precio2, precio_extra, precio_extra2, precio_nino, precio_nino2, min_personas, min_personas2')
+      .select('id, nombre, activa, precio, precio2, precio_extra, precio_extra2, precio_nino, precio_nino2, min_personas, min_personas2')
       .eq('id', zonaId).maybeSingle();
     if (rSeccion.error || !rSeccion.data) {
       console.error('Checkout rechazado: la zona ' + zonaId + ' no está en el catálogo.', rSeccion.error || '');
@@ -549,6 +549,16 @@ async function crearSesion(req, res) {
       return;
     }
     const seccion = rSeccion.data;
+    // migracion-mapa-secciones-activa.sql: una zona desactivada (tenía
+    // reservas y se retiró de venta) sigue en el catálogo para su historial,
+    // pero el checkout NUNCA debe aceptar una compra contra ella — sin este
+    // rechazo, una pestaña abierta desde antes de desactivarla podía seguir
+    // completando la compra aunque la landing ya no la ofreciera.
+    if (seccion.activa === false) {
+      console.error('Checkout rechazado: la zona ' + zonaId + ' está desactivada.');
+      res.status(400).json({ error: 'La zona seleccionada ya no está disponible. Actualiza la página e intenta de nuevo.' });
+      return;
+    }
 
     // La fecha del juego decide el bloque de tarifa (DOM–MIÉ vs JUE–SÁB).
     let fechaJuego = null;

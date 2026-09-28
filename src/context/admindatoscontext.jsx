@@ -264,9 +264,18 @@ export function admindatosprovider({ children }) {
 
     // el catalogo sale de mapa_secciones; solo si no hay secciones se usa la
     // lista quemada, igual que syncAreasDesdeCrear() cuando no encuentra nada.
+    // migracion-mapa-secciones-activa.sql (26 sep 2026): una zona con reservas
+    // ya no se borra fisico, se DESACTIVA (activa=false) — sigue en la tabla
+    // para que su historial financiero resuelva, pero ningun selector/venta
+    // debe volver a ofrecerla. `activa !== false` trata las filas de ANTES de
+    // la migracion (columna inexistente, undefined) como activas: no rompe
+    // nada mientras la migracion no se corra.
     const ds = ok(rsecciones, 'mapa_secciones')
     if (ds) setsecciones(ds)
-    const catalogo = ds && ds.length ? ds.map(map_seccion) : areas_data
+    // el fallback quemado es solo para "la tabla no tiene NADA" — si tiene
+    // filas pero todas desactivadas, el catalogo real es "ninguna zona
+    // vendible", no la lista quemada.
+    const catalogo = ds && ds.length ? ds.filter((s) => s.activa !== false).map(map_seccion) : areas_data
     // la tabla `areas` solo aporta el estado base de cada zona.
     const da = ok(rareas, 'areas')
     setareas(

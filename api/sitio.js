@@ -22,8 +22,15 @@ async function mapa(_sb, req, res) {
   const { data, error } = await sb.from('mapa_secciones').select('*').order('orden');
   if (error) throw error;
 
+  // migracion-mapa-secciones-activa.sql (26 sep 2026): una zona con reservas
+  // ya no se borra física, se desactiva (activa=false) — sigue en la tabla
+  // para su historial, pero el checkout público NUNCA debe volver a venderla.
+  // `activa !== false` trata las filas de ANTES de la migración (columna
+  // inexistente, undefined) como activas: no rompe nada sin la migración.
+  const activas = (data || []).filter(s => s.activa !== false);
+
   // Misma forma que usan el editor y panel-inicio (name/min en camel corto).
-  const secciones = (data || []).map(s => ({
+  const secciones = activas.map(s => ({
     id: s.id,
     name: s.nombre || '',
     num: s.num || '',
