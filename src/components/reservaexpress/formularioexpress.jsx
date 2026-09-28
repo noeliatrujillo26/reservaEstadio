@@ -230,21 +230,34 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
   // filtrar: las ocupadas se muestran deshabilitadas en el <select> en vez de
   // desaparecer, para que se note que el juego ya tiene zonas tomadas. Un
   // palco compartido con cupo se muestra habilitado con su conteo real
-  // ("Palco Izq (3/8 adultos)") en vez de solo libre/ocupada.
+  // ("Palco Izq 🟢 5 libres") en vez de solo libre/ocupada.
+  //
+  // `libres` = lugares que de verdad quedan: en un palco compartido, los
+  // adultos que faltan para el tope (info.libres, ya calculado por
+  // disponibilidad_zonas_en_vivo); en una zona exclusiva libre, su
+  // capacidad completa (a.cap) — libre ahi es todo o nada. Ocupada = 0.
   const zonasconestado = useMemo(() => {
     if (!d.juegoid) return []
     return (areas || []).map((a) => {
       const info = zonasdisponibilidad[String(a.id)]
       const libre = !info || !info.ocupada
-      const etiqueta =
-        info && info.escompartida && !info.ocupada
-          ? a.nombre + ' (' + info.ocupados + '/' + info.capacidad + ' adultos)'
-          : a.nombre + (!libre ? ' (Ocupada)' : '')
-      return { area: a, libre, etiqueta, info }
+      const libres = info && info.escompartida
+        ? (libre ? (Number(info.libres) || 0) : 0)
+        : (libre ? (Number(a.cap) || 0) : 0)
+      const etiqueta = a.nombre + ' ' + (libre ? '🟢 ' + libres + ' libre' + (libres === 1 ? '' : 's') : '🔴 Ocupada')
+      return { area: a, libre, libres, etiqueta, info }
     })
   }, [areas, zonasdisponibilidad, d.juegoid])
 
   const hayzonaslibres = zonasconestado.some((z) => z.libre)
+  const totalzonaslibres = zonasconestado.filter((z) => z.libre).length
+
+  // Chips "🟢 Solo disponibles" / "⚪ Todas las opciones" (26 sep 2026):
+  // arrancan en "solo disponibles" — el caso de uso de taquilla es ofrecer lo
+  // que SÍ se puede vender, y ver el inventario completo (con lo ocupado
+  // deshabilitado, mismo criterio de siempre) es la excepción, no la regla.
+  const [mostrartodaslaszonas, setmostrartodaslaszonas] = useState(false)
+  const zonasmostradas = mostrartodaslaszonas ? zonasconestado : zonasconestado.filter((z) => z.libre)
 
   // si cambia el juego (o la zona elegida deja de estar libre — alguien mas
   // la tomo mientras tanto, o un palco compartido llego a su capacidad), se
@@ -569,7 +582,49 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
             </select>
           </div>
           <div className="re-campo">
-            <label>Zona / Asador *</label>
+            <label>
+              Zona / Asador *
+              {d.juegoid && !cargandozonas && (
+                <span
+                  style={{
+                    marginLeft: '8px', fontSize: '11.5px', fontWeight: 700,
+                    color: hayzonaslibres ? 'var(--verde, #16a34a)' : 'var(--rojo)',
+                  }}
+                >
+                  {hayzonaslibres ? '🟢 ' + totalzonaslibres + ' libre' + (totalzonaslibres === 1 ? '' : 's') : '🔴 sin libres'}
+                </span>
+              )}
+            </label>
+            {d.juegoid && (
+              <div className="re-chips" style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setmostrartodaslaszonas(false)}
+                  style={{
+                    padding: '4px 10px', borderRadius: '999px', fontSize: '11.5px', fontWeight: 700,
+                    border: '1px solid ' + (!mostrartodaslaszonas ? 'var(--verde, #16a34a)' : 'var(--borde)'),
+                    background: !mostrartodaslaszonas ? 'var(--verde, #16a34a)' : 'transparent',
+                    color: !mostrartodaslaszonas ? '#fff' : 'var(--texto-tenue)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  🟢 SOLO DISPONIBLES
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setmostrartodaslaszonas(true)}
+                  style={{
+                    padding: '4px 10px', borderRadius: '999px', fontSize: '11.5px', fontWeight: 700,
+                    border: '1px solid ' + (mostrartodaslaszonas ? 'var(--texto-tenue)' : 'var(--borde)'),
+                    background: mostrartodaslaszonas ? 'var(--surface-2, #f1f1f1)' : 'transparent',
+                    color: 'var(--texto-tenue)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ⚪ TODAS LAS OPCIONES
+                </button>
+              </div>
+            )}
             <select
               ref={refzona}
               className={'re-select' + err('zona')} value={d.zonaid} disabled={!d.juegoid || cargandozonas}
@@ -583,7 +638,7 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
                     ? 'Verificando disponibilidad…'
                     : '— Selecciona una zona —'}
               </option>
-              {!cargandozonas && zonasconestado.map(({ area: a, libre, etiqueta }) => (
+              {!cargandozonas && zonasmostradas.map(({ area: a, libre, etiqueta }) => (
                 <option key={a.id} value={a.id} disabled={!libre}>
                   {etiqueta}
                 </option>
