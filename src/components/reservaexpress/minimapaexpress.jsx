@@ -19,16 +19,28 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { useEffect, useState } from 'react'
-import { mapa_estadio_src } from '../../context/mapacontext'
+
+// La imagen vive en public/ y se sirve DENTRO de la ruta de la app (vite
+// base '/reserva-express/'): mismo criterio que el logo del topbar. Un path
+// desde la raiz ('/NuevoMapa.png') solo resuelve en el alias de Vercel — en
+// reservaestadio.com, que llega proxied por /reserva-express/*, daba 404.
+const MAPA_SRC = import.meta.env.BASE_URL + 'NuevoMapa.png'
 
 const VERDE = '#16A34A'
 const GRIS = '#9AA3B4'
 const NARANJA = '#E05C1A'
 
-// dimensiones de NuevoMapa.png; se sustituyen por las reales al cargar.
-const RESPALDO = { w: 1382, h: 1350 }
+// dimensiones reales de public/NuevoMapa.png (1311x1199); solo sirven para
+// que el frame tenga la proporcion correcta ANTES de que cargue la imagen —
+// al cargar se leen las naturales, por si el archivo cambia.
+const RESPALDO = { w: 1311, h: 1199 }
 
-function Pines({ dims, pines, zonaid, onelegir, escala = 1 }) {
+// mapa_secciones.r es el DIAMETRO del pin en % del ancho de la imagen — asi
+// lo pinta zonasoverlay.jsx del sitio publico (width = r% del ancho). Tomarlo
+// como radio duplicaba cada bolita y las encimaba. El texto va al 42% del
+// diametro como en el publico, con un piso para que en un celular (~360px)
+// el numero siga leyendose, y un tope para que nunca se salga del circulo.
+function Pines({ dims, pines, zonaid, onelegir }) {
   return (
     <svg
       className="re-minimapa-svg"
@@ -40,9 +52,13 @@ function Pines({ dims, pines, zonaid, onelegir, escala = 1 }) {
       {pines.map((p) => {
         const cx = (p.x / 100) * dims.w
         const cy = (p.y / 100) * dims.h
-        const r = Math.max(8, (p.r / 100) * dims.w) * escala
+        const diam = Math.max(dims.w * 0.03, (p.r / 100) * dims.w)
+        const r = diam / 2
         const sel = zonaid && String(zonaid) === String(p.id)
-        const fs = Math.max(10, r * 0.85)
+        const fsbase = Math.min(diam * 0.62, Math.max(diam * 0.42, dims.w * 0.026))
+        // "IZQ"/"DER" (3 letras) no caben al mismo cuerpo que "A" o "12".
+        const fs = String(p.num).length > 2 ? fsbase * 0.72 : fsbase
+        const borde = Math.max(1.5, diam * 0.05)
         return (
           <g
             key={p.id}
@@ -51,12 +67,12 @@ function Pines({ dims, pines, zonaid, onelegir, escala = 1 }) {
             style={{ cursor: p.libre ? 'pointer' : 'default' }}
           >
             <title>{p.nombre + (p.libre ? '' : ' (Ocupada)')}</title>
-            {sel && <circle cx={cx} cy={cy} r={r * 1.45} fill="none" stroke={NARANJA} strokeWidth={Math.max(3, r * 0.22)} />}
-            <circle cx={cx} cy={cy} r={r} fill={p.libre ? VERDE : GRIS} stroke="#fff" strokeWidth={Math.max(1.5, r * 0.1)} opacity={p.libre ? 1 : 0.85} />
+            {sel && <circle cx={cx} cy={cy} r={r + borde * 2.2} fill="none" stroke={NARANJA} strokeWidth={borde * 1.6} />}
+            <circle cx={cx} cy={cy} r={r} fill={p.libre ? VERDE : GRIS} stroke="#fff" strokeWidth={borde} opacity={p.libre ? 1 : 0.8} />
             {p.num ? (
               <text
                 x={cx} y={cy} textAnchor="middle" dominantBaseline="central"
-                fontSize={fs} fontWeight="700" fill="#fff" style={{ pointerEvents: 'none' }}
+                fontSize={fs} fontWeight="800" fill="#fff" style={{ pointerEvents: 'none' }}
               >
                 {p.num}
               </text>
@@ -119,7 +135,7 @@ export default function minimapaexpress({ secciones, zonas, mostrarsololibres, z
     <>
       <div className="re-minimapa">
         <div className="re-minimapa-frame" style={{ aspectRatio: proporcion }}>
-          <img src={mapa_estadio_src} alt="Mapa del estadio" onLoad={al_cargar} draggable={false} />
+          <img src={MAPA_SRC} alt="Mapa del estadio" onLoad={al_cargar} draggable={false} />
           <Pines dims={dims} pines={pines} zonaid={zonaid} onelegir={onelegir} />
         </div>
         <div className="re-minimapa-pie">
@@ -142,7 +158,7 @@ export default function minimapaexpress({ secciones, zonas, mostrarsololibres, z
               <button type="button" className="re-lightbox-cerrar" onClick={() => setabierto(false)} aria-label="Cerrar">×</button>
             </div>
             <div className="re-minimapa-frame grande" style={{ aspectRatio: proporcion }}>
-              <img src={mapa_estadio_src} alt="Mapa del estadio" onLoad={al_cargar} draggable={false} />
+              <img src={MAPA_SRC} alt="Mapa del estadio" onLoad={al_cargar} draggable={false} />
               <Pines dims={dims} pines={pines} zonaid={zonaid} onelegir={elegir} />
             </div>
             <div className="re-ayuda" style={{ padding: '0 12px 12px' }}>
