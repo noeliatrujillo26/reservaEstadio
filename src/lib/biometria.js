@@ -36,6 +36,15 @@
 
 const PREFIJO_CLAVE = 're_biometria_'
 
+// Periodo de gracia (03 oct 2026, a pedido explícito): con uso diario, Face
+// ID/Touch ID NO debe pedirse en cada apertura ni en cada recarga — solo
+// cuando pasaron 7 días completos desde la última verificación exitosa (o
+// nunca se verificó: alta recién habilitada cuenta como la primera). La
+// marca (`ultimaVerificacionFaceid`, timestamp en ms) vive en el MISMO
+// objeto local que la credencial — un solo lugar, y "deshabilitar" borra
+// las dos cosas de un golpe.
+export const GRACIA_MS = 7 * 24 * 60 * 60 * 1000
+
 function clave(email) {
   return PREFIJO_CLAVE + String(email || '').trim().toLowerCase()
 }
@@ -84,6 +93,25 @@ export function biometria_habilitada(email) {
   return !!(d && d.credencialId)
 }
 
+// ¿Sigue dentro del periodo de gracia de 7 días desde la última
+// verificación exitosa? false también si nunca se habilitó o nunca se
+// marcó ninguna verificación (sin fecha = sin gracia, se pide igual).
+export function dentro_de_periodo_gracia(email) {
+  const d = leer_local(email)
+  if (!d || !d.credencialId || !d.ultimaVerificacionFaceid) return false
+  return Date.now() - d.ultimaVerificacionFaceid < GRACIA_MS
+}
+
+// Renueva la marca de tiempo por otros 7 días — se llama tras CUALQUIER
+// verificación exitosa (habilitar por primera vez cuenta como la primera
+// verificación, y cada desbloqueo la renueva). Si por lo que sea ya no
+// hay credencial guardada (se deshabilitó entre medias), no hace nada.
+function marcar_verificacion_exitosa(email) {
+  const d = leer_local(email)
+  if (!d || !d.credencialId) return
+  escribir_local(email, { ...d, ultimaVerificacionFaceid: Date.now() })
+}
+
 function abuf_a_b64(buf) {
   return btoa(String.fromCharCode(...new Uint8Array(buf)))
 }
@@ -118,7 +146,12 @@ export async function habilitar_biometria(usuario) {
       },
     })
     if (!credencial) return { ok: false, motivo: 'cancelado' }
-    const guardado = escribir_local(usuario.email, { credencialId: abuf_a_b64(credencial.rawId) })
+    // Alta = la primera verificación exitosa: arranca el reloj de 7 días
+    // de una vez, para no pedir Face ID otra vez un minuto después de
+    // activarlo.
+    const guardado = escribir_local(usuario.email, {
+      credencialId: abuf_a_b64(credencial.rawId), ultimaVerificacionFaceid: Date.now(),
+    })
     if (!guardado) return { ok: false, motivo: 'sin_almacenamiento' }
     return { ok: true }
   } catch (e) {
@@ -148,6 +181,7 @@ export async function desbloquear_biometria(email) {
       },
     })
     if (!credencial) return { ok: false, motivo: 'cancelado' }
+    marcar_verificacion_exitosa(email) // renueva los 7 días de gracia
     return { ok: true }
   } catch (e) {
     const motivo = e && e.name === 'NotAllowedError' ? 'cancelado' : 'error'

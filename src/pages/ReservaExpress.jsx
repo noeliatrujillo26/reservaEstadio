@@ -36,7 +36,7 @@ import FormularioExpress from '../components/reservaexpress/formularioexpress'
 import CobrarReserva from '../components/reservaexpress/cobrarreserva'
 import VerReservas from '../components/reservaexpress/verreservas'
 import { BloqueoBiometrico, OfertaBiometria } from '../components/reservaexpress/bloqueobiometrico'
-import { biometria_habilitada } from '../lib/biometria'
+import { biometria_habilitada, dentro_de_periodo_gracia } from '../lib/biometria'
 import '../styles/reserva-express.css'
 
 function tiene_acceso_reserva_express(usuario) {
@@ -160,7 +160,11 @@ function pantalla() {
     return <PantallaAcceso />
   }
 
-  if (!desbloqueado && biometria_habilitada(usuario.email)) {
+  // Periodo de gracia (03 oct 2026): con una verificación exitosa en los
+  // últimos 7 días, se entra directo — Face ID solo vuelve a pedirse tras
+  // inactividad prolongada (o si se cerró sesión manualmente, que borra la
+  // marca junto con la credencial — ver cerrar_sesion() en admincontext.jsx).
+  if (!desbloqueado && biometria_habilitada(usuario.email) && !dentro_de_periodo_gracia(usuario.email)) {
     return (
       <BloqueoBiometrico
         usuario={usuario}

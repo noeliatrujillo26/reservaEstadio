@@ -6,5 +6,5 @@
 export { sb } from '../src/supabaseclient'
 export {
   biometria_disponible, biometria_habilitada, habilitar_biometria,
-  desbloquear_biometria, deshabilitar_biometria,
+  desbloquear_biometria, deshabilitar_biometria, dentro_de_periodo_gracia, GRACIA_MS,
 } from '../src/lib/biometria'

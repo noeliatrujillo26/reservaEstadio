@@ -71,7 +71,7 @@ if (build.status !== 0) {
 }
 const {
   sb, biometria_disponible, biometria_habilitada, habilitar_biometria,
-  desbloquear_biometria, deshabilitar_biometria,
+  desbloquear_biometria, deshabilitar_biometria, dentro_de_periodo_gracia, GRACIA_MS,
 } = await import('./out-biometria/biometria-puente.js')
 
 let ok = 0, fail = 0
@@ -154,6 +154,68 @@ console.log('\n─── 7) Disponibilidad reportada fielmente ───')
   comportamiento.soportado = false
   check('biometria_disponible() === false cuando no existe', !(await biometria_disponible()))
   comportamiento.soportado = true
+}
+
+console.log('\n─── 8) Periodo de gracia de 7 días (uso diario sin pedir Face ID) ───')
+{
+  // Reloj congelado y avanzable a voluntad — Date.now() es la ÚNICA fuente
+  // de tiempo que usa biometria.js (nunca `new Date()`), así que sobreponer
+  // la función basta.
+  const DIA_MS = 24 * 60 * 60 * 1000
+  const real_date_now = Date.now
+  const dia0 = real_date_now()
+  let ahora = dia0
+  Date.now = () => ahora
+
+  const CAJERO = { id: 21, email: 'cajero@naranjeros.mx', nombre: 'Cajero Diario' }
+  comportamiento.crear = 'exito'
+  comportamiento.obtener = 'exito'
+
+  // Día 0: se habilita por primera vez — cuenta como la primera
+  // verificación, arranca el reloj de inmediato.
+  await habilitar_biometria(CAJERO)
+  check('Día 0 (recién habilitado): dentro del periodo de gracia', dentro_de_periodo_gracia(CAJERO.email))
+
+  // Días 1, 2 y 6: acceso directo, sin pedir Face ID — mismo criterio que
+  // "uso diario continuo" del ticket.
+  for (const dia of [1, 2, 6]) {
+    ahora = dia0 + dia * DIA_MS
+    check('Día ' + dia + ': sigue dentro del periodo de gracia (acceso directo)', dentro_de_periodo_gracia(CAJERO.email))
+  }
+
+  // Día 7 exacto (GRACIA_MS cumplido, sin un ms de sobra): ya expiró —
+  // "MÁS de 7 días" en el ticket se traduce aquí a "cumplidos los 7 días,
+  // ya no hay gracia", no a "7 días y pasado un instante más".
+  ahora = dia0 + 7 * DIA_MS
+  check('Día 7 (gracia cumplida): YA requiere Face ID', !dentro_de_periodo_gracia(CAJERO.email))
+
+  // La verificación del día 7 RENUEVA la marca por otros 7 días.
+  const rDia7 = await desbloquear_biometria(CAJERO.email)
+  check('Verificación del día 7 exitosa', rDia7.ok === true, rDia7)
+  check('Tras verificar: vuelve a estar dentro del periodo de gracia', dentro_de_periodo_gracia(CAJERO.email))
+
+  // Día 13 (6 días después de la renovación, 13 desde el inicio): sigue
+  // vigente — confirma que la ventana se corrió, no que seguía la vieja.
+  ahora = dia0 + 13 * DIA_MS
+  check('Día 13 (6 días después de renovar en el día 7): sigue vigente', dentro_de_periodo_gracia(CAJERO.email))
+
+  // Día 14 (7 días después de la renovación): vuelve a pedirse.
+  ahora = dia0 + 14 * DIA_MS
+  check('Día 14 (7 días después de renovar): vuelve a pedir Face ID', !dentro_de_periodo_gracia(CAJERO.email))
+
+  // "Cerrar sesión" manual (deshabilitar_biometria) borra la credencial Y
+  // la marca de tiempo juntas — no debe quedar un periodo de gracia
+  // fantasma para una credencial que ya no existe.
+  deshabilitar_biometria(CAJERO.email)
+  check('Tras cerrar sesión manualmente: sin periodo de gracia (y sin credencial)',
+    !dentro_de_periodo_gracia(CAJERO.email) && !biometria_habilitada(CAJERO.email))
+
+  // Cuenta que NUNCA se verificó (dato corrupto/legado sin la marca): sin
+  // fecha no hay gracia, se pide igual — no se "regala" un periodo de 7
+  // días por default.
+  check('GRACIA_MS es exactamente 7 días', GRACIA_MS === 7 * DIA_MS, GRACIA_MS)
+
+  Date.now = real_date_now
 }
 
 console.log('\nResultado: ' + ok + ' ✅ / ' + fail + ' ❌')
