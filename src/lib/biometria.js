@@ -96,9 +96,13 @@ export function biometria_habilitada(email) {
 // ¿Sigue dentro del periodo de gracia de 7 días desde la última
 // verificación exitosa? false también si nunca se habilitó o nunca se
 // marcó ninguna verificación (sin fecha = sin gracia, se pide igual).
+// `ultimaVerificacionFaceid: 0` (lo que deja expirar_verificacion_biometria()
+// al cerrar sesión) cae aquí mismo: 0 es una fecha "del año 1970", así que
+// Date.now() - 0 siempre es mayor a GRACIA_MS — nunca hace falta un caso
+// especial para distinguir "0" de "nunca se verificó".
 export function dentro_de_periodo_gracia(email) {
   const d = leer_local(email)
-  if (!d || !d.credencialId || !d.ultimaVerificacionFaceid) return false
+  if (!d || !d.credencialId || d.ultimaVerificacionFaceid == null) return false
   return Date.now() - d.ultimaVerificacionFaceid < GRACIA_MS
 }
 
@@ -190,10 +194,31 @@ export async function desbloquear_biometria(email) {
   }
 }
 
-// "Cerrar sesión" (admincontext.jsx) también llama esto: sin la credencial
-// local, reabrir la app ya no puede ofrecer el desbloqueo rápido — exige
-// autenticarse de nuevo con correo y contraseña, igual que si nunca se
-// hubiera habilitado.
+// "Cerrar sesión" MANUAL (admincontext.jsx) llama esto — NO a
+// deshabilitar_biometria() de abajo. Corrección del 03 oct 2026: antes el
+// logout borraba la credencial COMPLETA, así que el siguiente ingreso
+// volvía a ofrecer "Habilitar Face ID" como si fuera la primera vez, en
+// vez de pedir el desbloqueo directo de una cuenta que ya lo tenía
+// activado. Ahora solo se expira la marca de tiempo — `credencialId`
+// (el WebAuthn ya registrado en este dispositivo) se CONSERVA — así que:
+//   · biometria_habilitada() sigue viendo la credencial → el siguiente
+//     ingreso muestra el candado de desbloqueo directo, nunca el banner
+//     de "¿quieres activar Face ID?".
+//   · dentro_de_periodo_gracia() da false de inmediato (timestamp 0) →
+//     ese desbloqueo SÍ se exige una vez, no se regala un acceso directo
+//     solo porque la credencial sigue ahí.
+export function expirar_verificacion_biometria(email) {
+  const d = leer_local(email)
+  if (!d || !d.credencialId) return
+  escribir_local(email, { ...d, ultimaVerificacionFaceid: 0 })
+}
+
+// Borra TODO (credencial + marca) — a diferencia de expirar_verificacion_
+// biometria() de arriba, esto es un "apaga Face ID en este dispositivo"
+// de verdad: sin esto, el siguiente ingreso vuelve a ofrecer el alta desde
+// cero. Hoy no hay ningún botón en la UI que la dispare (ver
+// bloqueobiometrico.jsx) — queda lista para ese control cuando se agregue,
+// en vez de inventarse una desde cero.
 export function deshabilitar_biometria(email) {
   borrar_local(email)
 }

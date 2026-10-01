@@ -71,7 +71,8 @@ if (build.status !== 0) {
 }
 const {
   sb, biometria_disponible, biometria_habilitada, habilitar_biometria,
-  desbloquear_biometria, deshabilitar_biometria, dentro_de_periodo_gracia, GRACIA_MS,
+  desbloquear_biometria, deshabilitar_biometria, expirar_verificacion_biometria,
+  dentro_de_periodo_gracia, GRACIA_MS,
 } = await import('./out-biometria/biometria-puente.js')
 
 let ok = 0, fail = 0
@@ -137,13 +138,41 @@ console.log('\n─── 5) Cancelar el REGISTRO (habilitar) también es un "no,
   comportamiento.crear = 'exito'
 }
 
-console.log('\n─── 6) "Cerrar sesión" manual apaga el candado — deshabilitar_biometria() ───')
+console.log('\n─── 6) "Cerrar sesión" MANUAL (corregido 03 oct 2026): expira, NO borra ───')
 {
-  check('Sigue habilitada antes de cerrar sesión', biometria_habilitada(USUARIO.email))
-  deshabilitar_biometria(USUARIO.email)
-  check('Tras deshabilitar_biometria(): ya no está habilitada', !biometria_habilitada(USUARIO.email))
+  // admincontext.jsx llama expirar_verificacion_biometria() en el logout
+  // manual — NO deshabilitar_biometria(). Antes de la corrección, el
+  // logout borraba el credentialId completo y el siguiente ingreso volvía
+  // a ofrecer "Habilitar Face ID" como si nunca se hubiera activado.
+  check('Sigue habilitada y dentro de gracia antes de cerrar sesión',
+    biometria_habilitada(USUARIO.email) && dentro_de_periodo_gracia(USUARIO.email))
+
+  expirar_verificacion_biometria(USUARIO.email)
+
+  check('Tras cerrar sesión: la credencial SIGUE habilitada en el dispositivo (no se perdió el alta)',
+    biometria_habilitada(USUARIO.email))
+  check('...pero la verificación quedó expirada (ya no está dentro de gracia)',
+    !dentro_de_periodo_gracia(USUARIO.email))
+
+  // El siguiente ingreso (tras volver a teclear correo+contraseña, ya
+  // fuera de este archivo — eso lo exige admincontext.jsx como siempre)
+  // debe ofrecer el DESBLOQUEO directo, nunca "no_habilitada" (que
+  // dispararía el banner de alta en vez del candado de desbloqueo).
+  comportamiento.obtener = 'exito'
   const r = await desbloquear_biometria(USUARIO.email)
-  check('Reabrir sin credencial exige autenticación normal (motivo "no_habilitada", no un desbloqueo fantasma)',
+  check('El reingreso puede desbloquear DIRECTO con la misma credencial (no hace falta re-enrolar)',
+    r.ok === true, r)
+  check('Y al desbloquear, la gracia se renueva por otros 7 días', dentro_de_periodo_gracia(USUARIO.email))
+}
+
+console.log('\n─── 6b) deshabilitar_biometria() — el "apaga Face ID" de verdad, distinto del logout ───')
+{
+  check('Sigue habilitada antes de deshabilitarla por completo', biometria_habilitada(USUARIO.email))
+  deshabilitar_biometria(USUARIO.email)
+  check('Tras deshabilitar_biometria(): ya NO está habilitada (a diferencia del logout de arriba)',
+    !biometria_habilitada(USUARIO.email))
+  const r = await desbloquear_biometria(USUARIO.email)
+  check('Sin credencial: exige autenticación normal (motivo "no_habilitada", no un desbloqueo fantasma)',
     r.ok === false && r.motivo === 'no_habilitada', r)
 }
 
@@ -203,12 +232,12 @@ console.log('\n─── 8) Periodo de gracia de 7 días (uso diario sin pedir F
   ahora = dia0 + 14 * DIA_MS
   check('Día 14 (7 días después de renovar): vuelve a pedir Face ID', !dentro_de_periodo_gracia(CAJERO.email))
 
-  // "Cerrar sesión" manual (deshabilitar_biometria) borra la credencial Y
-  // la marca de tiempo juntas — no debe quedar un periodo de gracia
-  // fantasma para una credencial que ya no existe.
-  deshabilitar_biometria(CAJERO.email)
-  check('Tras cerrar sesión manualmente: sin periodo de gracia (y sin credencial)',
-    !dentro_de_periodo_gracia(CAJERO.email) && !biometria_habilitada(CAJERO.email))
+  // "Cerrar sesión" manual (expirar_verificacion_biometria, corregido
+  // 03 oct 2026) expira la gracia pero CONSERVA la credencial — el
+  // siguiente ingreso pide un desbloqueo directo, no un alta desde cero.
+  expirar_verificacion_biometria(CAJERO.email)
+  check('Tras cerrar sesión manualmente: sin periodo de gracia, pero la credencial SIGUE ahí',
+    !dentro_de_periodo_gracia(CAJERO.email) && biometria_habilitada(CAJERO.email))
 
   // Cuenta que NUNCA se verificó (dato corrupto/legado sin la marca): sin
   // fecha no hay gracia, se pide igual — no se "regala" un periodo de 7
