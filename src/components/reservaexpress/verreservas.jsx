@@ -39,72 +39,9 @@ import { tel_norm } from '../../lib/clientes'
 import { estado_vivo } from '../../lib/mapaocupacion'
 import { folio_visible } from '../../lib/reservasadmin'
 import { mxn2 } from '../../lib/dinero'
+import { IconEditar, IconEmail, IconEstado, IconJuego, IconLupa, IconWhatsapp, IconZona } from './iconos'
 
 const money = (n) => '$' + (Number(n) || 0).toLocaleString('es-MX', mxn2)
-
-// Iconos de la tarjeta de reserva — trazo delgado (stroke), mismo estilo que
-// los demás SVG inline del formulario (viewBox 16/18, strokeWidth ~1.6).
-// 'currentColor' hereda el color de texto del contenedor (.re-reserva-fila
-// svg, .re-accion-btn), así que cada badge/botón los pinta a su manera sin
-// duplicar el SVG por color.
-function IconJuego() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M5 1.5v3M11 1.5v3M2 6.5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  )
-}
-function IconZona() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d="M8 14.5s5-4.2 5-8.3A5 5 0 003 6.2c0 4.1 5 8.3 5 8.3z"
-        stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"
-      />
-      <circle cx="8" cy="6.2" r="1.7" stroke="currentColor" strokeWidth="1.4" />
-    </svg>
-  )
-}
-function IconEstado() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M5.5 8.3l1.8 1.8 3.2-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-function IconEditar() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-      <path
-        d="M11.4 2.6a1.6 1.6 0 012.3 0l1.7 1.7a1.6 1.6 0 010 2.3L6.6 15.4l-4 .9.9-4 7.9-7.9z"
-        stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-function IconEmail() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-      <rect x="2" y="4" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M2.5 5l5.6 4.3a1.5 1.5 0 001.8 0L15.5 5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-function IconWhatsapp() {
-  // Insignia circular verde con el glifo blanco, en vez de un emoji 📲 —
-  // mismo verde de marca (#25D366) que ya usaba .re-btn-whatsapp.
-  return (
-    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
-      <circle cx="10" cy="10" r="10" fill="#25D366" />
-      <path
-        d="M13.85 11.35c-.22-.11-1.3-.64-1.5-.71-.2-.08-.35-.11-.5.11-.14.22-.56.71-.69.85-.13.15-.26.16-.48.06-1.29-.64-2.13-1.15-2.98-2.6-.22-.39.22-.36.64-1.2.07-.15.04-.27-.03-.38s-.5-1.19-.68-1.63c-.18-.42-.37-.37-.5-.38h-.42c-.15 0-.39.06-.59.28-.2.22-.77.75-.77 1.83 0 1.08.79 2.12.9 2.27.11.15 1.52 2.32 3.68 3.15 2.16.84 2.16.56 2.56.52.41-.04 1.3-.53 1.49-1.05.18-.52.18-.96.13-1.05-.06-.09-.2-.15-.42-.26z"
-        fill="#fff"
-      />
-    </svg>
-  )
-}
 
 // Tarjeta de UNA reserva — exportada aparte (no solo por prolijidad): es lo
 // que pruebas/tarjetareserva.run.mjs renderiza directo con datos fijos para
@@ -378,7 +315,7 @@ export default function verreservas({ tab = 'reservas', ontab } = {}) {
           que pedía corregir el rediseño. */}
       <div className="re-form" style={editando ? undefined : { paddingBottom: '28px' }}>
         <div className="re-seccion">
-          <div className="re-seccion-titulo">🔎 Buscar reserva</div>
+          <div className="re-seccion-titulo"><IconLupa /> Buscar reserva</div>
           <div className="re-campo">
             <label>Folio, cliente, teléfono o email</label>
             <input
@@ -436,7 +373,7 @@ export default function verreservas({ tab = 'reservas', ontab } = {}) {
 
         {reserva && editando && (
           <div className="re-seccion">
-            <div className="re-seccion-titulo">✏️ Editar reserva</div>
+            <div className="re-seccion-titulo"><IconEditar /> Editar reserva</div>
 
             <div className="re-campo">
               <label>Juego *</label>

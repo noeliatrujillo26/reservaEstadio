@@ -35,6 +35,7 @@ import { folio_visible } from '../../lib/reservasadmin'
 import { saldo_favor_de, toca_saldo_favor } from '../../lib/cascadas'
 import { mxn2, redondear_dinero } from '../../lib/dinero'
 import { hoy_hermosillo } from '../../lib/fechas'
+import { IconArchivo, IconLupa, IconRecibo, IconResumen, IconSubir, IconWhatsapp } from './iconos'
 
 const money = (n) => '$' + (Number(n) || 0).toLocaleString('es-MX', mxn2)
 
@@ -238,7 +239,7 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
 
       <div className="re-form">
         <div className="re-seccion">
-          <div className="re-seccion-titulo">🔎 Buscar reserva</div>
+          <div className="re-seccion-titulo"><IconLupa /> Buscar reserva</div>
           <div className="re-campo">
             <label>Folio, cliente o teléfono</label>
             {!reserva ? (
@@ -295,7 +296,7 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
         {reserva && (
           <>
             <div className="re-seccion">
-              <div className="re-seccion-titulo">💰 Resumen</div>
+              <div className="re-seccion-titulo"><IconResumen /> Resumen</div>
               <div className="re-resumen-grid">
                 <div className="re-resumen-caja">
                   <div className="re-resumen-caja-label">Total reserva</div>
@@ -325,7 +326,7 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
             </div>
 
             <div className="re-seccion">
-              <div className="re-seccion-titulo">🧾 Registrar cobro</div>
+              <div className="re-seccion-titulo"><IconRecibo /> Registrar cobro</div>
               <div className="re-campo">
                 <label>Monto a cobrar ($) *</label>
                 <input
@@ -390,7 +391,9 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
                   htmlFor="re-cobrar-archivo"
                   className={'re-upload' + (errorcampo === 'comprobante' && !archivo ? ' re-error' : '')}
                 >
-                  {archivo ? '📎 ' + archivo.name : '📤 Clic para cargar comprobante (imagen o PDF)'}
+                  {archivo
+                    ? <><IconArchivo /><span>{archivo.name}</span></>
+                    : <><IconSubir /><span>Clic para cargar comprobante (imagen o PDF)</span></>}
                 </label>
                 <input
                   ref={refarchivo}
@@ -465,7 +468,7 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
               <div><strong>Restante:</strong> {exito.restante <= 0 ? '✅ Liquidada' : money(exito.restante)}</div>
             </div>
             <button className="re-btn re-btn-whatsapp" onClick={enviar_whatsapp}>
-              📲 Enviar Comprobante por WhatsApp
+              <IconWhatsapp /> Enviar Comprobante por WhatsApp
             </button>
             {errorcampo === 'whatsapp' && (
               <div className="re-ayuda" style={{ color: 'var(--rojo)', marginBottom: '10px' }}>

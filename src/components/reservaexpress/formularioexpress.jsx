@@ -71,6 +71,7 @@ import {
   discada_disponible, min_seccion, precio_extra_seccion, precio_nino_seccion, precio_seccion,
 } from '../../lib/reservasadmin'
 import { redondear_dinero, mxn2 } from '../../lib/dinero'
+import { IconCarneAsada, IconDiscada, IconEvento, IconResumen, IconUsuario } from './iconos'
 
 const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2)
 
@@ -516,7 +517,7 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
 
       <div className="re-form">
         <div className="re-seccion">
-          <div className="re-seccion-titulo">👤 Cliente</div>
+          <div className="re-seccion-titulo"><IconUsuario /> Cliente</div>
           <div className="re-campo">
             <label>Nombre completo o Empresa *</label>
             {!elegido ? (
@@ -614,7 +615,7 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
         </div>
 
         <div className="re-seccion">
-          <div className="re-seccion-titulo">🏟️ Evento</div>
+          <div className="re-seccion-titulo"><IconEvento /> Evento</div>
           <div className="re-campo">
             <label>Juego *</label>
             <select
@@ -748,14 +749,14 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
                   type="button" className={d.tipocomida === 'carne_asada' ? 'activo' : ''}
                   onClick={() => set('tipocomida', 'carne_asada')}
                 >
-                  🥩 Carne asada
+                  <IconCarneAsada /> Carne asada
                 </button>
                 {discadadisponible && (
                   <button
                     type="button" className={d.tipocomida === 'discada' ? 'activo' : ''}
                     onClick={() => set('tipocomida', 'discada')}
                   >
-                    🌮 Discada
+                    <IconDiscada /> Discada
                   </button>
                 )}
               </div>
@@ -781,7 +782,7 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
         </div>
 
         <div className="re-seccion">
-          <div className="re-seccion-titulo">💰 Financiero</div>
+          <div className="re-seccion-titulo"><IconResumen /> Financiero</div>
 
           <div className="re-campo">
             <label>Extra ($)</label>
