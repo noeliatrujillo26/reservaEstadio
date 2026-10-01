@@ -12,7 +12,8 @@
     "verificar-cascadas": "node pruebas/cascadas.run.mjs",
     "verificar-descuentos": "node pruebas/calc-total-prospecto.run.mjs",
     "verificar-bidireccional": "node pruebas/disponibilidad-bidireccional.run.mjs",
-    "verificar-verreservas": "node pruebas/verreservas.run.mjs"
+    "verificar-verreservas": "node pruebas/verreservas.run.mjs",
+    "verificar-tarjetareserva": "node pruebas/tarjetareserva.run.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",

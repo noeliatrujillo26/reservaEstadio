@@ -72,19 +72,22 @@
 .pagina-reserva-express .re-form { flex: 1; padding: 18px 16px 100px; max-width: 560px; width: 100%; margin: 0 auto; }
 
 /* ── pestañas superiores: Nueva Reserva / Registrar Cobro / Reservas ──
-   (3 pestañas desde el 01 oct 2026 — gap y tipografía achicados un poco
-   respecto a las 2 originales para que la tercera no las apriete a la
-   fuerza en pantallas angostas.) */
+   (3 pestañas desde el 01 oct 2026; rediseño minimalista 02 oct 2026 —
+   mismo criterio visual que .re-segmento button.activo: tinte suave en vez
+   de relleno sólido, bordes redondeados consistentes y una transición breve
+   para que el cambio de pestaña no se sienta como un salto duro.) */
 .pagina-reserva-express .re-tabs {
   position: sticky; top: 55px; z-index: 19; background: var(--fondo);
   display: flex; gap: 6px; padding: 10px 16px 4px; max-width: 560px; width: 100%; margin: 0 auto;
 }
 .pagina-reserva-express .re-tab {
-  flex: 1; min-height: 44px; border-radius: 12px; border: 1.5px solid var(--borde);
+  flex: 1; min-height: 44px; border-radius: 14px; border: 1.5px solid var(--borde);
   background: var(--tarjeta); color: var(--texto-suave); font-size: 12.5px; font-weight: 700;
   cursor: pointer; font-family: inherit; padding: 0 4px;
+  transition: border-color .15s, background-color .15s, color .15s;
 }
-.pagina-reserva-express .re-tab.activo { border-color: var(--naranja); background: var(--naranja); color: #fff; }
+.pagina-reserva-express .re-tab:hover { border-color: var(--naranja); color: var(--naranja-dark); }
+.pagina-reserva-express .re-tab.activo { border-color: var(--naranja); background: #FFF0E8; color: var(--naranja-dark); }
 
 .pagina-reserva-express .re-seccion { margin-bottom: 22px; }
 .pagina-reserva-express .re-seccion-titulo {
@@ -235,6 +238,64 @@
   .pagina-reserva-express .re-resumen-caja { padding: 8px 4px; }
   .pagina-reserva-express .re-resumen-caja-valor { font-size: 13px; }
 }
+
+/* ── tarjeta de UNA reserva (pestaña "Reservas", 02 oct 2026) ──────────
+   Un solo contenedor con separadores finos internos en vez de varios
+   .re-seccion sueltos con márgenes grandes entre ellos — el pedido
+   explícito era "flujo visual continuo desde los datos del cliente hasta
+   los botones de acción", así que encabezado/cuerpo/resumen viven DENTRO
+   de la misma caja y los botones de acción cuelgan justo debajo, sin el
+   hueco que dejaban los títulos en mayúsculas de cada sección. ── */
+.pagina-reserva-express .re-reserva-card {
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 16px;
+  padding: 16px; display: flex; flex-direction: column; gap: 14px;
+  box-shadow: 0 2px 10px rgba(0,0,0,.04); margin-bottom: 14px;
+}
+.pagina-reserva-express .re-reserva-divisor { border-top: 1px solid var(--borde); margin: 0; }
+
+.pagina-reserva-express .re-reserva-header {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+}
+.pagina-reserva-express .re-reserva-folio {
+  display: inline-flex; align-items: center; width: fit-content;
+  background: #FFF0E8; color: var(--naranja-dark); border-radius: 999px;
+  padding: 4px 11px; font-size: 11px; font-weight: 800; letter-spacing: .3px;
+  margin-bottom: 6px;
+}
+.pagina-reserva-express .re-reserva-cliente-nombre { font-size: 16px; font-weight: 800; color: var(--texto); }
+.pagina-reserva-express .re-reserva-cliente-contacto { font-size: 12px; color: var(--texto-tenue); margin-top: 2px; }
+.pagina-reserva-express .re-reserva-cerrar {
+  background: none; border: none; cursor: pointer; color: var(--texto-tenue);
+  font-size: 22px; line-height: 1; padding: 2px 4px; flex-shrink: 0;
+}
+
+.pagina-reserva-express .re-reserva-cuerpo { display: flex; flex-direction: column; gap: 9px; }
+.pagina-reserva-express .re-reserva-fila {
+  display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--texto);
+}
+.pagina-reserva-express .re-reserva-fila svg { flex-shrink: 0; color: var(--texto-tenue); }
+.pagina-reserva-express .re-reserva-fila .re-reserva-etiqueta { color: var(--texto-tenue); flex-shrink: 0; }
+.pagina-reserva-express .re-reserva-fila .re-reserva-valor { font-weight: 700; text-align: right; flex: 1; overflow-wrap: anywhere; }
+
+/* ── botones de acción de la tarjeta (Editar / Email / WhatsApp) ──────
+   Mismo molde para los tres: icono a la izquierda, borde de color propio,
+   fondo claro — a propósito DISTINTO del botón sólido .re-btn-primario
+   (ese es para la acción de cerrar un flujo — "Registrar cobro", "Guardar
+   cambios" —, no para estas tres acciones secundarias de la tarjeta). ── */
+.pagina-reserva-express .re-accion-btn {
+  display: flex; align-items: center; justify-content: flex-start; gap: 10px;
+  width: 100%; min-height: 48px; padding: 0 16px; border-radius: 12px;
+  font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer;
+  background: var(--tarjeta); transition: background-color .15s;
+}
+.pagina-reserva-express .re-accion-btn svg { flex-shrink: 0; }
+.pagina-reserva-express .re-accion-btn:disabled { opacity: .5; cursor: not-allowed; }
+.pagina-reserva-express .re-accion-editar { border: 1.5px solid var(--naranja); color: var(--naranja-dark); }
+.pagina-reserva-express .re-accion-editar:hover:not(:disabled) { background: #FFF0E8; }
+.pagina-reserva-express .re-accion-email { border: 1.5px solid #2563EB; color: #1D4ED8; }
+.pagina-reserva-express .re-accion-email:hover:not(:disabled) { background: #EFF6FF; }
+.pagina-reserva-express .re-accion-whatsapp { border: 1.5px solid #25D366; color: #128C4A; }
+.pagina-reserva-express .re-accion-whatsapp:hover:not(:disabled) { background: #ECFDF3; }
 
 /* ── botón principal ── */
 .pagina-reserva-express .re-cta-wrap {
