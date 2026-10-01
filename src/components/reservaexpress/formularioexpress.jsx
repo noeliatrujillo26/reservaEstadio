@@ -948,7 +948,7 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
           className="re-btn re-btn-primario" onClick={guardar}
           disabled={guardando}
         >
-          {guardando ? 'Creando…' : 'Crear Reserva Momentánea'}
+          {guardando ? 'Creando…' : 'Crear reserva momentánea'}
         </button>
       </div>
 

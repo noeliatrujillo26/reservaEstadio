@@ -393,7 +393,7 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
                 >
                   {archivo
                     ? <><IconArchivo /><span>{archivo.name}</span></>
-                    : <><IconSubir /><span>Clic para cargar comprobante (imagen o PDF)</span></>}
+                    : <><IconSubir /><span>Subir comprobante</span></>}
                 </label>
                 <input
                   ref={refarchivo}
@@ -427,7 +427,7 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
             className="re-btn re-btn-primario" onClick={guardar}
             disabled={guardando || !(montonum > 0) || !forma}
           >
-            {guardando ? 'Registrando…' : 'REGISTRAR COBRO'}
+            {guardando ? 'Registrando…' : 'Registrar Cobro'}
           </button>
         </div>
       )}

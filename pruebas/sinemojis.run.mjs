@@ -11,6 +11,7 @@
 // Se corre con:  node pruebas/sinemojis.run.mjs
 // ═══════════════════════════════════════════════════════════════════
 import { spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 
 const build = spawnSync(
   'npx',
@@ -52,6 +53,11 @@ console.log('─── "Nueva Reserva" (formularioexpress.jsx) ───')
   // comprueba solo que, si el SVG de Carne Asada ya está, el formulario no
   // reventó al resolver el ícono (misma import, mismo módulo).
   check('La página no se cae al renderizar (hay contenido real)', html.length > 2000, html.length)
+
+  // Botón naranja principal (02 oct 2026, refinamiento): Sentence case, no
+  // "Crear Reserva Momentánea" con cada palabra en mayúscula.
+  check('Botón "Crear reserva momentánea" en Sentence case (no "Crear Reserva Momentánea")',
+    html.includes('Crear reserva momentánea') && !html.includes('Crear Reserva Momentánea'))
 }
 
 console.log('\n─── "Registrar Cobro" (cobrarreserva.jsx) ───')
@@ -62,6 +68,21 @@ console.log('\n─── "Registrar Cobro" (cobrarreserva.jsx) ───')
   }
   check('Título "Buscar reserva" sigue presente', /Buscar reserva<\/div>/.test(html))
   check('El formulario no se cae al renderizar', html.length > 1000, html.length)
+}
+
+// El botón "Registrar Cobro" y el área de carga solo se montan con una
+// reserva ya elegida (estado interno que un render SSR de una sola pasada
+// no puede simular) — se verifican sobre el CÓDIGO FUENTE en vez del HTML
+// renderizado, mismo criterio que usan otras pruebas de este repo
+// (test-landing-responsive.js, en el otro proyecto) para marcado que no
+// se monta solo.
+console.log('\n─── Botón naranja principal y carga de comprobante (código fuente) ───')
+{
+  const src = readFileSync('src/components/reservaexpress/cobrarreserva.jsx', 'utf8')
+  check('Botón "Registrar Cobro" en Sentence case (no "REGISTRAR COBRO")',
+    src.includes("'Registrar Cobro'") && !src.includes('REGISTRAR COBRO'))
+  check('Carga de comprobante: texto corto "Subir comprobante" (no el párrafo largo anterior)',
+    src.includes('Subir comprobante') && !src.includes('Clic para cargar comprobante'))
 }
 
 console.log('\nResultado: ' + ok + ' ✅ / ' + fail + ' ❌')
