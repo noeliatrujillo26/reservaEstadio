@@ -16,6 +16,7 @@
 import { createContext, useCallback, useEffect, useState } from 'react'
 import { sb } from '../supabaseclient'
 import { perms_default } from '../lib/permisos'
+import { deshabilitar_biometria } from '../lib/biometria'
 
 export const admincontext = createContext(null)
 
@@ -187,7 +188,12 @@ export function adminprovider({ children }) {
     // limpiar la vista recordada: el proximo inicio entra al Dashboard.
     try { localStorage.removeItem('admin_last_view') } catch (e) {}
     await sb.auth.signOut()
-    setusuario(null)
+    // Face ID/Touch ID (02 oct 2026, /reserva-express): un cierre de sesión
+    // MANUAL también apaga el candado biométrico de este dispositivo — sin
+    // esto, reabrir la app ofrecería "desbloquear" una sesión que ya no
+    // existe. Setter funcional para leer el `usuario` saliente sin volver
+    // esta función dependiente de ese estado.
+    setusuario((u) => { if (u) deshabilitar_biometria(u.email); return null })
     setestado('fuera')
   }, [])
 

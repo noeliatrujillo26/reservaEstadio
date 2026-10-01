@@ -35,6 +35,8 @@ import Toast from '../components/ui/toast'
 import FormularioExpress from '../components/reservaexpress/formularioexpress'
 import CobrarReserva from '../components/reservaexpress/cobrarreserva'
 import VerReservas from '../components/reservaexpress/verreservas'
+import { BloqueoBiometrico, OfertaBiometria } from '../components/reservaexpress/bloqueobiometrico'
+import { biometria_habilitada } from '../lib/biometria'
 import '../styles/reserva-express.css'
 
 function tiene_acceso_reserva_express(usuario) {
@@ -127,6 +129,13 @@ function pantalla() {
   // pantallas compartan el MISMO AdminDatosProvider — cambiar de pestaña no
   // pierde ni recarga los datos ya cargados de la sesión.
   const [tab, settab] = useState('nueva')
+  // Candado de Face ID/Touch ID (02 oct 2026) — ver src/lib/biometria.js
+  // para el modelo de seguridad completo (candado LOCAL sobre la sesión ya
+  // persistida, no un segundo factor de servidor). `desbloqueado` nace en
+  // false: "al abrir la app" es exactamente esta primera carga del
+  // componente — un refresh de la pestaña vuelve a arrancar en false,
+  // igual que una pantalla de bloqueo real.
+  const [desbloqueado, setdesbloqueado] = useState(false)
 
   useEffect(() => {
     document.title = 'Reserva Express — Naranjeros Admin'
@@ -151,8 +160,19 @@ function pantalla() {
     return <PantallaAcceso />
   }
 
+  if (!desbloqueado && biometria_habilitada(usuario.email)) {
+    return (
+      <BloqueoBiometrico
+        usuario={usuario}
+        ondesbloquear={() => setdesbloqueado(true)}
+        oncerrarsesion={cerrar_sesion}
+      />
+    )
+  }
+
   return (
     <AdminDatosProvider>
+      <OfertaBiometria usuario={usuario} />
       {tab === 'nueva' && <FormularioExpress tab={tab} ontab={settab} />}
       {tab === 'cobrar' && <CobrarReserva tab={tab} ontab={settab} />}
       {tab === 'reservas' && <VerReservas tab={tab} ontab={settab} />}

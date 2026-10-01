@@ -16,6 +16,23 @@ if (!supabase_url || !supabase_anon_key) {
   )
 }
 
-export const sb = createClient(supabase_url, supabase_anon_key)
+// Sesión fija (02 oct 2026, /reserva-express): persistSession/autoRefreshToken
+// YA eran el default de @supabase/supabase-js en el navegador — se dejan
+// explícitos para que la intención quede escrita en el código y no dependa
+// de que un default de la librería no cambie en una actualización futura.
+// `storage` se resuelve en caliente (nunca `window.localStorage` a secas):
+// este mismo archivo se importa también desde los puentes SSR de
+// pruebas/*.jsx (renderToString en Node, sin `window`) — evaluar `window`
+// ahí arriba tronaría esos bancos de pruebas antes de llegar a createClient.
+const storage_navegador = typeof window !== 'undefined' ? window.localStorage : undefined
+
+export const sb = createClient(supabase_url, supabase_anon_key, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: storage_navegador,
+  },
+})
 
 export default sb

@@ -173,6 +173,20 @@ export function IconCarneAsada() {
   )
 }
 
+// Candado biométrico (02 oct 2026) — huella digital simplificada, trazo
+// delgado consistente con el resto del set.
+export function IconBiometria() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 3a9 9 0 00-9 9v2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M12 3a9 9 0 019 9v3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M7 21v-5a5 5 0 0110 0v1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M12 21v-4a2 2 0 10-4 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M16 21v-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function IconDiscada() {
   return (
     <svg width="20" height="20" viewBox="0 0 100 100" fill="none" aria-hidden="true">

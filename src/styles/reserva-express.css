@@ -349,6 +349,28 @@
   padding: 10px 12px; margin-bottom: 16px; line-height: 1.5; text-align: left;
 }
 
+/* ── Face ID / Touch ID (02 oct 2026) ──────────────────────────────── */
+.pagina-reserva-express .re-biometria-icono {
+  width: 56px; height: 56px; border-radius: 50%; background: #FFF0E8; color: var(--naranja-dark);
+  display: flex; align-items: center; justify-content: center; margin: 0 auto 14px;
+}
+.pagina-reserva-express .re-biometria-oferta {
+  display: flex; align-items: flex-start; gap: 12px; max-width: 560px; margin: 0 auto;
+  padding: 14px 16px; border-bottom: 1px solid var(--borde); background: #FFF8F3; color: var(--naranja-dark);
+}
+.pagina-reserva-express .re-biometria-oferta svg { flex-shrink: 0; margin-top: 2px; }
+.pagina-reserva-express .re-biometria-oferta-texto { flex: 1; font-size: 12.5px; color: var(--texto-suave); line-height: 1.5; }
+.pagina-reserva-express .re-biometria-oferta-texto strong { display: block; font-size: 13.5px; font-weight: 600; color: var(--texto); margin-bottom: 2px; }
+.pagina-reserva-express .re-biometria-oferta-aviso { color: var(--rojo); margin-top: 4px; }
+.pagina-reserva-express .re-biometria-oferta-botones { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.pagina-reserva-express .re-biometria-oferta-botones button {
+  min-height: 32px; padding: 0 12px; border-radius: 8px; border: 1.5px solid var(--naranja);
+  background: #fff; color: var(--naranja-dark); font-weight: 600; font-size: 12px;
+  cursor: pointer; font-family: inherit; white-space: nowrap;
+}
+.pagina-reserva-express .re-biometria-oferta-botones button:last-child { border-color: var(--borde); color: var(--texto-suave); }
+.pagina-reserva-express .re-biometria-oferta-botones button:disabled { opacity: .6; cursor: not-allowed; }
+
 /* < 768px (celular): el botón queda fijo al pie, ancho completo — ya cubierto
    por .re-cta-wrap/.re-btn arriba. >= 768px (escritorio): deja de flotar
    fijo al pie y pasa a vivir DENTRO del flujo normal del formulario, con el

@@ -34,6 +34,7 @@ pruebas/out-escritura
 pruebas/out-cascadas
 pruebas/out-tarjetareserva
 pruebas/out-sinemojis
+pruebas/out-biometria
 
 # scripts/limpieza-prospectos.mjs: la salida compilada se regenera solo, y
 # los candidatos-limpieza-*.json traen datos reales de clientes (nombre,
