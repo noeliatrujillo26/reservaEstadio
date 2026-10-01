@@ -60,6 +60,8 @@ export {
   disponibilidad_zonas_en_vivo, disponibilidad_juegos_para_zona,
 } from '../src/lib/mapaocupacion'
 
+export { reserva_coincide, buscar_reservas, resumen_reserva } from '../src/lib/cobrarreserva'
+
 export {
   nuevo_folio_prospecto, regla_volumen_activa, descuento_volumen_aplicable,
   calc_total_prospecto, bruto_tarjeta, validar_prospecto, validar_edicion_prospecto,

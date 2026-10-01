@@ -34,6 +34,7 @@ import ToastProvider from '../context/toastcontext'
 import Toast from '../components/ui/toast'
 import FormularioExpress from '../components/reservaexpress/formularioexpress'
 import CobrarReserva from '../components/reservaexpress/cobrarreserva'
+import VerReservas from '../components/reservaexpress/verreservas'
 import '../styles/reserva-express.css'
 
 function tiene_acceso_reserva_express(usuario) {
@@ -119,11 +120,12 @@ function pantalla() {
   // 'fuera', y sin esta bandera aparte el render caería al `if (estado ===
   // 'fuera')` de más abajo y mostraría el login de nuevo en vez del mensaje.
   const [sinpermiso, setsinpermiso] = useState(false)
-  // Pestañas superiores (25 sep 2026): 'nueva' (alta de Reserva Momentánea,
-  // el flujo original) o 'cobrar' (abonar/liquidar una reserva existente).
-  // Viven aquí, un nivel arriba, para que las DOS pantallas compartan el
-  // MISMO AdminDatosProvider — cambiar de pestaña no pierde ni recarga los
-  // datos ya cargados de la sesión.
+  // Pestañas superiores (25 sep 2026, ampliado 01 oct 2026): 'nueva' (alta de
+  // Reserva Momentánea, el flujo original), 'cobrar' (abonar/liquidar una
+  // reserva existente) o 'reservas' (buscar, editar y reenviar comprobantes
+  // de una reserva ya creada). Viven aquí, un nivel arriba, para que las TRES
+  // pantallas compartan el MISMO AdminDatosProvider — cambiar de pestaña no
+  // pierde ni recarga los datos ya cargados de la sesión.
   const [tab, settab] = useState('nueva')
 
   useEffect(() => {
@@ -151,9 +153,9 @@ function pantalla() {
 
   return (
     <AdminDatosProvider>
-      {tab === 'nueva'
-        ? <FormularioExpress tab={tab} ontab={settab} />
-        : <CobrarReserva tab={tab} ontab={settab} />}
+      {tab === 'nueva' && <FormularioExpress tab={tab} ontab={settab} />}
+      {tab === 'cobrar' && <CobrarReserva tab={tab} ontab={settab} />}
+      {tab === 'reservas' && <VerReservas tab={tab} ontab={settab} />}
       <Toast />
     </AdminDatosProvider>
   )

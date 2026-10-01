@@ -30,14 +30,21 @@ function tel_digitos(t) {
 }
 
 // ¿La reserva coincide con lo tecleado? Folio (su id, con o sin el prefijo
-// visible "RES-"), nombre del cliente, o teléfono por DÍGITOS — mismo
+// visible "RES-"), nombre del cliente, email, o teléfono por DÍGITOS — mismo
 // criterio de teléfono que cliente_coincide() en lib/clientes.js.
+//
+// El email se sumó el 01 oct 2026 (módulo "Reservas" de /reserva-express,
+// que busca explícitamente por "Folio, Nombre de cliente, Teléfono o
+// Email") — amplía las coincidencias, nunca las reduce, así que
+// cobrarreserva.jsx (el otro consumidor de esta función) sigue encontrando
+// exactamente lo mismo que antes, y además ahora también por email.
 export function reserva_coincide(r, q) {
   const lq = String(q || '').trim().toLowerCase()
   if (!lq) return false // sin texto no hay para quién buscar: lista vacía, no "todas".
   const folio = String(r.id || '').toLowerCase()
   if (folio.includes(lq) || folio_visible(r).toLowerCase().includes(lq)) return true
   if (String(r.cliente || '').toLowerCase().includes(lq)) return true
+  if (String(r.email || '').toLowerCase().includes(lq)) return true
   const digitos = lq.replace(/\D/g, '')
   if (digitos && tel_digitos(r.tel).includes(digitos)) return true
   return false

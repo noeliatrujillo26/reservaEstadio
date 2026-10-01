@@ -505,6 +505,12 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
           >
             Registrar Cobro
           </button>
+          <button
+            type="button" className={'re-tab' + (tab === 'reservas' ? ' activo' : '')}
+            onClick={() => ontab('reservas')}
+          >
+            Reservas
+          </button>
         </div>
       )}
 

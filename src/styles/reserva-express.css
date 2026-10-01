@@ -71,15 +71,18 @@
 
 .pagina-reserva-express .re-form { flex: 1; padding: 18px 16px 100px; max-width: 560px; width: 100%; margin: 0 auto; }
 
-/* ── pestañas superiores: Nueva Reserva / Cobrar a Reserva ── */
+/* ── pestañas superiores: Nueva Reserva / Registrar Cobro / Reservas ──
+   (3 pestañas desde el 01 oct 2026 — gap y tipografía achicados un poco
+   respecto a las 2 originales para que la tercera no las apriete a la
+   fuerza en pantallas angostas.) */
 .pagina-reserva-express .re-tabs {
   position: sticky; top: 55px; z-index: 19; background: var(--fondo);
-  display: flex; gap: 8px; padding: 10px 16px 4px; max-width: 560px; width: 100%; margin: 0 auto;
+  display: flex; gap: 6px; padding: 10px 16px 4px; max-width: 560px; width: 100%; margin: 0 auto;
 }
 .pagina-reserva-express .re-tab {
   flex: 1; min-height: 44px; border-radius: 12px; border: 1.5px solid var(--borde);
-  background: var(--tarjeta); color: var(--texto-suave); font-size: 13.5px; font-weight: 700;
-  cursor: pointer; font-family: inherit;
+  background: var(--tarjeta); color: var(--texto-suave); font-size: 12.5px; font-weight: 700;
+  cursor: pointer; font-family: inherit; padding: 0 4px;
 }
 .pagina-reserva-express .re-tab.activo { border-color: var(--naranja); background: var(--naranja); color: #fff; }
 
