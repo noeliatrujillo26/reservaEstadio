@@ -151,6 +151,93 @@ export async function disponibilidad_zonas_en_vivo(sb, juegoid, areas) {
   return resultado
 }
 
+// ── DISPONIBILIDAD EN VIVO DE UNA ZONA, A TRAVES DE TODOS LOS JUEGOS ──────
+// Selección bidireccional (01 oct 2026): /reserva-express permitía elegir
+// zona SOLO después de fijar el juego (#selectZona nacía disabled con
+// "— Elige primero el juego —"). Esto habilita el camino inverso — elegir
+// zona primero y filtrar #selectJuego por los partidos donde esa zona sigue
+// libre — con el MISMO criterio y las MISMAS tres fuentes que
+// disponibilidad_zonas_en_vivo() de arriba (zona_juego_estado + reservas +
+// pipeline_prospectos), solo que la consulta se filtra por `zona_id` y el
+// resultado se agrupa por juego en vez de por zona. Se mantiene como una
+// función separada — e invertida — en vez de reusar la de arriba con los
+// parámetros cambiados: esa recorre TODAS las zonas de un juego, esta
+// recorre TODOS los juegos de UNA zona; forzarlas a compartir código habría
+// significado o traer siempre todas las zonas (desperdiciando la consulta)
+// o parametrizar tanto la entrada como la agrupación de salida, perdiendo
+// la simetría 1:1 con la lógica ya auditada de disponibilidad_zonas_en_vivo.
+//
+// `area` es el objeto de la zona elegida (necesita .escompartida y
+// .capacidadmaxima para los palcos — mismo shape que trae useadmindatos()).
+// Devuelve { [juegoid]: { ocupada, escompartida, ocupados, capacidad,
+// libres } }, igual forma que disponibilidad_zonas_en_vivo() pero indexado
+// por juego.
+export async function disponibilidad_juegos_para_zona(sb, zonaid, area, juegos) {
+  const resultado = {}
+  if (!zonaid || !area) return resultado
+
+  const [rz, rr, rp] = await Promise.allSettled([
+    sb.from('zona_juego_estado').select('juego_id, estado').eq('zona_id', zonaid),
+    sb.from('reservas').select('juego_id, estado, personas, adultos, ninos').eq('zona_id', zonaid),
+    sb.from('pipeline_prospectos').select('juego, etapa').eq('zona_id', zonaid),
+  ])
+
+  const estadojuego = {}
+  if (rz.status === 'fulfilled' && !rz.value.error) {
+    (rz.value.data || []).forEach((f) => {
+      if (f.juego_id != null) estadojuego[String(f.juego_id)] = f.estado
+    })
+  } else {
+    console.warn('disponibilidad_juegos_para_zona: no se pudo leer zona_juego_estado', rz.reason || rz.value?.error)
+  }
+
+  const reservaszona = []
+  const reservasocupadas = new Set()
+  if (rr.status === 'fulfilled' && !rr.value.error) {
+    (rr.value.data || []).forEach((f) => {
+      if (f.juego_id == null) return
+      const jid = String(f.juego_id)
+      // mismo shape que espera ocupacion_palco()/lugares_de_reserva().
+      reservaszona.push({
+        zonaid: String(zonaid), juegoid: jid, estado: f.estado,
+        personas: f.personas, adultos: f.adultos, ninos: f.ninos,
+      })
+      if (!/cancelad/i.test(f.estado || '')) reservasocupadas.add(jid)
+    })
+  } else {
+    console.warn('disponibilidad_juegos_para_zona: no se pudo leer reservas', rr.reason || rr.value?.error)
+  }
+
+  // Misma salvedad que disponibilidad_zonas_en_vivo(): solo aplica a zonas
+  // exclusivas, nunca a un palco compartido (ese se rige por su capacidad).
+  const prospectosocupados = new Set()
+  if (rp.status === 'fulfilled' && !rp.value.error) {
+    (rp.value.data || []).forEach((f) => {
+      if (f.juego != null && f.etapa !== 'descartado') prospectosocupados.add(String(f.juego))
+    })
+  } else {
+    console.warn('disponibilidad_juegos_para_zona: no se pudo leer pipeline_prospectos', rp.reason || rp.value?.error)
+  }
+
+  ;(juegos || []).forEach((j) => {
+    const jid = String(j.id)
+    if (area.escompartida) {
+      const o = ocupacion_palco(area, jid, reservaszona)
+      const bloqueada = String(estadojuego[jid] || '').toLowerCase() === 'bloqueada'
+      resultado[jid] = {
+        ocupada: bloqueada || o.agotado, escompartida: true,
+        ocupados: o.ocupados, capacidad: o.capacidad, libres: o.libres,
+      }
+    } else {
+      const est = String(estadojuego[jid] || '').toLowerCase()
+      const ocupada = (!!est && est !== 'libre') || reservasocupadas.has(jid) || prospectosocupados.has(jid)
+      resultado[jid] = { ocupada, escompartida: false, ocupados: null, capacidad: null, libres: null }
+    }
+  })
+
+  return resultado
+}
+
 // El upsert devuelve { ok, motivo, error }. NUNCA lanza.
 //
 // Esto se VERIFICA con .select() como todo lo demas. En la v1 era

@@ -64,7 +64,7 @@ import usereservaexpress from '../../hooks/usereservaexpress'
 import { catalogo_clientes, cliente_coincide } from '../../lib/clientes'
 import { validar_codigo_descuento } from '../../lib/catalogos'
 import { categoria_sec } from '../../lib/dashboard'
-import { disponibilidad_zonas_en_vivo } from '../../lib/mapaocupacion'
+import { disponibilidad_juegos_para_zona, disponibilidad_zonas_en_vivo } from '../../lib/mapaocupacion'
 import { map_precio } from '../../lib/preciosadmin'
 import { calc_total_prospecto } from '../../lib/prospectos'
 import {
@@ -236,8 +236,15 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
   // deshabilitada. El conteo total de libres SOLO vive en el badge de arriba
   // (totalzonaslibres) — `libres` se conserva aqui unicamente para sumarlo
   // ahi, ya no se imprime por zona.
+  //
+  // Selección bidireccional (01 oct 2026): sin juego fijo el selector de
+  // zona YA NO se queda vacío/deshabilitado — se puebla con TODAS las zonas,
+  // marcadas libres (el filtro real llega en cuanto el juego se decide, por
+  // cualquiera de los dos selectores).
   const zonasconestado = useMemo(() => {
-    if (!d.juegoid) return []
+    if (!d.juegoid) {
+      return (areas || []).map((a) => ({ area: a, libre: true, libres: null, etiqueta: a.nombre, info: null }))
+    }
     return (areas || []).map((a) => {
       const info = zonasdisponibilidad[String(a.id)]
       const libre = !info || !info.ocupada
@@ -268,6 +275,41 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
     if (info && info.ocupada) set('zonaid', '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [d.juegoid, zonasdisponibilidad])
+
+  // ── Selección bidireccional (01 oct 2026): CASO A, zona primero ────────
+  // Mismo criterio que la disponibilidad por juego de arriba, pero en el
+  // sentido contrario — disponibilidad_juegos_para_zona() (lib/mapaocupacion.js).
+  // Solo corre cuando el visitante entró por la zona (sin juego fijo
+  // todavía): en cuanto hay un juego elegido, CASO B es el que manda y este
+  // efecto se limpia — los dos sentidos no se calculan a la vez.
+  const [juegosdisponibilidad, setjuegosdisponibilidad] = useState({})
+  const [cargandojuegos, setcargandojuegos] = useState(false)
+
+  useEffect(() => {
+    let vivo = true
+    if (!d.zonaid || d.juegoid) { setjuegosdisponibilidad({}); return }
+    const area = (areas || []).find((a) => String(a.id) === String(d.zonaid))
+    if (!area) { setjuegosdisponibilidad({}); return }
+    setcargandojuegos(true)
+    disponibilidad_juegos_para_zona(sb, d.zonaid, area, juegos)
+      .then((mapa) => { if (vivo) setjuegosdisponibilidad(mapa) })
+      .finally(() => { if (vivo) setcargandojuegos(false) })
+    return () => { vivo = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d.zonaid, d.juegoid])
+
+  // Juegos a ofrecer en el <select>: SIN zona elegida (o con juego ya fijo —
+  // CASO B manda), la lista completa de siempre. Con zona elegida y sin
+  // juego todavía, SOLO los partidos donde esa zona sigue libre — a
+  // diferencia del selector de zona (que deja las ocupadas visibles pero
+  // deshabilitadas), aquí el propio ticket pide quitarlas de la lista.
+  const juegosmostrados = useMemo(() => {
+    if (!d.zonaid || d.juegoid) return juegosordenados
+    return juegosordenados.filter((j) => {
+      const info = juegosdisponibilidad[String(j.id)]
+      return !info || !info.ocupada
+    })
+  }, [juegosordenados, juegosdisponibilidad, d.zonaid, d.juegoid])
 
   const vendedoras = useMemo(
     () => (usuarios || []).filter((u) => u.rol === 'Vendedora' && u.estado === 'Activo').map((u) => u.nombre),
@@ -571,15 +613,22 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
             <label>Juego *</label>
             <select
               ref={refjuego}
-              className={'re-select' + err('juego')} value={d.juegoid}
+              className={'re-select' + err('juego')} value={d.juegoid} disabled={cargandojuegos}
               onChange={(e) => set('juegoid', e.target.value)}
               onKeyDown={alenter_avanzar(refjuego)}
             >
-              <option value="">— Selecciona el juego —</option>
-              {juegosordenados.map((j) => (
+              <option value="">
+                {cargandojuegos ? 'Verificando disponibilidad…' : '— Selecciona el juego —'}
+              </option>
+              {!cargandojuegos && juegosmostrados.map((j) => (
                 <option key={j.id} value={j.id}>{fecha_juego(j)} · vs {j.rival}</option>
               ))}
             </select>
+            {d.zonaid && !d.juegoid && !cargandojuegos && juegosmostrados.length === 0 && (
+              <div className="re-ayuda" style={{ color: 'var(--rojo)' }}>
+                Esta zona no tiene lugares libres en ningún juego próximo.
+              </div>
+            )}
           </div>
           <div className="re-campo">
             <label>
@@ -627,16 +676,12 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
             )}
             <select
               ref={refzona}
-              className={'re-select' + err('zona')} value={d.zonaid} disabled={!d.juegoid || cargandozonas}
+              className={'re-select' + err('zona')} value={d.zonaid} disabled={cargandozonas}
               onChange={(e) => set('zonaid', e.target.value)}
               onKeyDown={alenter_avanzar(refzona)}
             >
               <option value="">
-                {!d.juegoid
-                  ? '— Elige primero el juego —'
-                  : cargandozonas
-                    ? 'Verificando disponibilidad…'
-                    : '— Selecciona una zona —'}
+                {cargandozonas ? 'Verificando disponibilidad…' : '— Selecciona la zona / asador —'}
               </option>
               {!cargandozonas && zonasmostradas.map(({ area: a, libre, etiqueta }) => (
                 <option key={a.id} value={a.id} disabled={!libre} style={!libre ? { color: 'var(--texto-tenue)' } : undefined}>

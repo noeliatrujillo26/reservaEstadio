@@ -57,6 +57,7 @@ export {
   estado_vivo, puede_bloquearse, set_estado_zona, alternar_bloqueo, estados_zona,
   texto_fallo_estado, liberar_reservas_de_prospecto, folios_de_prospecto,
   puede_eliminarse, msg_no_eliminable,
+  disponibilidad_zonas_en_vivo, disponibilidad_juegos_para_zona,
 } from '../src/lib/mapaocupacion'
 
 export {
