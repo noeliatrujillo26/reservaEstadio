@@ -29,14 +29,15 @@
 //     vez de reabrir esa generación de imagen).
 // ═══════════════════════════════════════════════════════════════════
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { sb } from '../../supabaseclient'
 import useadmin from '../../hooks/useadmin'
 import useadmindatos from '../../hooks/useadmindatos'
 import usereservaexpress from '../../hooks/usereservaexpress'
 import { usetoast } from '../../context/toastcontext'
 import { buscar_reservas, resumen_reserva } from '../../lib/cobrarreserva'
 import { tel_norm } from '../../lib/clientes'
-import { estado_vivo } from '../../lib/mapaocupacion'
+import { disponibilidad_zonas_en_vivo } from '../../lib/mapaocupacion'
 import { folio_visible } from '../../lib/reservasadmin'
 import { mxn2 } from '../../lib/dinero'
 import {
@@ -144,7 +145,7 @@ export function TarjetaReserva({
 
 export default function verreservas({ tab = 'reservas', ontab } = {}) {
   const { usuario, cerrar_sesion } = useadmin()
-  const { juegos, areas, areasestados, reservas, cobros, pipeline, cargando } = useadmindatos()
+  const { juegos, areas, reservas, cobros, pipeline, cargando } = useadmindatos()
   const { editar_reserva_express, guardando } = usereservaexpress()
   const { mostrartoast } = usetoast()
 
@@ -166,16 +167,41 @@ export default function verreservas({ tab = 'reservas', ontab } = {}) {
   )
   const resumen = useMemo(() => resumen_reserva(reserva, cobros, pipeline), [reserva, cobros, pipeline])
 
-  // Zonas ofrecidas al editar: libres para el juego elegido + la propia de la
-  // reserva (si no, desaparecería de su propio selector) — mismo criterio
-  // que reservaform.jsx.
+  // Zonas ofrecidas al editar: disponibilidad EN VIVO contra Supabase —
+  // corregido 06 oct 2026, antes leía `areasestados` de useadmindatos(),
+  // el mapa cacheado que se carga UNA SOLA VEZ al abrir la sesión y solo
+  // se refresca cuando algo llama recargar(); eso dejaba ofrecer una zona
+  // que alguien más ya había ocupado mientras la sesión seguía abierta.
+  // MISMO criterio que formularioexpress.jsx (disponibilidad_zonas_en_vivo:
+  // zona_juego_estado + reservas activas + prospectos con zona asignada).
+  const [zonasdisponibilidad, setzonasdisponibilidad] = useState({})
+  const [cargandozonas, setcargandozonas] = useState(false)
+
+  useEffect(() => {
+    let vivo = true
+    if (!d.juegoid) { setzonasdisponibilidad({}); return }
+    setcargandozonas(true)
+    disponibilidad_zonas_en_vivo(sb, d.juegoid, areas)
+      .then((mapa) => { if (vivo) setzonasdisponibilidad(mapa) })
+      .finally(() => { if (vivo) setcargandozonas(false) })
+    return () => { vivo = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d.juegoid])
+
+  // La zona ACTUAL de la reserva es válida de todos modos, pero SOLO si el
+  // juego elegido es el MISMO que ya tenía — si el usuario cambia a otro
+  // juego, esa zona no tiene nada que ver y no debe colarse "gratis".
   const zonasposibles = useMemo(() => {
-    if (!d.juegoid) return []
+    if (!d.juegoid || cargandozonas) return []
+    const esmismoJuego = reserva && String(reserva.juegoid) === String(d.juegoid)
     return (areas || []).filter((a) => {
-      if (reserva && String(a.id) === String(reserva.zonaid)) return true
-      return estado_vivo(areasestados, d.juegoid, a.id) === 'libre'
+      if (esmismoJuego && String(a.id) === String(reserva.zonaid)) return true
+      const info = zonasdisponibilidad[String(a.id)]
+      return !info || !info.ocupada
     })
-  }, [areas, areasestados, d.juegoid, reserva])
+  }, [areas, zonasdisponibilidad, cargandozonas, d.juegoid, reserva])
+
+  const sinzonasdisponibles = !!d.juegoid && !cargandozonas && zonasposibles.length === 0
 
   function elegir(r) {
     setreservaid(r.id)
@@ -232,6 +258,15 @@ export default function verreservas({ tab = 'reservas', ontab } = {}) {
 
   async function reenviaremail() {
     if (!reserva || !reserva.email) return
+    // Toda la autorización que pide este botón: una sesión de Reserva
+    // Express activa — CUALQUIERA, no solo Administrador. El endpoint
+    // (/api/send-reservation-email) no exige ningún rol ni cookie de panel
+    // admin, así que esta comprobación es puramente defensiva (sesión
+    // caída a medio uso), no un candado nuevo.
+    if (!usuario) {
+      mostrartoast('⚠️ Tu sesión expiró. Vuelve a iniciar sesión para reenviar el comprobante.')
+      return
+    }
     setenviandoemail(true)
     try {
       const resp = await fetch('/api/send-reservation-email', {
@@ -396,15 +431,29 @@ export default function verreservas({ tab = 'reservas', ontab } = {}) {
               <label>Zona / Asador *</label>
               <select
                 className={'re-select' + (errorcampo === 'zona' ? ' re-error' : '')}
-                value={d.zonaid} disabled={!d.juegoid}
+                value={d.zonaid} disabled={!d.juegoid || cargandozonas || sinzonasdisponibles}
                 onChange={(e) => setd((x) => ({ ...x, zonaid: e.target.value }))}
               >
-                <option value="">{d.juegoid ? '— Selecciona una zona —' : '— Elige primero el juego —'}</option>
-                {zonasposibles.map((a) => (
+                <option value="">
+                  {!d.juegoid
+                    ? '— Elige primero el juego —'
+                    : cargandozonas
+                      ? 'Verificando disponibilidad…'
+                      : sinzonasdisponibles
+                        ? '— Sin zonas disponibles —'
+                        : '— Selecciona una zona —'}
+                </option>
+                {!cargandozonas && zonasposibles.map((a) => (
                   <option key={a.id} value={a.id}>{a.nombre}</option>
                 ))}
               </select>
-              <div className="re-ayuda">Solo zonas libres para el juego elegido (más la actual de esta reserva).</div>
+              {sinzonasdisponibles ? (
+                <div className="re-ayuda" style={{ color: 'var(--rojo)' }}>
+                  No hay zonas libres para este juego. Elige otra fecha.
+                </div>
+              ) : (
+                <div className="re-ayuda">Solo zonas libres para el juego elegido (más la actual de esta reserva, si es el mismo juego).</div>
+              )}
             </div>
 
             <div className="re-campo">
