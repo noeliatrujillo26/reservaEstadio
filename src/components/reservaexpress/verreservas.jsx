@@ -269,14 +269,32 @@ export default function verreservas({ tab = 'reservas', ontab } = {}) {
     }
     setenviandoemail(true)
     try {
+      // Dato FRESCO directo de Supabase ANTES de reenviar (06 oct 2026) —
+      // el arreglo `reservas` de useadmindatos() se recarga tras guardar
+      // una edición, pero ese recargar() es async: si se reenvía el
+      // comprobante justo después de editar, hay una ventana muy breve en
+      // la que `reserva` (useMemo sobre ese arreglo) todavía podría no
+      // reflejar el último guardado. El endpoint YA relee la fila completa
+      // en el servidor para construir el correo (api/send-reservation-
+      // email.js, con la service key) — esta consulta aparte es para el
+      // correo DEL REENVÍO (debe coincidir con el de la reserva) y para
+      // que el folio no dependa de una copia local potencialmente vieja.
+      const { data: fresca, error: errFresca } = await sb
+        .from('reservas').select('id, email').eq('id', reserva.id).maybeSingle()
+      if (errFresca || !fresca) {
+        mostrartoast('⚠️ No se pudo confirmar la reserva antes de reenviar. Intenta de nuevo.')
+        return
+      }
+      const emailfresco = fresca.email || reserva.email
+
       const resp = await fetch('/api/send-reservation-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folio: reserva.id, email: reserva.email, reenvio: true }),
+        body: JSON.stringify({ folio: fresca.id, email: emailfresco, reenvio: true }),
       })
       const data = await resp.json().catch(() => ({}))
       if (resp.ok && data.enviado) {
-        mostrartoast('✅ Comprobante reenviado a ' + reserva.email)
+        mostrartoast('✅ Comprobante actualizado reenviado con éxito a ' + emailfresco)
       } else {
         mostrartoast('⚠️ No se pudo reenviar el comprobante' + (data.error ? ': ' + data.error : '.'))
       }

@@ -997,6 +997,9 @@ body.vista-solo-ver .modal select,
   transform: translateY(0);
   opacity: 1;
 }
+/* Variantes de color (06 oct 2026) — ver src/components/ui/toast.jsx. */
+.pagina-admin .toast.toast-exito { border-left-color: #16A34A; }
+.pagina-admin .toast.toast-error { border-left-color: #DC2626; }
 .pagina-admin .page-header {
   margin-bottom: 24px;
 }

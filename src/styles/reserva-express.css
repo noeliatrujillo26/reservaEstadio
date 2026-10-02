@@ -434,3 +434,28 @@
     max-width: 560px; margin: 0 auto;
   }
 }
+
+/* ── Toast (06 oct 2026) ────────────────────────────────────────────
+   El <Toast/> compartido (src/components/ui/toast.jsx) traía su único
+   CSS bajo .pagina-admin — bajo .pagina-reserva-express no tenía NINGUNA
+   regla, así que cada aviso (éxito o error) salía sin posición fija, sin
+   fondo, sin color: prácticamente invisible en vez de un verdadero toast.
+   Mismo patrón visual que admin.css, con los tokens propios de esta
+   página (--naranja/--verde/--rojo) y .toast-exito/.toast-error para el
+   color según el tipo de aviso. */
+.pagina-reserva-express .toast {
+  position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 300;
+  margin: 0 auto; max-width: 480px;
+  background: #1A1D24; color: #fff; padding: 13px 18px; border-radius: 12px;
+  font-size: 13.5px; font-weight: 600; line-height: 1.4;
+  border-left: 4px solid var(--naranja);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+  transform: translateY(100px); opacity: 0; pointer-events: none;
+  transition: transform .25s, opacity .25s;
+}
+.pagina-reserva-express .toast.show { transform: translateY(0); opacity: 1; }
+.pagina-reserva-express .toast.toast-exito { border-left-color: var(--verde); }
+.pagina-reserva-express .toast.toast-error { border-left-color: var(--rojo); }
+@media (min-width: 560px) {
+  .pagina-reserva-express .toast { left: auto; right: 24px; bottom: 24px; }
+}
