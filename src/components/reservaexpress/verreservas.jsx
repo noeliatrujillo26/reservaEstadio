@@ -260,9 +260,15 @@ export default function verreservas({ tab = 'reservas', ontab } = {}) {
     if (!reserva || !reserva.email) return
     // Toda la autorización que pide este botón: una sesión de Reserva
     // Express activa — CUALQUIERA, no solo Administrador. El endpoint
-    // (/api/send-reservation-email) no exige ningún rol ni cookie de panel
-    // admin, así que esta comprobación es puramente defensiva (sesión
-    // caída a medio uso), no un candado nuevo.
+    // propio (/api/send-reservation-email, en este repo) no exige ningún
+    // rol ni cookie de panel admin. PERO reservaestadio.com sirve
+    // /reserva-express mediante un rewrite-proxy hacia el panel v1
+    // (vercel.json de ese otro proyecto), así que un fetch relativo desde
+    // ahí puede resolverse contra ESE origen y golpear el endpoint del v1
+    // (mismo path, otro proyecto) — el cual SÍ exige Bearer de sesión de
+    // panel y devuelve "Sesión del panel requerida." (401) si falta. Por
+    // eso abajo se manda el access_token de la sesión vigente: de recibo
+    // en el endpoint que sea, la petición llega autenticada.
     if (!usuario) {
       mostrartoast('⚠️ Tu sesión expiró. Vuelve a iniciar sesión para reenviar el comprobante.')
       return
@@ -287,9 +293,14 @@ export default function verreservas({ tab = 'reservas', ontab } = {}) {
       }
       const emailfresco = fresca.email || reserva.email
 
+      const { data: sesionactual } = await sb.auth.getSession()
+      const token = sesionactual?.session?.access_token
+      const headers = { 'Content-Type': 'application/json' }
+      if (token) headers.Authorization = 'Bearer ' + token
+
       const resp = await fetch('/api/send-reservation-email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ folio: fresca.id, email: emailfresco, reenvio: true }),
       })
       const data = await resp.json().catch(() => ({}))

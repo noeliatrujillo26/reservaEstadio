@@ -95,6 +95,30 @@ console.log('\n─── 4) Reenvío con datos FRESCOS (06 oct 2026): consulta d
     cuerpo.includes("'✅ Comprobante actualizado reenviado con éxito a ' + emailfresco"))
 }
 
+console.log('\n─── 6) Bearer de sesión (02 oct 2026): reservaestadio.com proxya /reserva-express hacia el panel v1 ───')
+{
+  // Causa raíz real del 401 "Sesión del panel requerida.": reservaestadio.com
+  // sirve /reserva-express con un rewrite-proxy hacia el proyecto del panel
+  // v1 (su propio vercel.json), así que un fetch RELATIVO desde el navegador
+  // puede resolverse contra ESE origen y caer en el api/send-reservation-
+  // email.js del panel v1 (mismo path, otro proyecto) en vez del de este
+  // repo. Ese endpoint v1 SÍ exige Bearer de sesión de panel
+  // (api/_lib/authPanel.js) para un reenvío. La única manera de que la
+  // petición pase sin importar en qué proyecto aterrice es mandar el
+  // access_token de la sesión vigente.
+  const inicio = src.indexOf('async function reenviaremail(')
+  const fin = src.indexOf('function mensaje_whatsapp', inicio)
+  const cuerpo = inicio >= 0 && fin > inicio ? src.slice(inicio, fin) : ''
+
+  check('Obtiene la sesión vigente de Supabase (sb.auth.getSession()) antes del fetch',
+    cuerpo.includes('sb.auth.getSession()'))
+  check('Manda el access_token como header Authorization: Bearer <token>',
+    /headers\.Authorization = 'Bearer ' \+ token/.test(cuerpo))
+  check('El header se agrega al objeto de headers del fetch (no se reemplaza Content-Type)',
+    /const headers = \{ 'Content-Type': 'application\/json' \}/.test(cuerpo) &&
+    /headers,\s*\n\s*body: JSON\.stringify/.test(cuerpo))
+}
+
 console.log('\n─── 5) Toast visible y con color (antes invisible en /reserva-express) ───')
 {
   const srcToast = readFileSync('src/components/ui/toast.jsx', 'utf8')
