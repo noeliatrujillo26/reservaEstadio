@@ -97,5 +97,49 @@ console.log('\n─── d) verreservas.jsx guarda con editar_reserva_express(),
   check('guardarcambios() llama a editar_reserva_express(...)', src.includes('editar_reserva_express('))
 }
 
+console.log('\n─── e) editar_reserva_express() cascada al Pipeline (02 oct 2026) ───')
+{
+  // Una reserva nacida de "Reserva Momentánea" queda vinculada a su tarjeta
+  // vía pipeline_prospectos.reserva_ids (ver crear_express más arriba en el
+  // mismo archivo) — mismo campo (reservaids en el cliente) que
+  // useprospectos.js .editar() ya sincroniza en sentido CONTRARIO (tarjeta →
+  // reserva). Sin este bloque, editar el contacto en Reserva Express dejaba
+  // la tarjeta del Pipeline con nombre/correo/teléfono viejos.
+  const src = readFileSync('src/hooks/usereservaexpress.js', 'utf8')
+  const inicio = src.indexOf('const editar_reserva_express = useCallback(')
+  const fin = src.indexOf('COMPARTIR EL TICKET', inicio)
+  const cuerpo = inicio >= 0 && fin > inicio ? src.slice(inicio, fin) : ''
+
+  check('Busca la tarjeta del Pipeline vinculada por reservaids (no por folio ni por email)',
+    /\(pipeline \|\| \[\]\)\.find\(\s*\n?\s*\(c\) => \(c\.reservaids \|\| \[\]\)\.some\(\(rid\) => String\(rid\) === String\(editando\.id\)\)/.test(cuerpo))
+  check('Si existe, actualiza nombre/email/tel en pipeline_prospectos con los valores NUEVOS',
+    /actualizar_directo\('pipeline_prospectos', \{ nombre, email, tel \}, tarjeta\.id, null\)/.test(cuerpo))
+  check('Fallo de la cascada es NO FATAL (aviso, la reserva ya quedó guardada)',
+    cuerpo.includes("avisos.push('⚠️ La tarjeta del Pipeline no se pudo actualizar"))
+  check('`pipeline` entra en las dependencias del useCallback (si no, el closure vería un arreglo viejo)',
+    /\[usuario, guardando, juegos, areas, pipeline, mostrartoast, recargar\]/.test(src))
+}
+
+console.log('\n─── f) WhatsApp ("Enviar comprobante"): enlace de /mis-reservas con autologin ───')
+{
+  // Mismo bug de origen que el botón del correo (ver bloque b): antes de
+  // esta fecha mandaba solo el origen + "/mis-reservas", sin folio ni email
+  // — el cliente llegaba al formulario en blanco. folio CRUDO (reserva.id),
+  // NO folio_visible() ("RES-XXX"): /api/mis-reservas compara
+  // String(r.id) === String(folio) contra el id real de la fila.
+  const src = readFileSync('src/components/reservaexpress/verreservas.jsx', 'utf8')
+  const inicio = src.indexOf('function mensaje_whatsapp(')
+  const fin = src.indexOf('function reenviarwhatsapp(', inicio)
+  const cuerpo = inicio >= 0 && fin > inicio ? src.slice(inicio, fin) : ''
+
+  check('mensaje_whatsapp() existe', inicio >= 0)
+  check('La URL de /mis-reservas lleva ?folio=<reserva.id> (crudo, no folio_visible)',
+    /\/mis-reservas'\s*\n\s*\+ '\?folio=' \+ encodeURIComponent\(reserva\.id\)/.test(cuerpo))
+  check('...y &email=<reserva.email>, ambos con encodeURIComponent',
+    /&email=' \+ encodeURIComponent\(reserva\.email \|\| ''\)/.test(cuerpo))
+  check('El mensaje de WhatsApp sigue usando esa misma urlreserva en el texto',
+    cuerpo.includes('urlreserva'))
+}
+
 console.log('\nResultado: ' + ok + ' ✅ / ' + fail + ' ❌')
 process.exit(fail ? 1 : 0)

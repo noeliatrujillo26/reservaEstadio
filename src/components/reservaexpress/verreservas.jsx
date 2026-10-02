@@ -321,7 +321,12 @@ export default function verreservas({ tab = 'reservas', ontab } = {}) {
   // resumen con los datos VIGENTES de la reserva (ya reflejan cualquier
   // edición recién guardada) y el enlace al portal de autoservicio.
   function mensaje_whatsapp() {
+    // folio CRUDO (reserva.id), no folio_visible() ("RES-XXX"): el autologin
+    // de /mis-reservas (ver autologinportal.js + api/mis-reservas.js)
+    // compara String(r.id) === String(folio) contra el id real.
     const urlreserva = window.location.origin + '/mis-reservas'
+      + '?folio=' + encodeURIComponent(reserva.id)
+      + '&email=' + encodeURIComponent(reserva.email || '')
     return '¡Hola *' + (reserva.cliente || '') + '*! 👋\n' +
       'Aquí está el comprobante actualizado de tu reserva:\n\n' +
       '📌 *Folio:* ' + folio_visible(reserva) + '\n' +

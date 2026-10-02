@@ -489,6 +489,20 @@ export function usereservaexpress() {
           if (!ocupa.ok) avisos.push('⚠️ ' + a.nombre + ' no se marcó como reservada en la base.')
         }
 
+        // Cascada al Pipeline (02 oct 2026): esta reserva pudo nacer de una
+        // tarjeta de "Reserva Momentánea" (crear_express la vincula vía
+        // pipeline_prospectos.reserva_ids) — mismo campo que useprospectos.js
+        // .editar() sincroniza en sentido contrario (tarjeta → reserva). Sin
+        // esto, cambiar el contacto aquí dejaba la tarjeta del Pipeline con
+        // los datos viejos. No-fatal: la reserva ya quedó guardada.
+        const tarjeta = (pipeline || []).find(
+          (c) => (c.reservaids || []).some((rid) => String(rid) === String(editando.id))
+        )
+        if (tarjeta) {
+          const rp = await actualizar_directo('pipeline_prospectos', { nombre, email, tel }, tarjeta.id, null)
+          if (!rp.ok) avisos.push('⚠️ La tarjeta del Pipeline no se pudo actualizar con el nuevo contacto.')
+        }
+
         mostrartoast('✅ Reserva actualizada')
         registrar_movimiento(sb, {
           tipo: 'Reserva',
@@ -507,7 +521,7 @@ export function usereservaexpress() {
         setguardando(false)
       }
     },
-    [usuario, guardando, juegos, areas, mostrartoast, recargar]
+    [usuario, guardando, juegos, areas, pipeline, mostrartoast, recargar]
   )
 
   // ── COMPARTIR EL TICKET POR WHATSAPP ─────────────────────────────
