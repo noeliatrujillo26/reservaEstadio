@@ -35,7 +35,10 @@ import { folio_visible } from '../../lib/reservasadmin'
 import { saldo_favor_de, toca_saldo_favor } from '../../lib/cascadas'
 import { mxn2, redondear_dinero } from '../../lib/dinero'
 import { hoy_hermosillo } from '../../lib/fechas'
-import { IconArchivo, IconLupa, IconRecibo, IconResumen, IconSubir, IconWhatsapp } from './iconos'
+import {
+  IconArchivo, IconLupa, IconNuevaReserva, IconRecibo, IconRegistrarCobro,
+  IconReservasLista, IconResumen, IconSubir, IconWhatsapp,
+} from './iconos'
 
 const money = (n) => '$' + (Number(n) || 0).toLocaleString('es-MX', mxn2)
 
@@ -217,22 +220,22 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
       {ontab && (
         <div className="re-tabs">
           <button
-            type="button" className={'re-tab' + (tab === 'nueva' ? ' activo' : '')}
+            type="button" className={'re-tab re-tab-nueva' + (tab === 'nueva' ? ' activo' : '')}
             onClick={() => ontab('nueva')}
           >
-            Nueva Reserva
+            <IconNuevaReserva /> Nueva Reserva
           </button>
           <button
-            type="button" className={'re-tab' + (tab === 'cobrar' ? ' activo' : '')}
+            type="button" className={'re-tab re-tab-cobrar' + (tab === 'cobrar' ? ' activo' : '')}
             onClick={() => ontab('cobrar')}
           >
-            Registrar Cobro
+            <IconRegistrarCobro /> Registrar Cobro
           </button>
           <button
-            type="button" className={'re-tab' + (tab === 'reservas' ? ' activo' : '')}
+            type="button" className={'re-tab re-tab-reservas' + (tab === 'reservas' ? ' activo' : '')}
             onClick={() => ontab('reservas')}
           >
-            Reservas
+            <IconReservasLista /> Reservas
           </button>
         </div>
       )}

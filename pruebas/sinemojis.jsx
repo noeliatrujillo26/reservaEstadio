@@ -15,6 +15,7 @@ import { admincontext } from '../src/context/admincontext'
 import ToastProvider from '../src/context/toastcontext'
 import FormularioExpress from '../src/components/reservaexpress/formularioexpress'
 import CobrarReserva from '../src/components/reservaexpress/cobrarreserva'
+import VerReservas from '../src/components/reservaexpress/verreservas'
 
 const areas = [
   { id: 'sec-1', nombre: 'Terraza Derecha 1', cap: 64, escompartida: false, estado: 'libre' },
@@ -40,15 +41,21 @@ const sesion = {
   estado: 'dentro', error: '', seterror() {}, iniciar_sesion() {}, cerrar_sesion() {}, escritura_admin: false,
 }
 
-function envolver(Comp) {
+// `ontab` presente (aunque sea un no-op) para que las 3 pestañas
+// superiores se monten — con tab/ontab ausentes (el default de los 3
+// componentes) el bloque `{ontab && (...)}` no renderiza nada.
+function envolver(Comp, props) {
   return renderToString(
     <admincontext.Provider value={sesion}>
       <ToastProvider>
-        <admindatoscontext.Provider value={valor}><Comp /></admindatoscontext.Provider>
+        <admindatoscontext.Provider value={valor}><Comp {...props} /></admindatoscontext.Provider>
       </ToastProvider>
     </admincontext.Provider>
   )
 }
 
-export function renderFormulario() { return envolver(FormularioExpress) }
-export function renderCobrar() { return envolver(CobrarReserva) }
+const props_tabs = { tab: 'nueva', ontab: () => {} }
+
+export function renderFormulario() { return envolver(FormularioExpress, props_tabs) }
+export function renderCobrar() { return envolver(CobrarReserva, { ...props_tabs, tab: 'cobrar' }) }
+export function renderReservas() { return envolver(VerReservas, { ...props_tabs, tab: 'reservas' }) }

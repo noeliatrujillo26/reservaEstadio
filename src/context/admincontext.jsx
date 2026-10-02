@@ -67,16 +67,30 @@ export function adminprovider({ children }) {
   const cargar_perfil = useCallback(async () => {
     let user = null
     try {
-      const r = await con_tiempo(sb.auth.getUser(), 5000, 'auth.getUser')
+      // getSession() (NO getUser()) a propósito — corregido 05 oct 2026 tras
+      // reportes de "me pide iniciar sesión otra vez" EN CELULAR nada más.
+      // getUser() SIEMPRE hace un viaje de red a Supabase para revalidar al
+      // usuario; getSession() primero resuelve la sesión YA guardada en
+      // localStorage (persistSession:true, supabaseclient.js) sin esperar
+      // red, y solo la toca por red si el token ya expiró y hay que
+      // refrescarlo. En una conexión celular lenta o al "despertar" el radio
+      // justo al abrir la app, ese viaje de red de getUser() podía tardar
+      // más que el tope de 5 s de con_tiempo() de abajo — el tiempo agotado
+      // se trataba como "no se pudo verificar" y mandaba al login, con una
+      // sesión local perfectamente válida esperando sin que nadie la mirara.
+      // getSession() no depende de ese viaje para el caso común (token
+      // todavía vigente), así que deja de ser sensible a la misma falla.
+      const r = await con_tiempo(sb.auth.getSession(), 5000, 'auth.getSession')
       // lectura DEFENSIVA: sin sesion algunas versiones devuelven data en null
       // y el destructurado directo lanzaba un TypeError que se confundia con
       // "no tienes acceso".
-      user = (r && r.data && r.data.user) || null
+      const session = (r && r.data && r.data.session) || null
+      user = (session && session.user) || null
     } catch (e) {
       // sin sesion guardada supabase rechaza; eso no es un fallo tecnico.
       const msg = String((e && e.message) || '')
       if (/session|Auth session missing/i.test(msg)) return { motivo: sin_sesion }
-      console.error('admin/getUser:', e)
+      console.error('admin/getSession:', e)
       return { motivo: fallo_tecnico }
     }
     if (!user) return { motivo: sin_sesion }

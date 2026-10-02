@@ -173,6 +173,39 @@ export function IconCarneAsada() {
   )
 }
 
+// Iconos de las 3 pestañas superiores (05 oct 2026) — mismo trazo base de
+// calendario que IconEvento, con un acento propio por pestaña para que se
+// distingan de un vistazo incluso en su estado inactivo (tenue).
+export function IconNuevaReserva() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M5 1.5v3M11 1.5v3M2 6.5h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M8 8.3v4M6 10.3h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function IconRegistrarCobro() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="6.1" cy="9.6" r="4.1" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="9.9" cy="6.4" r="4.1" stroke="currentColor" strokeWidth="1.4" fill="var(--tarjeta, #fff)" />
+      <text x="9.9" y="8.3" textAnchor="middle" fontSize="5.3" fontWeight="700" fill="currentColor" stroke="none">$</text>
+    </svg>
+  )
+}
+
+export function IconReservasLista() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M5 1.5v3M11 1.5v3M2 6.5h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M4.5 9h7M4.5 11.3h4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 // Candado biométrico (02 oct 2026) — huella digital simplificada, trazo
 // delgado consistente con el resto del set.
 export function IconBiometria() {

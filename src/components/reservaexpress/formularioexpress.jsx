@@ -71,7 +71,10 @@ import {
   discada_disponible, min_seccion, precio_extra_seccion, precio_nino_seccion, precio_seccion,
 } from '../../lib/reservasadmin'
 import { redondear_dinero, mxn2 } from '../../lib/dinero'
-import { IconCarneAsada, IconDiscada, IconEvento, IconResumen, IconUsuario } from './iconos'
+import {
+  IconCarneAsada, IconDiscada, IconEvento, IconNuevaReserva, IconRegistrarCobro,
+  IconReservasLista, IconResumen, IconUsuario,
+} from './iconos'
 
 const money = (n) => '$' + redondear_dinero(n || 0).toLocaleString('es-MX', mxn2)
 
@@ -495,22 +498,22 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
       {ontab && (
         <div className="re-tabs">
           <button
-            type="button" className={'re-tab' + (tab === 'nueva' ? ' activo' : '')}
+            type="button" className={'re-tab re-tab-nueva' + (tab === 'nueva' ? ' activo' : '')}
             onClick={() => ontab('nueva')}
           >
-            Nueva Reserva
+            <IconNuevaReserva /> Nueva Reserva
           </button>
           <button
-            type="button" className={'re-tab' + (tab === 'cobrar' ? ' activo' : '')}
+            type="button" className={'re-tab re-tab-cobrar' + (tab === 'cobrar' ? ' activo' : '')}
             onClick={() => ontab('cobrar')}
           >
-            Registrar Cobro
+            <IconRegistrarCobro /> Registrar Cobro
           </button>
           <button
-            type="button" className={'re-tab' + (tab === 'reservas' ? ' activo' : '')}
+            type="button" className={'re-tab re-tab-reservas' + (tab === 'reservas' ? ' activo' : '')}
             onClick={() => ontab('reservas')}
           >
-            Reservas
+            <IconReservasLista /> Reservas
           </button>
         </div>
       )}

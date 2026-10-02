@@ -22,7 +22,7 @@ if (build.status !== 0) {
   console.log('FALLA la compilación del puente de pruebas')
   process.exit(1)
 }
-const { renderFormulario, renderCobrar } = await import('./out-sinemojis/sinemojis.js')
+const { renderFormulario, renderCobrar, renderReservas } = await import('./out-sinemojis/sinemojis.js')
 
 let ok = 0, fail = 0
 function check(nombre, cond, extra) {
@@ -83,6 +83,53 @@ console.log('\n─── Botón naranja principal y carga de comprobante (códig
     src.includes("'Registrar Cobro'") && !src.includes('REGISTRAR COBRO'))
   check('Carga de comprobante: texto corto "Subir comprobante" (no el párrafo largo anterior)',
     src.includes('Subir comprobante') && !src.includes('Clic para cargar comprobante'))
+}
+
+// ── Sesión fija: getSession(), no getUser() (05 oct 2026) ────────────────
+// getUser() SIEMPRE hace un viaje de red a Supabase para revalidar; en una
+// conexión celular lenta/al despertar el radio justo al abrir la app, ese
+// viaje podía tardar más que el tope de con_tiempo() y mandaba al login con
+// una sesión local perfectamente válida esperando. getSession() resuelve
+// la sesión YA guardada en localStorage sin depender de ese viaje de red
+// para el caso común. No hay forma honesta de ejercitar esto end-to-end
+// (depende de window/localStorage reales y de una llamada de red a
+// Supabase) — se verifica contra el CÓDIGO FUENTE, mismo criterio que la
+// verificación de editar_reserva_express() en
+// autologin-y-edicion-express.run.mjs.
+console.log('\n─── Sesión fija: admincontext.jsx usa getSession(), no getUser() ───')
+{
+  const src = readFileSync('src/context/admincontext.jsx', 'utf8')
+  const inicio = src.indexOf('const cargar_perfil = useCallback(')
+  const fin = src.indexOf('}, [])', inicio)
+  const cuerpo = inicio >= 0 && fin > inicio ? src.slice(inicio, fin) : ''
+  check('cargar_perfil() existe', inicio >= 0)
+  check('Usa sb.auth.getSession() para resolver la sesión ya guardada', cuerpo.includes('sb.auth.getSession()'))
+  check('NO usa sb.auth.getUser() (el que siempre viaja por red)', !cuerpo.includes('sb.auth.getUser()'))
+  check('Lee el usuario desde session.user (getSession() ya lo trae, sin otra llamada)',
+    cuerpo.includes('session.user'))
+}
+
+// ── Rediseño de las 3 pestañas superiores (05 oct 2026) ──────────────────
+// Cada botón lleva su propia clase de color (re-tab-nueva/-cobrar/-
+// -reservas) + su ícono — se verifica en los 3 componentes que las montan
+// (las tres pantallas repiten la misma barra, sin un componente
+// compartido).
+console.log('\n─── Pestañas superiores: clases de color + íconos por pestaña ───')
+{
+  const revisar = (html, nombre) => {
+    check(nombre + ': re-tab-nueva presente', /re-tab re-tab-nueva/.test(html), html.length)
+    check(nombre + ': re-tab-cobrar presente', /re-tab re-tab-cobrar/.test(html), html.length)
+    check(nombre + ': re-tab-reservas presente', /re-tab re-tab-reservas/.test(html), html.length)
+    check(nombre + ': la pestaña activa trae la clase "activo"', / activo"/.test(html), html.length)
+    // 3 pestañas × su propio ícono (calendario+, monedas+$, calendario+lista)
+    // = al menos 3 <svg> solo en la barra de pestañas (puede haber más en el
+    // resto de la pantalla, pero nunca menos de 3 aquí).
+    const svgs = (html.match(/<svg/g) || []).length
+    check(nombre + ': hay íconos SVG de sobra para las 3 pestañas (≥3 en toda la página)', svgs >= 3, svgs)
+  }
+  revisar(renderFormulario(), 'Nueva Reserva (formularioexpress.jsx)')
+  revisar(renderCobrar(), 'Registrar Cobro (cobrarreserva.jsx)')
+  revisar(renderReservas(), 'Reservas (verreservas.jsx)')
 }
 
 console.log('\nResultado: ' + ok + ' ✅ / ' + fail + ' ❌')

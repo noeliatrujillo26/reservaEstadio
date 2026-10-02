@@ -39,7 +39,10 @@ import { tel_norm } from '../../lib/clientes'
 import { estado_vivo } from '../../lib/mapaocupacion'
 import { folio_visible } from '../../lib/reservasadmin'
 import { mxn2 } from '../../lib/dinero'
-import { IconEditar, IconEmail, IconEstado, IconJuego, IconLupa, IconWhatsapp, IconZona } from './iconos'
+import {
+  IconEditar, IconEmail, IconEstado, IconJuego, IconLupa, IconNuevaReserva,
+  IconRegistrarCobro, IconReservasLista, IconWhatsapp, IconZona,
+} from './iconos'
 
 const money = (n) => '$' + (Number(n) || 0).toLocaleString('es-MX', mxn2)
 
@@ -296,14 +299,14 @@ export default function verreservas({ tab = 'reservas', ontab } = {}) {
 
       {ontab && (
         <div className="re-tabs">
-          <button type="button" className={'re-tab' + (tab === 'nueva' ? ' activo' : '')} onClick={() => ontab('nueva')}>
-            Nueva Reserva
+          <button type="button" className={'re-tab re-tab-nueva' + (tab === 'nueva' ? ' activo' : '')} onClick={() => ontab('nueva')}>
+            <IconNuevaReserva /> Nueva Reserva
           </button>
-          <button type="button" className={'re-tab' + (tab === 'cobrar' ? ' activo' : '')} onClick={() => ontab('cobrar')}>
-            Registrar Cobro
+          <button type="button" className={'re-tab re-tab-cobrar' + (tab === 'cobrar' ? ' activo' : '')} onClick={() => ontab('cobrar')}>
+            <IconRegistrarCobro /> Registrar Cobro
           </button>
-          <button type="button" className={'re-tab' + (tab === 'reservas' ? ' activo' : '')} onClick={() => ontab('reservas')}>
-            Reservas
+          <button type="button" className={'re-tab re-tab-reservas' + (tab === 'reservas' ? ' activo' : '')} onClick={() => ontab('reservas')}>
+            <IconReservasLista /> Reservas
           </button>
         </div>
       )}
