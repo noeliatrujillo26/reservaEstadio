@@ -40,7 +40,7 @@ function buildCotizEmailHtml(c, ligaPdf) {
   return '<div style="font-family:Segoe UI,Arial,sans-serif;max-width:560px;margin:0 auto;color:#111">' +
   '<div style="border-bottom:3px solid ' + NARANJA + ';padding:16px 0;margin-bottom:16px">' +
   '<img src="' + LOGO_URL + '" alt="Naranjeros de Hermosillo" height="40" style="height:40px;display:block;margin-bottom:10px">' +
-  '<div style="font-size:18px;font-weight:800">¡Aquí está tu cotización de Zonas Naranjeros!</div>' +
+  '<div style="font-size:18px;font-weight:800">¡Aquí está tu cotización de Áreas Sociales Naranjeros!</div>' +
   '<div style="font-size:13px;color:#666">Naranjeros de Hermosillo · Zonas de Asadores</div></div>' +
   '<p style="font-size:14px">Hola <strong>' + (c.cliente || '') + '</strong>, gracias por tu interés. Este es el detalle de tu cotización:</p>' +
   '<table style="width:100%;border-collapse:collapse;background:#F7F5F0;border-radius:10px;padding:8px" cellpadding="8">' +
@@ -85,7 +85,7 @@ async function enviarCotizacionPorCorreo(c, ligaPdf) {
   const destinatario = String(c.email || '').trim().toLowerCase();
   if (!destinatario) return { enviado: false, motivo: 'sin-email' };
 
-  const asunto = '📋 Tu cotización ' + c.id + ' · Zonas Naranjeros de Hermosillo';
+  const asunto = '📋 Tu cotización ' + c.id + ' · Áreas Sociales Naranjeros de Hermosillo';
   const cuerpo = buildCotizEmailHtml(c, ligaPdf);
 
   const smtp = getTransporteSMTP();

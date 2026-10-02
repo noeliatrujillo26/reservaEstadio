@@ -16,7 +16,8 @@
     "verificar-tarjetareserva": "node pruebas/tarjetareserva.run.mjs",
     "verificar-sinemojis": "node pruebas/sinemojis.run.mjs",
     "verificar-biometria": "node pruebas/biometria.run.mjs",
-    "verificar-autologin-edicion": "node pruebas/autologin-y-edicion-express.run.mjs"
+    "verificar-autologin-edicion": "node pruebas/autologin-y-edicion-express.run.mjs",
+    "verificar-remitente-correo": "node pruebas/remitente-correo.run.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",

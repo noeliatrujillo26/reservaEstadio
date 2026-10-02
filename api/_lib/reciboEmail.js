@@ -7,7 +7,7 @@
 //   EMAIL_SERVER_PORT     — 465 (SSL implícito; otro puerto usa STARTTLS)
 //   EMAIL_SERVER_USER     — buzón completo, ej. contacto@reservaestadio.com
 //   EMAIL_SERVER_PASSWORD — contraseña del buzón
-//   EMAIL_FROM            — remitente, ej. "Zonas Naranjeros" <contacto@reservaestadio.com>
+//   EMAIL_FROM            — remitente, ej. "Áreas Sociales Naranjeros" <contacto@reservaestadio.com>
 //   RESEND_API_KEY/RESEND_FROM — respaldo si no hay SMTP configurado
 //   SITE_URL              — opcional; default https://reservaestadio.com
 // Sin SMTP ni Resend, el recibo se publica igual y el correo se omite con log.
@@ -161,7 +161,7 @@ function buildReciboHtml(reserva, montos) {
 // {name, address} deja que nodemailer arme las comillas correctamente.
 function _remitenteSMTP() {
   const usuario = _credencialLimpia(process.env.EMAIL_SERVER_USER);
-  let nombre = 'Zonas Naranjeros';
+  let nombre = 'Áreas Sociales Naranjeros';
   const m = String(process.env.EMAIL_FROM || '').match(/^\s*"?([^"<]*?)"?\s*</);
   if (m && m[1].trim()) nombre = m[1].trim();
   return { name: nombre, address: usuario };
