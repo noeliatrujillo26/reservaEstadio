@@ -75,21 +75,31 @@
   .pagina-portal .opt .meta {color:var(--muted);font-size:12px;margin-top:1px;}
   .pagina-portal .opt.selected {background:#FFF6F2;}
 
-  /* Cards grid */
+  /* Cards grid — 04 oct 2026: overflow-hidden + max-width:100% para que
+     DETALLES DE LA RESERVA y ESTADO DE PAGO nunca desborden la pantalla
+     (ni en un teléfono angosto ni con zoom alto), y padding lateral que se
+     achica en vez de empujar el contenido fuera de la tarjeta. */
   .pagina-portal .grid {display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-bottom:20px;}
-  .pagina-portal .card {border:1px solid var(--line);border-radius:16px;padding:24px;}
+  .pagina-portal .card {
+    border:1px solid var(--line);border-radius:16px;padding:24px;
+    overflow:hidden;max-width:100%;box-sizing:border-box;
+  }
   .pagina-portal .card h4 {font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:18px;}
 
-  .pagina-portal .row {display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line);font-size:15px;}
+  /* Etiqueta ↔ valor sin encimarse: la etiqueta ("Personas") puede partirse
+     si hace falta, el valor ("15 lugares", "$10,042.50 MXN") se queda de
+     una sola pieza a la derecha — mismo criterio que .re-desglose-fila en
+     reserva-express.css. */
+  .pagina-portal .row {display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);font-size:15px;}
   .pagina-portal .row:last-child {border-bottom:none;}
-  .pagina-portal .row .k {color:var(--muted);}
-  .pagina-portal .row .v {font-weight:600;}
+  .pagina-portal .row .k {color:var(--muted);min-width:0;overflow-wrap:break-word;}
+  .pagina-portal .row .v {font-weight:600;flex-shrink:0;max-width:60%;text-align:right;overflow-wrap:break-word;}
 
   /* Payment */
   .pagina-portal .amounts {display:flex;gap:24px;margin-bottom:20px;}
-  .pagina-portal .amount {flex:1;}
+  .pagina-portal .amount {flex:1;min-width:0;}
   .pagina-portal .amount .lbl {font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
-  .pagina-portal .amount .val {font-size:28px;font-weight:800;margin-top:4px;}
+  .pagina-portal .amount .val {font-size:28px;font-weight:800;margin-top:4px;white-space:nowrap;}
   .pagina-portal .val.paid {color:var(--green);}
   .pagina-portal .val.due {color:var(--orange);}
   .pagina-portal .bar {height:8px;border-radius:99px;background:var(--soft);overflow:hidden;margin-bottom:8px;}
@@ -177,6 +187,22 @@
     .pagina-portal .layout {grid-template-columns:1fr;}
     .pagina-portal aside {border-right:none;border-bottom:1px solid var(--line);}
     .pagina-portal main {padding:28px 22px;}
+  }
+
+  /* 04 oct 2026: pantallas reducidas o zoom alto (el navegador encoge el
+     viewport de layout igual en los dos casos) — padding lateral más
+     limpio en las tarjetas y las dos cifras de "Estado de pago" pasan de
+     lado a lado a una debajo de otra, cada una con todo el ancho para
+     quedar en una sola línea sin partirse. */
+  @media(max-width:480px){
+    /* minmax(300px,1fr) no cede por debajo de 300px: en un teléfono de
+       320-375px (o esos mismos px efectivos con zoom), eso es justo lo que
+       forzaba el desbordamiento horizontal de las tarjetas. */
+    .pagina-portal .grid {grid-template-columns:1fr;}
+    .pagina-portal main {padding:20px 12px;}
+    .pagina-portal .card {padding:16px;}
+    .pagina-portal .amounts {flex-direction:column;gap:14px;}
+    .pagina-portal .amount .val {font-size:22px;}
   }
 
   /* ══ Acceso al portal (folio + correo) ══ */

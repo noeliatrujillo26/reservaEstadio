@@ -63,7 +63,10 @@ import { leer_mensajes } from '../lib/mensajes'
 import { disponibilidad_zonas_en_vivo, estados_zona, texto_fallo_estado } from '../lib/mapaocupacion'
 import { calc_total_prospecto, nuevo_folio_prospecto } from '../lib/prospectos'
 import { html_ticket_reserva, nombre_archivo_ticket } from '../lib/recibo'
-import { email_valido, etiqueta_juego, generar_folio_reserva } from '../lib/reservasadmin'
+import {
+  cobro_inicial, economia_reserva, email_valido, estado_pago_reserva,
+  etiqueta_juego, generar_folio_reserva, tel_valido,
+} from '../lib/reservasadmin'
 import { subir_comprobante } from '../lib/storage'
 import { hoy_hermosillo } from '../lib/fechas'
 
@@ -409,6 +412,104 @@ export function usereservaexpress() {
     [usuario, guardando, pipeline, clientes, juegos, reservas, areas, descuentosvolumen, mostrartoast, recargar]
   )
 
+  // ── EDITAR una reserva YA EXISTENTE (pestaña "Reservas", 04 oct 2026) ──
+  // Espejo de la rama `editando` de usereservasescritura().guardar()
+  // (el hook del panel de escritorio), pero con el MISMO criterio de
+  // autorización que crear_express de arriba: actualizar_directo/
+  // bloquear_zona_directo en vez de actualizar_verificado/set_estado_zona,
+  // así que NO se cae con "La escritura del panel está desactivada en esta
+  // versión" (motivo_bloqueo/VITE_ESCRITURA_ADMIN) — esa bandera es del
+  // panel de escritorio, todavía en fase de solo lectura a propósito, y
+  // ReservaExpress.jsx ya exige su propia sesión de administrador antes de
+  // montar esta pantalla. Ampliar esa bandera para destrabar esto habría
+  // encendido la escritura en TODO el panel de escritorio de un jalón.
+  //
+  // `datos` = { juegoid, zonaid, nombre, email, tel, pago, metodo, adultos,
+  //             ninos, personas, bruto, descuentopct, saldoconsumo,
+  //             cotizacionid, editando } — exactamente lo que ya construye
+  // verreservas.jsx (antes se lo pasaba a usereservasescritura().guardar()).
+  const editar_reserva_express = useCallback(
+    async (datos) => {
+      if (!usuario) {
+        mostrartoast('⚠️ Tu sesión expiró. Vuelve a iniciar sesión.')
+        return { ok: false }
+      }
+      if (guardando) return { ok: false }
+
+      if (!datos.juegoid) { mostrartoast('⚠️ Selecciona un juego'); return { ok: false, campo: 'juego' } }
+      if (!datos.zonaid) { mostrartoast('⚠️ Selecciona una sección'); return { ok: false, campo: 'zona' } }
+      const nombre = String(datos.nombre || '').trim()
+      if (!nombre) { mostrartoast('⚠️ Selecciona o ingresa un cliente'); return { ok: false, campo: 'nombre' } }
+      const email = String(datos.email || '').trim()
+      if (!email) { mostrartoast('⚠️ Ingresa el email del cliente'); return { ok: false, campo: 'email' } }
+      if (!email_valido(email)) { mostrartoast('⚠️ El email no es válido'); return { ok: false, campo: 'email' } }
+      const tel = String(datos.tel || '').trim()
+      if (!tel) { mostrartoast('⚠️ Ingresa el teléfono del cliente'); return { ok: false, campo: 'tel' } }
+      if (!tel_valido(tel)) { mostrartoast('⚠️ El teléfono debe tener 10 dígitos'); return { ok: false, campo: 'tel' } }
+
+      const j = (juegos || []).find((x) => String(x.id) === String(datos.juegoid))
+      const a = (areas || []).find((x) => x.id === datos.zonaid)
+      if (!j || !a) { mostrartoast('⚠️ Datos inválidos'); return { ok: false } }
+
+      const editando = datos.editando
+      if (!editando) return { ok: false }
+
+      const eco = economia_reserva(datos.bruto, datos.descuentopct)
+      const pago = datos.pago || 'Sin pago'
+      const cobrar = cobro_inicial(pago, eco.neto, datos.montomanual, datos.engancheminpct)
+      const estadopago = estado_pago_reserva(cobrar, eco.neto)
+
+      setguardando(true)
+      const avisos = []
+      try {
+        const comun = {
+          cliente: nombre, email, tel, pago, metodo: datos.metodo || 'Tarjeta', personas: datos.personas,
+          zona: a.nombre, zona_id: a.id, juego: etiqueta_juego(j), juego_id: j.id,
+          monto: eco.bruto, descuento_monto: eco.descuento, monto_pagado: cobrar, estado_pago: estadopago,
+          adultos: datos.adultos, ninos: datos.ninos, saldo_consumo: datos.saldoconsumo || 0,
+          cotizacion_id: datos.cotizacionid || null,
+        }
+
+        const res = await actualizar_directo('reservas', comun, editando.id, claves_legacy_reserva)
+        if (!res.ok) {
+          mostrartoast(
+            res.motivo === 'sin_filas'
+              ? '⚠️ La base no aceptó el cambio (0 filas). Revisa las políticas RLS de `reservas`.'
+              : '⚠️ No se pudo guardar en Supabase' + ((res.error && res.error.message) ? ': ' + res.error.message : '.')
+          )
+          return { ok: false }
+        }
+
+        // Cambio de juego o zona: libera la sección anterior y ocupa la
+        // nueva — sin esto, la anterior se queda "reservada" sin dueño.
+        if (String(editando.zonaid) !== String(a.id) || String(editando.juegoid) !== String(j.id)) {
+          const libera = await bloquear_zona_directo(editando.juegoid, editando.zonaid, 'libre')
+          const ocupa = await bloquear_zona_directo(j.id, a.id, 'reservada')
+          if (!libera.ok) avisos.push('⚠️ La sección anterior no se pudo liberar en la base.')
+          if (!ocupa.ok) avisos.push('⚠️ ' + a.nombre + ' no se marcó como reservada en la base.')
+        }
+
+        mostrartoast('✅ Reserva actualizada')
+        registrar_movimiento(sb, {
+          tipo: 'Reserva',
+          desc: 'Reserva editada (Reserva Express): ' + a.nombre + ' · vs ' + j.rival,
+          ref: nombre,
+          usuario: usuario ? usuario.nombre : '—',
+        })
+        await recargar()
+        if (avisos.length) mostrartoast(avisos.join(' · '), 9000)
+        return { ok: true, id: editando.id, avisos }
+      } catch (err) {
+        console.error('editar reserva (Reserva Express):', err)
+        mostrartoast('⚠️ No se pudo guardar la reserva. Intenta de nuevo.')
+        return { ok: false }
+      } finally {
+        setguardando(false)
+      }
+    },
+    [usuario, guardando, juegos, areas, mostrartoast, recargar]
+  )
+
   // ── COMPARTIR EL TICKET POR WHATSAPP ─────────────────────────────
   // `exito` es el resumen que arma formularioexpress.jsx tras crear_express:
   // { folio, reservaid, nombre, tel, zona, juego, monto, personas, vendedora }.
@@ -485,7 +586,7 @@ export function usereservaexpress() {
     [mostrartoast]
   )
 
-  return { puede, crear_express, guardando, compartir_whatsapp, compartiendo }
+  return { puede, crear_express, editar_reserva_express, guardando, compartir_whatsapp, compartiendo }
 }
 
 export default usereservaexpress

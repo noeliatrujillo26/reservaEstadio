@@ -205,8 +205,21 @@
   background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 14px;
   padding: 14px 16px; font-size: 13px; color: var(--texto-suave); margin-top: 4px;
 }
+/* Etiqueta ↔ valor SIN encimarse (04 oct 2026): la etiqueta puede ser
+   larga ("Adultos extra (6 × $500.00)") y el valor ("$10,042.50") nunca
+   debe partirse en dos líneas ni perder su lugar — la etiqueta es la que
+   cede espacio (flex:1, puede partirse ella sola) y el valor se queda
+   fijo a la derecha, de una sola pieza. */
 .pagina-reserva-express .re-desglose-fila {
   display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 5px 0;
+}
+.pagina-reserva-express .re-desglose-fila > span:first-child,
+.pagina-reserva-express .re-desglose-total > span:first-child {
+  flex: 1; min-width: 0; overflow-wrap: break-word;
+}
+.pagina-reserva-express .re-desglose-fila > span:last-child,
+.pagina-reserva-express .re-desglose-total > span:last-child {
+  flex-shrink: 0; white-space: nowrap;
 }
 .pagina-reserva-express .re-desglose-descuento { color: var(--rojo); font-weight: 600; }
 .pagina-reserva-express .re-desglose-personas {
@@ -218,10 +231,21 @@
   margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--borde);
   font-size: 19px; font-weight: 800; color: var(--naranja-dark);
 }
+@media (max-width: 380px) {
+  .pagina-reserva-express .re-desglose-total { font-size: 16px; }
+}
 
 /* ── grid de 3 cajitas (Total reserva / Pagado / Restante) — mismo
    maquetado que el Historial de Pagos del Pipeline: una fila de cajas
-   iguales que se acomodan solas en pantallas angostas. ── */
+   iguales que se acomodan solas en pantallas angostas.
+   04 oct 2026: pasa a UNA SOLA COLUMNA (grid-cols-1) bajo 480px — ese
+   corte responde tanto a un teléfono angosto como a un zoom alto en uno
+   normal (el navegador reduce el viewport de layout en los dos casos
+   igual). Con 3 columnas apretadas, "$10,042.50" rompía en dos líneas o
+   se encimaba con su etiqueta; en una sola columna cada cifra tiene todo
+   el ancho de la tarjeta y queda en una sola línea SIEMPRE
+   (white-space:nowrap), con la etiqueta a la izquierda y el valor a la
+   derecha en vez de apiladas. ── */
 .pagina-reserva-express .re-resumen-grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 4px;
 }
@@ -234,13 +258,20 @@
   letter-spacing: 0.4px; margin-bottom: 3px; white-space: nowrap;
 }
 .pagina-reserva-express .re-resumen-caja-valor {
-  font-size: 15px; font-weight: 800; color: var(--texto);
-  overflow-wrap: break-word;
+  font-size: 15px; font-weight: 800; color: var(--texto); white-space: nowrap;
 }
 .pagina-reserva-express .re-resumen-caja-valor.verde { color: var(--verde); }
 .pagina-reserva-express .re-resumen-caja-valor.rojo { color: var(--rojo); }
+@media (max-width: 480px) {
+  .pagina-reserva-express .re-resumen-grid { grid-template-columns: 1fr; gap: 6px; }
+  .pagina-reserva-express .re-resumen-caja {
+    display: flex; align-items: baseline; justify-content: space-between;
+    text-align: left; padding: 9px 12px; gap: 10px;
+  }
+  .pagina-reserva-express .re-resumen-caja-label { margin-bottom: 0; }
+  .pagina-reserva-express .re-resumen-caja-valor { font-size: 14px; }
+}
 @media (max-width: 380px) {
-  .pagina-reserva-express .re-resumen-caja { padding: 8px 4px; }
   .pagina-reserva-express .re-resumen-caja-valor { font-size: 13px; }
 }
 

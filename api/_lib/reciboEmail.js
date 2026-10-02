@@ -242,7 +242,14 @@ function buildEmailHtml(reserva, montos, liga) {
   '</table>' +
   historialHtml +
   '<a href="' + liga + '" style="display:block;text-align:center;background:' + NARANJA + ';color:#fff;text-decoration:none;padding:13px;border-radius:8px;font-weight:700;font-size:14px;margin:18px 0 10px">Ver / descargar mi recibo (PDF)</a>' +
-  '<a href="' + SITE_URL + '/mis-reservas" style="display:block;text-align:center;background:#fff;color:' + NARANJA + ';border:2px solid ' + NARANJA + ';text-decoration:none;padding:11px;border-radius:8px;font-weight:700;font-size:14px;margin:0 0 18px">Consultar mi reserva en línea</a>' +
+  // Autologin (04 oct 2026): ?folio=&email= deja que accesoportal.jsx
+  // (src/components/portal/accesoportal.jsx) autocomplete el formulario y
+  // consulte sola, sin que el cliente tenga que teclear folio ni correo —
+  // encodeURIComponent por el '@' del correo y porque el folio puede traer
+  // espacios en formatos viejos.
+  '<a href="' + SITE_URL + '/mis-reservas?folio=' + encodeURIComponent(reserva.id) +
+    '&email=' + encodeURIComponent(reserva.email || '') +
+    '" style="display:block;text-align:center;background:#fff;color:' + NARANJA + ';border:2px solid ' + NARANJA + ';text-decoration:none;padding:11px;border-radius:8px;font-weight:700;font-size:14px;margin:0 0 18px">Consultar mi reserva en línea</a>' +
   '<p style="font-size:12px;color:#666">Para entrar al portal usa tu folio <strong>' + reserva.id + '</strong> y este mismo correo. Guarda este mensaje: el enlace de tu recibo estará siempre disponible. Preséntalo el día del juego.</p>' +
   // Reglamento resumido del Área Social (la versión completa va en la
   // cotización PDF — js/modules/cotizaciones.js REGLAMENTO_AREA_SOCIAL).

@@ -8,14 +8,14 @@
 // una tarjeta resumen por coincidencia y permite:
 //
 //   · Editar Reserva — contacto del cliente, Juego y Zona/Asador. Mismo
-//     alcance y el MISMO hook de guardado (usereservasescritura().guardar())
-//     que usa el panel de escritorio (reservaform.jsx): la escritura pasa por
-//     actualizar_verificado() + el candado de rol de siempre (motivo_bloqueo
-//     sobre 'reservas'), así que el Panel Admin ve el cambio de inmediato
-//     (recargar() es parte del propio hook) y NO se reabre aquí la puerta que
-//     reservaform.jsx cerró a propósito para precio/personas/tipo de comida
-//     (esos viven en la cotización del prospecto, no en la reserva — ver la
-//     cabecera de ese archivo). Decisión explícita, no un olvido.
+//     alcance que reservaform.jsx (el panel de escritorio): NO se reabre
+//     aquí la puerta que ese formulario cerró a propósito para precio/
+//     personas/tipo de comida (esos viven en la cotización del prospecto,
+//     no en la reserva — ver su cabecera). Decisión explícita, no un
+//     olvido. Guarda con usereservaexpress().editar_reserva_express() —
+//     ver la cabecera de ese hook (04 oct 2026) para el porqué de usar
+//     esa función y no usereservasescritura().guardar(). Llama a
+//     recargar(), así que el Panel Admin ve el cambio de inmediato.
 //   · Reenviar Comprobante — por Email vía /api/send-reservation-email con
 //     `reenvio:true` (el mismo endpoint que ya manda el correo de
 //     confirmación al crear la reserva, aquí en modo reenvío manual: se
@@ -32,7 +32,7 @@
 import { useMemo, useState } from 'react'
 import useadmin from '../../hooks/useadmin'
 import useadmindatos from '../../hooks/useadmindatos'
-import usereservasescritura from '../../hooks/usereservasescritura'
+import usereservaexpress from '../../hooks/usereservaexpress'
 import { usetoast } from '../../context/toastcontext'
 import { buscar_reservas, resumen_reserva } from '../../lib/cobrarreserva'
 import { tel_norm } from '../../lib/clientes'
@@ -142,7 +142,7 @@ export function TarjetaReserva({
 export default function verreservas({ tab = 'reservas', ontab } = {}) {
   const { usuario, cerrar_sesion } = useadmin()
   const { juegos, areas, areasestados, reservas, cobros, pipeline, cargando } = useadmindatos()
-  const { guardar, guardando } = usereservasescritura()
+  const { editar_reserva_express, guardando } = usereservaexpress()
   const { mostrartoast } = usetoast()
 
   const [busqueda, setbusqueda] = useState('')
@@ -206,7 +206,7 @@ export default function verreservas({ tab = 'reservas', ontab } = {}) {
     const descuentopct = Number(reserva.monto) > 0
       ? Math.min(Number(reserva.descuentomonto) || 0, Number(reserva.monto)) / Number(reserva.monto)
       : 0
-    const r = await guardar({
+    const r = await editar_reserva_express({
       juegoid: d.juegoid,
       zonaid: d.zonaid,
       nombre: d.nombre,

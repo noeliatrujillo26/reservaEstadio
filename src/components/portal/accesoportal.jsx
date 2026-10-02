@@ -6,8 +6,9 @@
 // `reservas` (via /api/mis-reservas) no se muestra nada.
 // ═══════════════════════════════════════════════════════════════════
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import useportal from '../../hooks/useportal'
+import { leer_autologin_de_url } from '../../lib/autologinportal'
 
 export default function accesoportal() {
   const { entrar, error, seterror } = useportal()
@@ -15,13 +16,30 @@ export default function accesoportal() {
   const [email, setemail] = useState('')
   const [cargando, setcargando] = useState(false)
 
-  async function consultar() {
+  async function consultar(folioArg, emailArg) {
     seterror('')
     setcargando(true)
-    const r = await entrar(folio, email)
+    const r = await entrar(folioArg != null ? folioArg : folio, emailArg != null ? emailArg : email)
     setcargando(false)
     if (!r.exito) seterror(r.mensaje)
   }
+
+  // Autologin desde el enlace del correo (04 oct 2026): "Consultar mi
+  // reserva en línea" ahora manda ?folio=...&email=... (ver
+  // api/_lib/reciboEmail.js) — con los dos presentes, el formulario se
+  // autocompleta Y se envía solo, sin que el cliente tenga que teclear
+  // nada. Solo al montar: si entrar() falla (folio/correo no coinciden,
+  // ya se usaron para otra reserva, etc.), el formulario queda ahí
+  // normal, ya con los campos rellenos, para que el cliente corrija y
+  // reintente a mano.
+  useEffect(() => {
+    const { folio: folioURL, email: emailURL } = leer_autologin_de_url(window.location.search)
+    if (!folioURL || !emailURL) return
+    setfolio(folioURL)
+    setemail(emailURL)
+    consultar(folioURL, emailURL)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function al_teclear(e) {
     if (e.key === 'Enter') consultar()
@@ -56,7 +74,7 @@ export default function accesoportal() {
         </div>
         <button
           className="pay-btn" id="accBtn" style={{ marginTop: '6px' }}
-          onClick={consultar} disabled={cargando}
+          onClick={() => consultar()} disabled={cargando}
         >
           Consultar mis reservas
         </button>
