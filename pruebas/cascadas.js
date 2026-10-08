@@ -6,6 +6,9 @@
 // de supabase FALSO. Ninguna prueba toca la base real.
 // ═══════════════════════════════════════════════════════════════════
 
+export { sb } from '../src/supabaseclient'
+export { insertar_directo, actualizar_directo, _columna_faltante } from '../src/hooks/usereservaexpress'
+
 export {
   pagos_de_tarjeta, abonado_etapa, reservas_activas, enganche_requerido,
   indice_etapa, es_cotiz_especial, no_recalcular_area, total_reserva_card,

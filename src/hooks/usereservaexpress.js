@@ -70,13 +70,24 @@ import {
 import { subir_comprobante } from '../lib/storage'
 import { hoy_hermosillo } from '../lib/fechas'
 
+// Respaldo SOLO para cuando _columna_faltante() no logra leer el nombre
+// exacto de la columna del mensaje de error (02 oct 2026: antes era el
+// ÚNICO respaldo y le faltaban la mitad de los campos reales del
+// insert — zona_id/adultos/ninos/consumo_monto/extra_monto/cliente_id/
+// tipo_comida en prospecto; zona_id/adultos/ninos/saldo_consumo/
+// cotizacion_id en reserva — así que CUALQUIER columna ausente tiraba
+// TODOS esos datos, no solo la que de verdad faltaba. Ahora llevan el
+// esquema COMPLETO de su insert real.
 const claves_legacy_prospecto = [
-  'id', 'nombre', 'zona', 'serie', 'monto', 'etapa', 'badge', 'notas', 'vendedora', 'juego', 'tel',
+  'id', 'folio', 'nombre', 'email', 'zona', 'zona_id', 'serie', 'monto', 'etapa', 'badge', 'notas',
+  'vendedora', 'juego', 'tel', 'adultos', 'ninos', 'descuento', 'consumo_monto', 'extra_monto',
+  'adulto_extra_precio', 'nino_extra_precio', 'cliente_id', 'tipo_comida',
 ]
 
 const claves_legacy_reserva = [
-  'id', 'cliente', 'email', 'tel', 'zona', 'juego', 'juego_id', 'monto',
+  'id', 'cliente', 'email', 'tel', 'zona', 'zona_id', 'juego', 'juego_id', 'monto',
   'descuento_monto', 'monto_pagado', 'pago', 'metodo', 'personas', 'estado', 'estado_pago',
+  'adultos', 'ninos', 'saldo_consumo', 'cotizacion_id',
 ]
 
 function es_duplicado(error) {
@@ -112,18 +123,53 @@ function interpretar(res, operacion, tabla) {
   return { ok: true, filas, datos: res.data }
 }
 
-async function insertar_directo(tabla, payload, claveslegacy) {
+// Nombre de la columna que Postgrest dice no encontrar (02 oct 2026):
+// "Could not find the 'tipo_comida' column of 'pipeline_prospectos' in
+// the schema cache" (PGRST204) es el mensaje real de una columna que
+// todavía no existe en ESE entorno (migración pendiente). Antes, el único
+// respaldo era reintentar con un subconjunto fijo de "claves legacy" —
+// una lista chica que se queda vieja en cuanto se agrega un campo nuevo
+// y acaba tirando TODO lo que no esté en ella: un prospecto nacía sin
+// vendedora/adultos/niños/cliente_id/tipo_comida, no porque esos campos
+// fallaran, sino porque la lista nunca los incluyó. Quitar SOLO la
+// columna que de verdad falta conserva todo lo demás, siempre, sin
+// mantenimiento — ver claves_legacy_prospecto/claves_legacy_reserva como
+// respaldo adicional para cuando el mensaje no trae el nombre exacto.
+export function _columna_faltante(error) {
+  if (!error) return null
+  const msg = String(error.message || '')
+  let m = /Could not find the '([a-zA-Z0-9_]+)' column/i.exec(msg)
+  if (m) return m[1]
+  m = /column "?([a-zA-Z0-9_]+)"?[^"']*(does not exist|no existe)/i.exec(msg)
+  return m ? m[1] : null
+}
+
+export async function insertar_directo(tabla, payload, claveslegacy) {
   let res = await sb.from(tabla).insert(payload).select()
-  if (es_error_columna(res.error) && claveslegacy && claveslegacy.length) {
-    res = await sb.from(tabla).insert(subset_legacy(payload, claveslegacy)).select()
+  if (es_error_columna(res.error)) {
+    const col = _columna_faltante(res.error)
+    if (col && col in payload) {
+      const sinColumna = Object.assign({}, payload)
+      delete sinColumna[col]
+      res = await sb.from(tabla).insert(sinColumna).select()
+    } else if (claveslegacy && claveslegacy.length) {
+      res = await sb.from(tabla).insert(subset_legacy(payload, claveslegacy)).select()
+    }
   }
   return interpretar(res, 'insert', tabla)
 }
 
-async function actualizar_directo(tabla, payload, id, claveslegacy) {
+export async function actualizar_directo(tabla, payload, id, claveslegacy) {
   let res = await sb.from(tabla).update(payload).eq('id', id).select()
-  if (es_error_columna(res.error) && claveslegacy && claveslegacy.length) {
-    res = await sb.from(tabla).update(subset_legacy(payload, claveslegacy)).eq('id', id).select()
+  if (es_error_columna(res.error)) {
+    const col = _columna_faltante(res.error)
+    if (col && col in payload) {
+      const sinColumna = Object.assign({}, payload)
+      delete sinColumna[col]
+      res = await sb.from(tabla).update(sinColumna).eq('id', id).select()
+    } else if (claveslegacy && claveslegacy.length) {
+      res = await sb.from(tabla).update(subset_legacy(payload, claveslegacy)).eq('id', id).select()
+    }
   }
   return interpretar(res, 'update', tabla)
 }
