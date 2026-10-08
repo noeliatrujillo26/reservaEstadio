@@ -189,5 +189,31 @@ console.log('\n─── g) Anti doble-clic (02 oct 2026, urgente): candado SÍN
     /catch \(eDup\) \{\s*\n\s*console\.error\('No se pudo verificar duplicados recientes/.test(cuerpoCrear))
 }
 
+console.log('\n─── i) Cambio de zona/juego (editar_reserva_express): UPDATE por id, sin huérfanos ───')
+{
+  // Mismo requisito explícito del ticket del 02 oct 2026 para pipeline.js
+  // (v1), ahora verificado también aquí: cambiar zona/juego de una reserva
+  // existente debe (a) actualizar la fila ORIGINAL por su id — nunca crear
+  // una nueva —, y (b) liberar la zona vieja Y ocupar la nueva en el MISMO
+  // paso, para que no quede una sección "reservada" sin dueño. No hay forma
+  // honesta de montar el hook sin react-test-renderer (ver cabecera del
+  // archivo) — se verifica por código fuente, igual que el resto.
+  const src = readFileSync('src/hooks/usereservaexpress.js', 'utf8')
+  const inicio = src.indexOf('const editar_reserva_express = useCallback(')
+  const fin = src.indexOf('COMPARTIR EL TICKET', inicio)
+  const cuerpo = inicio >= 0 && fin > inicio ? src.slice(inicio, fin) : ''
+
+  check('UPDATE de `reservas` por editando.id — el id de la fila ORIGINAL, nunca uno nuevo',
+    /actualizar_directo\('reservas', comun, editando\.id, claves_legacy_reserva\)/.test(cuerpo))
+  check('editar_reserva_express() NUNCA llama a insertar_directo (ni en `reservas` ni en `pipeline_prospectos`)',
+    !cuerpo.includes('insertar_directo('))
+  check('Libera la zona/juego VIEJOS (editando.zonaid/editando.juegoid) solo cuando de verdad cambiaron',
+    /bloquear_zona_directo\(editando\.juegoid, editando\.zonaid, 'libre'\)/.test(cuerpo))
+  check('…y ocupa la zona/juego NUEVOS en el mismo paso, no en un paso aparte que pudiera quedar a medias',
+    /bloquear_zona_directo\(j\.id, a\.id, 'reservada'\)/.test(cuerpo))
+  check('La cascada a pipeline_prospectos (si hay tarjeta vinculada) también es UPDATE por tarjeta.id, nunca insert',
+    /actualizar_directo\('pipeline_prospectos', \{ nombre, email, tel \}, tarjeta\.id, null\)/.test(cuerpo))
+}
+
 console.log('\nResultado: ' + ok + ' ✅ / ' + fail + ' ❌')
 process.exit(fail ? 1 : 0)
