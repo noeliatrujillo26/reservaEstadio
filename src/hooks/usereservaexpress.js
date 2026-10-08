@@ -51,7 +51,7 @@
 // nombre+telefono) para no duplicar una ficha ya existente.
 // ═══════════════════════════════════════════════════════════════════
 
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { sb } from '../supabaseclient'
 import useadmin from './useadmin'
 import useadmindatos from './useadmindatos'
@@ -169,6 +169,16 @@ export function usereservaexpress() {
   const { mostrartoast } = usetoast()
   const [guardando, setguardando] = useState(false)
   const [compartiendo, setcompartiendo] = useState(false)
+  // Candado SÍNCRONO anti doble-clic (02 oct 2026, urgente): `guardando` es
+  // estado de React — se actualiza en el siguiente render, no al instante.
+  // Un doble clic dispara dos llamadas a crear_express()/editar_reserva_
+  // express() en el MISMO tick de JS; ambas leen el `guardando` de su
+  // propio closure (el de ANTES del clic, todavía `false`) y las dos pasan
+  // el guard — exactamente el bug reportado (dos reservas idénticas). Un
+  // ref sí es inmediato: `.current` se lee y se escribe en el momento,
+  // sin esperar un re-render, así que el segundo clic SIEMPRE lo encuentra
+  // ya en `true`.
+  const guardandoRef = useRef(false)
 
   // toda la autorizacion que pide este modulo: que haya sesion de
   // administrador activa (ReservaExpress.jsx ya la exige antes de montar
@@ -189,7 +199,7 @@ export function usereservaexpress() {
         mostrartoast('⚠️ Tu sesión expiró. Vuelve a iniciar sesión.')
         return { ok: false }
       }
-      if (guardando) return { ok: false }
+      if (guardandoRef.current) return { ok: false }
 
       const faltan = []
       if (!String(datos.nombre || '').trim()) faltan.push('nombre')
@@ -208,6 +218,7 @@ export function usereservaexpress() {
         return { ok: false, campos: faltan }
       }
 
+      guardandoRef.current = true
       setguardando(true)
       try {
         // 1. VALIDACION PREVENTIVA: re-verificar la zona EN VIVO contra
@@ -262,6 +273,36 @@ export function usereservaexpress() {
           }
         } catch (e) {
           console.error('Alta de cliente desde Reserva Exprés falló (no-fatal):', e)
+        }
+
+        // ── IDEMPOTENCIA en servidor (02 oct 2026, urgente) ─────────────────
+        // Segunda línea de defensa además de guardandoRef de arriba: si dos
+        // peticiones llegaran a Supabase de todas formas (dos pestañas, un
+        // reintento de red), esto evita la tarjeta/reserva duplicada. El id
+        // de la tarjeta embebe su epoch-ms ('pp'+Date.now()) — se reutiliza
+        // esa marca en vez de depender de una columna created_at aparte.
+        // No-fatal: si la verificación falla, se sigue con el alta normal.
+        try {
+          const { data: candidatos } = await sb.from('pipeline_prospectos')
+            .select('id, folio, reserva_ids')
+            .eq('nombre', datos.nombre).eq('zona_id', datos.zonaid)
+            .eq('juego', datos.juegoid).eq('monto', calc.total)
+          const haceQuince = Date.now() - 15000
+          const dup = (candidatos || []).find((p) => {
+            const m = /^pp(\d{12,})$/.exec(String(p && p.id || ''))
+            return m && Number(m[1]) >= haceQuince
+          })
+          if (dup) {
+            mostrartoast('⚠️ Esta reserva ya se había creado (se evitó un duplicado por doble clic)')
+            return {
+              ok: true, folio: dup.folio, reservaid: (dup.reserva_ids || [])[0] || null,
+              monto: calc.total, personas: calc.personas,
+              areabase: calc.areabase, descuentototal: calc.descuentototal,
+              consumomonto: Number(datos.consumomonto) || 0, extramonto: Number(datos.extramonto) || 0,
+            }
+          }
+        } catch (eDup) {
+          console.error('No se pudo verificar duplicados recientes de pipeline_prospectos (se continúa con el alta normal):', eDup)
         }
 
         // 3. LA TARJETA, directo en "Reserva Momentánea".
@@ -412,6 +453,7 @@ export function usereservaexpress() {
         mostrartoast('⚠️ No se pudo crear la reserva. Intenta de nuevo.')
         return { ok: false }
       } finally {
+        guardandoRef.current = false
         setguardando(false)
       }
     },
@@ -440,7 +482,7 @@ export function usereservaexpress() {
         mostrartoast('⚠️ Tu sesión expiró. Vuelve a iniciar sesión.')
         return { ok: false }
       }
-      if (guardando) return { ok: false }
+      if (guardandoRef.current) return { ok: false }
 
       if (!datos.juegoid) { mostrartoast('⚠️ Selecciona un juego'); return { ok: false, campo: 'juego' } }
       if (!datos.zonaid) { mostrartoast('⚠️ Selecciona una sección'); return { ok: false, campo: 'zona' } }
@@ -465,6 +507,7 @@ export function usereservaexpress() {
       const cobrar = cobro_inicial(pago, eco.neto, datos.montomanual, datos.engancheminpct)
       const estadopago = estado_pago_reserva(cobrar, eco.neto)
 
+      guardandoRef.current = true
       setguardando(true)
       const avisos = []
       try {
@@ -524,6 +567,7 @@ export function usereservaexpress() {
         mostrartoast('⚠️ No se pudo guardar la reserva. Intenta de nuevo.')
         return { ok: false }
       } finally {
+        guardandoRef.current = false
         setguardando(false)
       }
     },

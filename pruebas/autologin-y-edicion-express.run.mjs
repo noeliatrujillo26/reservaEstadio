@@ -141,5 +141,53 @@ console.log('\n─── f) WhatsApp ("Enviar comprobante"): enlace de /mis-rese
     cuerpo.includes('urlreserva'))
 }
 
+console.log('\n─── g) Anti doble-clic (02 oct 2026, urgente): candado SÍNCRONO, no solo estado ───')
+{
+  // Un doble clic dispara dos llamadas a crear_express()/editar_reserva_
+  // express() en el MISMO tick de JS; las dos leen `guardando` (estado de
+  // React) de su propio closure — el de ANTES del clic, todavía `false` —
+  // y las dos pasan el guard. `guardandoRef` (useRef) sí es inmediato:
+  // `.current` se lee/escribe en el momento, sin esperar un re-render.
+  // No hay forma honesta de MONTAR el hook sin react-test-renderer (este
+  // proyecto no lo trae) — se verifica contra el CÓDIGO FUENTE, mismo
+  // criterio que el resto de este archivo.
+  const src = readFileSync('src/hooks/usereservaexpress.js', 'utf8')
+  check('Importa useRef junto con useCallback/useState', /import \{ useCallback, useRef, useState \} from 'react'/.test(src))
+  check('Declara guardandoRef = useRef(false)', /const guardandoRef = useRef\(false\)/.test(src))
+
+  const extraerFn = (inicioMarca, finMarca) => {
+    const i = src.indexOf(inicioMarca)
+    const f = src.indexOf(finMarca, i)
+    return i >= 0 && f > i ? src.slice(i, f) : ''
+  }
+  const cuerpoCrear = extraerFn('const crear_express = useCallback(', 'const editar_reserva_express = useCallback(')
+  const cuerpoEditar = extraerFn('const editar_reserva_express = useCallback(', 'COMPARTIR EL TICKET')
+
+  check('crear_express(): el guard de entrada es guardandoRef.current, no el estado `guardando`',
+    /if \(guardandoRef\.current\) return \{ ok: false \}/.test(cuerpoCrear))
+  check('crear_express(): guardandoRef.current = true ANTES del try (mismo punto que setguardando(true))',
+    /guardandoRef\.current = true\s*\n\s*setguardando\(true\)/.test(cuerpoCrear))
+  check('crear_express(): guardandoRef.current se libera en el finally (éxito Y error, no solo el happy path)',
+    /finally \{\s*\n\s*guardandoRef\.current = false\s*\n\s*setguardando\(false\)/.test(cuerpoCrear))
+
+  check('editar_reserva_express(): mismo guard síncrono guardandoRef.current',
+    /if \(guardandoRef\.current\) return \{ ok: false \}/.test(cuerpoEditar))
+  check('editar_reserva_express(): mismo set/reset de guardandoRef que crear_express()',
+    /guardandoRef\.current = true\s*\n\s*setguardando\(true\)/.test(cuerpoEditar)
+    && /finally \{\s*\n\s*guardandoRef\.current = false\s*\n\s*setguardando\(false\)/.test(cuerpoEditar))
+
+  console.log('\n─── h) Idempotencia en servidor: segunda línea de defensa contra duplicados ───')
+  check('crear_express() consulta pipeline_prospectos por nombre+zona_id+juego+monto antes de insertar',
+    /\.eq\('nombre', datos\.nombre\)\.eq\('zona_id', datos\.zonaid\)\s*\n\s*\.eq\('juego', datos\.juegoid\)\.eq\('monto', calc\.total\)/.test(cuerpoCrear))
+  check('Solo cuenta como duplicado si el id embebe un epoch de los últimos 15 segundos (no uno viejo)',
+    /const haceQuince = Date\.now\(\) - 15000/.test(cuerpoCrear)
+    && /Number\(m\[1\]\) >= haceQuince/.test(cuerpoCrear))
+  check('Si hay duplicado reciente: NO inserta de nuevo, avisa con toast y regresa ok:true (idempotente)',
+    /mostrartoast\('⚠️ Esta reserva ya se había creado/.test(cuerpoCrear)
+    && /return \{\s*\n\s*ok: true, folio: dup\.folio/.test(cuerpoCrear))
+  check('La verificación es no-fatal: un fallo de red en el chequeo no bloquea el alta normal',
+    /catch \(eDup\) \{\s*\n\s*console\.error\('No se pudo verificar duplicados recientes/.test(cuerpoCrear))
+}
+
 console.log('\nResultado: ' + ok + ' ✅ / ' + fail + ' ❌')
 process.exit(fail ? 1 : 0)
