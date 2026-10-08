@@ -45,7 +45,7 @@ export { ruta_comprobante, comprobante_excede_limite } from '../src/lib/storage'
 export { concepto_color, formato_fecha, hora_cobro, instante_cobro } from '../src/lib/cobros'
 export { mensaje_reporte_dia, cobros_del_dia } from '../src/lib/reportedia'
 export { buscar_facturacion_cliente, regimen_legible } from '../src/lib/facturacion'
-export { html_recibo_cobro } from '../src/lib/recibo'
+export { html_recibo_cobro, html_ticket_reserva } from '../src/lib/recibo'
 export { ruta_de_url, es_ruta_bucket, es_recibo_auto } from '../src/lib/storage'
 
 export {

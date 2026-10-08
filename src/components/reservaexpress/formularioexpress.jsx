@@ -459,6 +459,8 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
         zona: zonaelegida ? zonaelegida.nombre : '', juego, monto: r.monto,
         personas: r.personas, vendedora: d.vendedora,
         avisobloqueo: r.avisobloqueo, avisoreserva: r.avisoreserva,
+        areabase: r.areabase, descuentototal: r.descuentototal,
+        consumomonto: r.consumomonto, extramonto: r.extramonto,
       })
     } else if (r && r.campos) {
       setcampos(r.campos)

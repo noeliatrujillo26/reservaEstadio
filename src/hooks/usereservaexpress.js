@@ -400,6 +400,12 @@ export function usereservaexpress() {
         return {
           ok: true, folio, reservaid, avisobloqueo, avisoreserva,
           monto: calc.total, personas: calc.personas,
+          // Desglose financiero (02 oct 2026): para que el ticket de WhatsApp
+          // (html_ticket_reserva) pinte Área/IVA/Subtotal/Descuento/Extra,
+          // igual que ya hace el correo de confirmación — antes solo viajaba
+          // el total final y esas filas no se podían reconstruir del otro lado.
+          areabase: calc.areabase, descuentototal: calc.descuentototal,
+          consumomonto: Number(datos.consumomonto) || 0, extramonto: Number(datos.extramonto) || 0,
         }
       } catch (err) {
         console.error('crear reserva exprés:', err)
@@ -566,6 +572,11 @@ export function usereservaexpress() {
           juego: juegolabel, fecha: fechalabel, personas: exito.personas,
           vendedora: exito.vendedora, monto: exito.monto,
           estado: 'Reserva registrada · pendiente de enganche',
+          // Desglose financiero (02 oct 2026, homologado con el correo de
+          // confirmación): areabase ya trae el área + personas extra ANTES
+          // del descuento — igual semántica que montoBruto en el correo.
+          areabase: exito.areabase, descuentototal: exito.descuentototal,
+          consumomonto: exito.consumomonto, extramonto: exito.extramonto,
         })
         const archivo = new File([html], nombre_archivo_ticket(folio), { type: 'text/html' })
         const subida = await subir_comprobante(sb, archivo, 'recibos')

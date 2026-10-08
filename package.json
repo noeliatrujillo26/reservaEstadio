@@ -18,7 +18,8 @@
     "verificar-biometria": "node pruebas/biometria.run.mjs",
     "verificar-autologin-edicion": "node pruebas/autologin-y-edicion-express.run.mjs",
     "verificar-remitente-correo": "node pruebas/remitente-correo.run.mjs",
-    "verificar-zona-reenvio": "node pruebas/zona-dinamica-y-reenvio.run.mjs"
+    "verificar-zona-reenvio": "node pruebas/zona-dinamica-y-reenvio.run.mjs",
+    "verificar-ticket-desglose": "node pruebas/ticket-reserva-desglose.run.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",

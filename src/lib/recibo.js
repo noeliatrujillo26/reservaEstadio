@@ -13,7 +13,7 @@
 
 import { app_config } from './config'
 import { folio_reserva, formato_fecha } from './cobros'
-import { mxn2 } from './dinero'
+import { mxn2, redondear_dinero } from './dinero'
 
 export function esc(s) {
   return String(s == null ? '' : s)
@@ -78,15 +78,42 @@ export function abrir_recibo_cobro(c, ctx) {
   return true
 }
 
+// Mismo desglose Área/IVA/Subtotal que el correo de confirmación
+// (api/_lib/reciboEmail.js en el panel v1, _desgloseAreaIvaReserva): precios
+// con IVA incluido, así que el Área "antes de IVA" se obtiene dividiendo
+// entre 1.16 — nunca se inventa un monto nuevo, solo se desglosa el mismo
+// total. `r.areabase` es el área + personas extra ANTES del descuento
+// (calc_total_prospecto, usereservaexpress.js) — la misma semántica que
+// montoBruto allá.
+function _desglose_area_iva(r) {
+  const areabase = Number(r.areabase) || 0
+  if (!(areabase > 0)) return null
+  const descuento = Math.max(0, Number(r.descuentototal) || 0)
+  const area = redondear_dinero(areabase / 1.16)
+  const iva = redondear_dinero(areabase - area)
+  const pctdescuento = areabase > 0 ? Math.round((descuento / areabase) * 100) : 0
+  return {
+    area, iva, subtotal: areabase, descuento, pctdescuento,
+    extra: Math.max(0, Number(r.extramonto) || 0),
+    consumo: Math.max(0, Number(r.consumomonto) || 0),
+  }
+}
+
 // ── TICKET DE RESERVA (sin pago) ────────────────────────────────
 // Mismo documento imprimible que html_recibo_cobro, para una reserva que
 // AUN NO tiene ningun cobro registrado — el caso de Reserva Exprés, que
 // aparta la zona y genera el folio formal en el mismo clic, antes de que
-// exista un abono que documentar. Por eso no hay "monto recibido": se
-// muestra el total de la reserva y su estado, no un pago.
+// exista un abono que documentar. Por eso no hay "monto recibido" de
+// verdad (nada se ha cobrado todavía): se muestra el desglose COMPLETO del
+// precio —Área, IVA, Subtotal, Descuento, Extra, Consumo— homologado con
+// el correo de confirmación (02 oct 2026), y el total queda como saldo por
+// cobrar en vez de un pago.
 export function html_ticket_reserva(r) {
   const fila = (k, v) =>
     v ? '<div class="row"><span>' + k + '</span><span>' + esc(v) + '</span></div>' : ''
+  const mxn = (n) => '$' + redondear_dinero(Number(n) || 0).toLocaleString('es-MX', mxn2) + ' MXN'
+  const desglose = _desglose_area_iva(r)
+  const total = Number(r.monto) || 0
 
   return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
@@ -116,8 +143,25 @@ export function html_ticket_reserva(r) {
     fila('Personas', r.personas ? r.personas + '' : '') +
     fila('Vendedora', r.vendedora) +
     '<div class="sep"></div>' +
-    '<div class="row tot"><span style="font-weight:700">Total de la reserva</span><span>$' +
-    (Number(r.monto) || 0).toLocaleString('es-MX', mxn2) + ' MXN</span></div>' +
+    // Desglose Área/IVA/Subtotal/Descuento/Extra/Consumo (02 oct 2026):
+    // mismo cálculo y mismo orden que el correo de confirmación — antes
+    // este ticket solo mostraba el total final, sin decir de qué se
+    // compone. Sin `areabase` (llamador viejo o dato incompleto) se omite
+    // el bloque entero en vez de pintar ceros inventados.
+    (desglose
+      ? fila('Área', mxn(desglose.area)) +
+        fila('IVA (16%)', mxn(desglose.iva)) +
+        fila('Subtotal', mxn(desglose.subtotal)) +
+        (desglose.descuento > 0 ? fila('Descuento (' + desglose.pctdescuento + '%)', '−' + mxn(desglose.descuento)) : '') +
+        (desglose.extra > 0 ? fila('Extra', mxn(desglose.extra)) : '') +
+        (desglose.consumo > 0 ? fila('Consumo', mxn(desglose.consumo)) : '') +
+        '<div class="sep"></div>'
+      : '') +
+    '<div class="row tot"><span style="font-weight:700">Total de la reserva</span><span>' + mxn(total) + '</span></div>' +
+    fila('Monto pagado', mxn(0)) +
+    fila('Forma de pago', 'Sin pago') +
+    fila('Saldo restante', mxn(total)) +
+    fila('Estado de pago', 'Por cobrar') +
     fila('Estado', r.estado) +
     '<div style="background:#FFF8F0;border-left:3px solid #E05C1A;border-radius:0 8px 8px 0;padding:10px 14px;font-size:11px;color:#555;margin:14px 0;line-height:1.6">' +
     esc(app_config.leyendas.comprobante) + '<br>' + esc(app_config.leyendas.factura) + '</div>' +
