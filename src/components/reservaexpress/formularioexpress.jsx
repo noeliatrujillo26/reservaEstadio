@@ -86,6 +86,10 @@ const vacio = {
   adultoextracant: '', ninoextracant: '', vendedora: '',
   consumomonto: '', extramonto: '', adultoextraprecio: '', ninoextraprecio: '',
   descuento: '', notas: '',
+  // Propina (14 oct 2026): opcional — NO entra a calc_total_prospecto ni al
+  // precio de la reserva; crear_express la guarda como su propia fila en
+  // `cobros` (monto 0, propina > 0, folio de la reserva nueva).
+  propina: '',
 }
 
 function fecha_juego(j) {
@@ -797,6 +801,20 @@ export default function formularioexpress({ tab = 'nueva', ontab } = {}) {
               value={d.extramonto} onChange={(e) => set('extramonto', e.target.value)}
               onKeyDown={alenter_avanzar(refextra)}
               placeholder="0.00"
+            />
+          </div>
+
+          {/* Propina (14 oct 2026): opcional e INDEPENDIENTE del total de la
+              reserva — no entra al cálculo del monto; al guardar viaja como
+              su propia fila en `cobros` (cobros.propina) y Reportes del
+              panel la suma solo en su tarjeta Propina / Ventas totales. */}
+          <div className="re-campo">
+            <label>Propina ($ MXN)</label>
+            <input
+              className="re-input" type="number" min="0" step="0.01" inputMode="decimal"
+              value={d.propina} onChange={(e) => set('propina', e.target.value)}
+              onFocus={(e) => e.target.select()}
+              placeholder="0"
             />
           </div>
 

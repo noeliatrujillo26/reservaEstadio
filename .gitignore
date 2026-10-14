@@ -44,3 +44,4 @@ scripts/candidatos-limpieza-*.json
 
 .vercel
 .env*
+pruebas/out-propina-express

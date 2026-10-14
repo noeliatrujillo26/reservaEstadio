@@ -56,6 +56,10 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
   const [abrirdrop, setabrirdrop] = useState(false)
   const [reserva, setreserva] = useState(null)
   const [monto, setmonto] = useState('')
+  // Propina (14 oct 2026): opcional, INDEPENDIENTE del monto — viaja en
+  // cobros.propina y jamás abona al saldo de la reserva; Reportes del panel
+  // la suma solo en su tarjeta Propina y en Ventas totales.
+  const [propina, setpropina] = useState('')
   const [forma, setforma] = useState('')
   const [referencia, setreferencia] = useState('')
   const [requierefactura, setrequierefactura] = useState(false)
@@ -89,6 +93,7 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
     setbusqueda('')
     setabrirdrop(false)
     setmonto('')
+    setpropina('')
     setforma(FORMAS_PAGO[0])
     setreferencia('')
     setrequierefactura(false)
@@ -106,6 +111,7 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
     setreserva(null)
     setbusqueda('')
     setmonto('')
+    setpropina('')
     setreferencia('')
     setrequierefactura(false)
     setarchivo(null)
@@ -122,6 +128,7 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
       reservaid: reserva ? reserva.id : '',
       concepto,
       monto,
+      propina,
       forma,
       referencia,
       fecha: hoy_hermosillo(),
@@ -350,6 +357,19 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
                     </button>
                   </div>
                 )}
+              </div>
+
+              {/* Propina (14 oct 2026): opcional e INDEPENDIENTE del monto —
+                  no abona al saldo de la reserva; el panel la suma solo en
+                  Reportes (tarjeta Propina / Ventas totales). */}
+              <div className="re-campo">
+                <label>Propina ($ MXN)</label>
+                <input
+                  className="re-input"
+                  type="number" min="0" step="0.01" inputMode="decimal" placeholder="0"
+                  value={propina} onChange={(e) => setpropina(e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                />
               </div>
 
               <div className="re-campo">

@@ -441,6 +441,27 @@ export function usereservaexpress() {
             }
             const vinc = await actualizar_directo('pipeline_prospectos', { reserva_ids: [nuevoid] }, id, null)
             if (!vinc.ok) console.warn('reserva_ids no se pudo vincular a la tarjeta:', vinc.motivo)
+            // Propina al crear (14 oct 2026): INDEPENDIENTE del precio de la
+            // reserva — viaja como su propia fila en `cobros` (monto 0,
+            // cobros.propina > 0, folio de la reserva nueva) para que los
+            // Reportes del panel la sumen en su tarjeta Propina / Ventas
+            // totales sin tocar jamás monto_pagado/saldo. No-fatal: la
+            // reserva ya quedó creada; un fallo aquí solo se registra.
+            const propinacrear = Math.round(Math.max(0, parseFloat(datos.propina) || 0) * 100) / 100
+            if (propinacrear > 0) {
+              const rpro = await insertar_directo('cobros', {
+                fecha: hoy_hermosillo(), cliente: String(datos.nombre || '').toUpperCase(),
+                area: 'ASADOR', zona: a.nombre, zona_id: a.id,
+                concepto: 'ABONO', monto: 0, propina: propinacrear,
+                forma_pago: 'EFECTIVO', fecha_reserva: '',
+                recibio: usuario ? usuario.nombre : '—', factura: '',
+                folio: String(nuevoid),
+                notas: 'Propina capturada al crear la reserva · Reserva Exprés',
+                origen: 'RESERVA_EXPRESS_MOBILE',
+              }, ['fecha', 'cliente', 'area', 'zona', 'concepto', 'monto', 'forma_pago',
+                  'fecha_reserva', 'recibio', 'factura', 'folio', 'notas'])
+              if (!rpro.ok) console.error('Propina de la reserva nueva no se guardó:', rpro.motivo || rpro.error)
+            }
           } else {
             avisoreserva = '⚠️ La zona quedó apartada, pero la reserva formal (folio NRJ) NO se pudo generar' +
               (res.motivo === 'sin_filas' ? ' (0 filas — revisa las políticas RLS de `reservas`).' : '.') +

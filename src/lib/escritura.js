@@ -87,6 +87,20 @@ export function es_error_columna(error) {
   return !!error && (error.code === 'PGRST204' || /column|columna/i.test(error.message || ''))
 }
 
+// Nombre de la columna faltante segun el mensaje de PostgREST/Postgres, o
+// null si no se puede leer. Espejo de _columna_faltante en
+// usereservaexpress.js (14 oct 2026): el reintento quirurgico quita SOLO esa
+// columna en vez de degradar todo el payload al subconjunto legacy — antes,
+// una sola columna sin migrar (p. ej. `propina`) tiraba tambien email,
+// zona_id, origen y creado_por_* del cobro.
+export function columna_faltante(error) {
+  const msg = (error && error.message) || ''
+  let m = /Could not find the '([a-zA-Z0-9_]+)' column/i.exec(msg)
+  if (m) return m[1]
+  m = /column "?([a-zA-Z0-9_]+)"?[^"']*(does not exist|no existe)/i.exec(msg)
+  return m ? m[1] : null
+}
+
 export function subset_legacy(payload, claves) {
   if (Array.isArray(payload)) return payload.map((p) => subset_legacy(p, claves))
   const out = {}
@@ -134,7 +148,21 @@ export async function insertar_verificado(sb, usuario, tabla, payload, clavesleg
   const bloqueo = motivo_bloqueo(usuario, tabla)
   if (bloqueo) return { ok: false, motivo: bloqueo }
 
-  let res = await sb.from(tabla).insert(payload).select()
+  let intento = Object.assign({}, payload)
+  let res = await sb.from(tabla).insert(intento).select()
+  // Reintento QUIRURGICO (14 oct 2026, mismo criterio que insertar_directo en
+  // usereservaexpress.js): si la base va una migracion atras, se quita SOLO
+  // la columna que el error nombra y se reintenta — hasta 5 columnas, por si
+  // faltan varias. Solo cuando el mensaje no trae nombre se degrada al
+  // subconjunto legacy de siempre.
+  let vueltas = 0
+  while (es_error_columna(res.error) && vueltas < 5) {
+    const col = columna_faltante(res.error)
+    if (!col || !(col in intento)) break
+    delete intento[col]
+    vueltas += 1
+    res = await sb.from(tabla).insert(intento).select()
+  }
   if (es_error_columna(res.error) && claveslegacy && claveslegacy.length) {
     res = await sb.from(tabla).insert(subset_legacy(payload, claveslegacy)).select()
   }

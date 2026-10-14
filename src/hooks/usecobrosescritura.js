@@ -329,6 +329,13 @@ export function usecobrosescritura() {
           zona_id: areamatch ? areamatch.id : '',
           concepto,
           monto: redondear_dinero(monto),
+          // Propina (14 oct 2026): opcional e INDEPENDIENTE del monto — jamás
+          // abona al saldo de la reserva; Reportes del panel la suma solo en
+          // su tarjeta Propina y en Ventas totales. Fuera de
+          // claves_legacy_cobro a propósito: sin la columna migrada
+          // (migracion-cobros-propina.sql del panel), el reintento de
+          // insertar_verificado la quita y el cobro se guarda igual.
+          propina: redondear_dinero(Math.max(0, parseFloat(datos.propina) || 0)),
           forma_pago: forma,
           fecha_reserva: '',
           recibio: usuario ? usuario.nombre : '',
