@@ -33,6 +33,7 @@ import { buscar_cliente, catalogo_clientes, tel_norm } from '../../lib/clientes'
 import { buscar_reservas, resumen_reserva } from '../../lib/cobrarreserva'
 import { folio_visible } from '../../lib/reservasadmin'
 import { saldo_favor_de, toca_saldo_favor } from '../../lib/cascadas'
+import { es_forma_efectivo } from '../../lib/dashboard'
 import { mxn2, redondear_dinero } from '../../lib/dinero'
 import { hoy_hermosillo } from '../../lib/fechas'
 import {
@@ -84,9 +85,11 @@ export default function cobrarreserva({ tab = 'cobrar', ontab } = {}) {
   const montonum = parseFloat(monto) || 0
   const esredencion = forma === 'SALDO A FAVOR'
   const saldoinsuficiente = esredencion && saldofavor != null && montonum > saldofavor + 0.009
-  // Comprobante obligatorio salvo Saldo a favor — mismo criterio que
-  // nuevocobro.jsx (toca_saldo_favor): ese dinero ya se respaldó al abonarlo.
-  const comprobanteobligatorio = !toca_saldo_favor('ABONO', forma)
+  // Comprobante obligatorio salvo Saldo a favor (ese dinero ya se respaldó
+  // al abonarlo) y EFECTIVO (15 oct 2026: el dinero en mano no siempre trae
+  // un papel que fotografiar — mismo criterio que detalleprospecto.jsx, el
+  // modal de pagos del Pipeline). Transferencia/Tarjeta siguen exigiéndolo.
+  const comprobanteobligatorio = !toca_saldo_favor('ABONO', forma) && !es_forma_efectivo(forma)
 
   function elegir(r) {
     setreserva(r)

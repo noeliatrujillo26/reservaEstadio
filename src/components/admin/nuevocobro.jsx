@@ -15,7 +15,7 @@ import { sb } from '../../supabaseclient'
 import useadmindatos from '../../hooks/useadmindatos'
 import { catalogo_clientes, cliente_coincide, reservas_del_cliente } from '../../lib/clientes'
 import { saldo_favor_de, toca_saldo_favor } from '../../lib/cascadas'
-import { es_pago_credito } from '../../lib/dashboard'
+import { es_forma_efectivo, es_pago_credito } from '../../lib/dashboard'
 import { mxn2 } from '../../lib/dinero'
 import { hoy_hermosillo } from '../../lib/fechas'
 
@@ -119,11 +119,13 @@ function nuevo_cobro({ abierto, oncerrar, onregistrar, guardando }) {
   )
 
   // ¿HACE FALTA COMPROBANTE? Por defecto SI: un cobro capturado a mano
-  // necesita respaldo de que el dinero entro. La excepcion son las DOS caras
-  // del saldo a favor: aplicarlo no mueve dinero por fuera (el comprobante se
-  // pidio al abonar), y al abonarlo se admite que el respaldo llegue despues
-  // sin frenar la captura del anticipo.
-  const comprobanteobligatorio = !toca_saldo_favor(concepto, forma)
+  // necesita respaldo de que el dinero entro. Las excepciones: las DOS caras
+  // del saldo a favor (aplicarlo no mueve dinero por fuera -el comprobante
+  // se pidio al abonar-, y al abonarlo se admite que el respaldo llegue
+  // despues sin frenar la captura del anticipo) y EFECTIVO (15 oct 2026: el
+  // dinero en mano no siempre trae un papel que fotografiar -mismo criterio
+  // que detalleprospecto.jsx, el modal de pagos del Pipeline-).
+  const comprobanteobligatorio = !toca_saldo_favor(concepto, forma) && !es_forma_efectivo(forma, metodos)
 
   const montonum = parseFloat(monto) || 0
   const escredito = es_pago_credito(concepto, '')
